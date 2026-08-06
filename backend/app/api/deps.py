@@ -4,6 +4,10 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 
+from app.services.tenant_service import TenantService
+
+def get_tenant_service() -> TenantService:
+    return TenantService()
 
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
