@@ -1,4 +1,8 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from app.api.router import router
+from app.api.deps import get_db
 
 app = FastAPI(
     title="NXTGEN Knowledge Assistant API",
@@ -6,15 +10,19 @@ app = FastAPI(
 )
 
 
+app.include_router(router)
+
+
 @app.get("/")
 def root():
     return {
-        "message": "NXTGEN Knowledge Assistant API is running."
+        "message": "NXTGEN Knowledge Assistant API"
     }
 
-
 @app.get("/health")
-def health():
+def health(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
     return {
-        "status": "healthy"
+        "status": "healthy",
+        "database": "connected"
     }
