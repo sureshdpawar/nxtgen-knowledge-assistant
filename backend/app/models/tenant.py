@@ -3,7 +3,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.db.mixins import TimestampMixin, UUIDMixin
-
+from sqlalchemy.orm import relationship
 
 class Tenant(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "tenant"
@@ -31,3 +31,9 @@ class Tenant(Base, UUIDMixin, TimestampMixin):
         nullable=False,
         default="active",
     )
+    
+    users = relationship(
+    "User",
+    back_populates="tenant",
+    cascade="all, delete-orphan",
+)

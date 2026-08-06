@@ -69,3 +69,9 @@ tiktoken>=0.11,<0.12
 pytest==8.4.2
 pytest-asyncio==1.2.0
 pytest-cov==7.0.0
+
+# -------------------------
+# Password Hashing
+# -------------------------
+passlib[bcrypt]==1.7.4
+bcrypt==4.3.0
