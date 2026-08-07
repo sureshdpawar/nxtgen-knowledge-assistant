@@ -3,7 +3,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import get_current_active_user
 from app.db.session import get_db
+from app.models.user import User
 from app.schemas.user import (
     UserCreate,
     UserResponse,
@@ -19,24 +21,13 @@ router = APIRouter(
 service = UserService()
 
 
-@router.post(
-    "/",
-    response_model=UserResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_user(
-    user: UserCreate,
-    db: Session = Depends(get_db),
-):
-    return service.create(db, user)
-
-
 @router.get(
     "/",
     response_model=list[UserResponse],
 )
 def list_users(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     return service.list(db)
 
@@ -48,10 +39,27 @@ def list_users(
 def get_user(
     user_id: UUID,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     return service.get(
         db,
         user_id,
+    )
+
+
+@router.post(
+    "/",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_user(
+    user: UserCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    return service.create(
+        db,
+        user,
     )
 
 
@@ -63,6 +71,7 @@ def update_user(
     user_id: UUID,
     user: UserUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     return service.update(
         db,
@@ -78,6 +87,7 @@ def update_user(
 def delete_user(
     user_id: UUID,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     service.delete(
         db,
