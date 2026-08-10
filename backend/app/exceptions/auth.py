@@ -21,3 +21,13 @@ class InactiveUserError(AppException):
             status_code=status.HTTP_403_FORBIDDEN,
             error_code="USER_INACTIVE",
         )
+
+
+class InsufficientPermissionsError(AppException):
+
+    def __init__(self):
+        super().__init__(
+            message="You do not have permission to perform this action.",
+            status_code=status.HTTP_403_FORBIDDEN,
+            error_code="INSUFFICIENT_PERMISSIONS",
+        )

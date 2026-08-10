@@ -1,9 +1,9 @@
 from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.mixins import TimestampMixin, UUIDMixin
-from sqlalchemy.orm import relationship
+
 
 class Tenant(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "tenant"
@@ -24,16 +24,24 @@ class Tenant(Base, UUIDMixin, TimestampMixin):
         String(30),
         nullable=False,
         default="free",
+        server_default="free",
     )
 
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
         default="active",
+        server_default="active",
     )
-    
-    users = relationship(
-    "User",
-    back_populates="tenant",
-    cascade="all, delete-orphan",
-)
+
+    users: Mapped[list["User"]] = relationship(
+        "User",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )
+
+    knowledge_bases: Mapped[list["KnowledgeBase"]] = relationship(
+        "KnowledgeBase",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )

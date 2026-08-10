@@ -42,16 +42,23 @@ class User(Base, UUIDMixin, TimestampMixin):
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole),
         default=UserRole.USER,
+        server_default=UserRole.USER.value,
         nullable=False,
     )
 
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
+        server_default="true",
         nullable=False,
     )
 
-    tenant = relationship(
+    tenant: Mapped["Tenant"] = relationship(
         "Tenant",
         back_populates="users",
+    )
+
+    owned_knowledge_bases: Mapped[list["KnowledgeBase"]] = relationship(
+        "KnowledgeBase",
+        back_populates="owner",
     )

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_active_user
+from app.auth.permissions import require_admin
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.tenant import (
@@ -55,7 +56,7 @@ def get_tenant(
 def create_tenant(
     tenant: TenantCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_admin),
 ):
     return service.create(
         db,
@@ -71,7 +72,7 @@ def update_tenant(
     tenant_id: UUID,
     tenant: TenantUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_admin),
 ):
     return service.update(
         db,
@@ -87,7 +88,7 @@ def update_tenant(
 def delete_tenant(
     tenant_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_admin),
 ):
     service.delete(
         db,

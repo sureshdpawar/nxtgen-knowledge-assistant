@@ -29,3 +29,12 @@ class DocumentStatus(str, Enum):
 class ConversationStatus(str, Enum):
     ACTIVE = "ACTIVE"
     CLOSED = "CLOSED"
+    
+class KnowledgeBaseStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    ARCHIVED = "ARCHIVED"
+
+
+class KnowledgeBaseVisibility(str, Enum):
+    PRIVATE = "PRIVATE"
+    SHARED = "SHARED"
