@@ -38,3 +38,19 @@ class KnowledgeBaseStatus(str, Enum):
 class KnowledgeBaseVisibility(str, Enum):
     PRIVATE = "PRIVATE"
     SHARED = "SHARED"
+    
+class KnowledgeSourceType(str, Enum):
+    UPLOAD = "UPLOAD"
+    WEBSITE = "WEBSITE"
+    SHAREPOINT = "SHAREPOINT"
+    CONFLUENCE = "CONFLUENCE"
+    GITHUB = "GITHUB"
+    GOOGLE_DRIVE = "GOOGLE_DRIVE"
+    ONEDRIVE = "ONEDRIVE"
+    S3 = "S3"
+
+
+class KnowledgeSourceStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    ERROR = "ERROR"    

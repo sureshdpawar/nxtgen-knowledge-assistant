@@ -62,3 +62,8 @@ class User(Base, UUIDMixin, TimestampMixin):
         "KnowledgeBase",
         back_populates="owner",
     )
+
+    knowledge_sources: Mapped[list["KnowledgeSource"]] = relationship(
+        "KnowledgeSource",
+        back_populates="creator",
+    )

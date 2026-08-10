@@ -1,11 +1,13 @@
-from app.models.knowledge_base import KnowledgeBase
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.models.knowledge_base import KnowledgeBase
+from app.models.knowledge_source import KnowledgeSource
 
 __all__ = [
     "Tenant",
     "User",
     "KnowledgeBase",
+    "KnowledgeSource",
 ]
 # Future imports
 # from app.models.user import User
