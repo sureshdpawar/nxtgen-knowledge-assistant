@@ -2,12 +2,14 @@ from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.knowledge_base import KnowledgeBase
 from app.models.knowledge_source import KnowledgeSource
+from app.models.document import Document
 
 __all__ = [
-    "Tenant",
+   "Tenant",
     "User",
     "KnowledgeBase",
     "KnowledgeSource",
+    "Document",
 ]
 # Future imports
 # from app.models.user import User

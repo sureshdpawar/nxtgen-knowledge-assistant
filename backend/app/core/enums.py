@@ -54,3 +54,9 @@ class KnowledgeSourceStatus(str, Enum):
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"
     ERROR = "ERROR"    
+    
+class DocumentStatus(str, Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    READY = "READY"
+    FAILED = "FAILED"

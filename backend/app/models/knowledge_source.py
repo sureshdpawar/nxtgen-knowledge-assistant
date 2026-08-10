@@ -55,10 +55,17 @@ class KnowledgeSource(Base, UUIDMixin, TimestampMixin):
     )
 
     knowledge_base: Mapped["KnowledgeBase"] = relationship(
-        "KnowledgeBase",
-        back_populates="knowledge_sources",
+    "KnowledgeBase",
+    back_populates="knowledge_sources",
     )
 
     creator: Mapped["User"] = relationship(
         "User",
+        back_populates="knowledge_sources",
+    )
+
+    documents: Mapped[list["Document"]] = relationship(
+        "Document",
+        back_populates="knowledge_source",
+        cascade="all, delete-orphan",
     )
