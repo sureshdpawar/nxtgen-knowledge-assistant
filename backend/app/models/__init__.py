@@ -5,6 +5,7 @@ from app.models.knowledge_source import KnowledgeSource
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.document_embedding import DocumentEmbedding
+from app.models.tenant_llm_configuration import (TenantLLMConfiguration)
 
 __all__ = [
    "Tenant",
@@ -14,6 +15,7 @@ __all__ = [
     "Document",
     "DocumentChunk",
     "DocumentEmbedding",
+    "TenantLLMConfiguration",
 ]
 # Future imports
 # from app.models.user import User

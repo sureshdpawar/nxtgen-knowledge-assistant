@@ -45,3 +45,11 @@ class Tenant(Base, UUIDMixin, TimestampMixin):
         back_populates="tenant",
         cascade="all, delete-orphan",
     )
+
+    llm_configurations: Mapped[
+        list["TenantLLMConfiguration"]
+    ] = relationship(
+        "TenantLLMConfiguration",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )

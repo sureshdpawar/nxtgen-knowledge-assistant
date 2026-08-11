@@ -60,3 +60,11 @@ class DocumentStatus(str, Enum):
     PROCESSING = "PROCESSING"
     READY = "READY"
     FAILED = "FAILED"
+    
+class LLMProvider(Enum):
+    OPENAI = "OPENAI"
+    AZURE_OPENAI = "AZURE_OPENAI"
+    ANTHROPIC = "ANTHROPIC"
+    GOOGLE = "GOOGLE"
+    VLLM = "VLLM"
+    OLLAMA = "OLLAMA"
