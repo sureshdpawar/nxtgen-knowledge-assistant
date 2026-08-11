@@ -4,6 +4,7 @@ from app.models.knowledge_base import KnowledgeBase
 from app.models.knowledge_source import KnowledgeSource
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
+from app.models.document_embedding import DocumentEmbedding
 
 __all__ = [
    "Tenant",
@@ -12,6 +13,7 @@ __all__ = [
     "KnowledgeSource",
     "Document",
     "DocumentChunk",
+    "DocumentEmbedding",
 ]
 # Future imports
 # from app.models.user import User

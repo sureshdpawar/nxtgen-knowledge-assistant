@@ -6,15 +6,22 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.exceptions.document import DocumentNotFoundError
 from app.models.document_chunk import DocumentChunk
+from app.models.document_embedding import DocumentEmbedding
 from app.parsers.parser_factory import ParserFactory
 from app.repositories.document_chunk_repository import (
     DocumentChunkRepository,
+)
+from app.repositories.document_embedding_repository import (
+    DocumentEmbeddingRepository,
 )
 from app.repositories.document_repository import (
     DocumentRepository,
 )
 from app.services.document_chunking_service import (
     DocumentChunkingService,
+)
+from app.services.embedding_service import (
+    EmbeddingService,
 )
 
 
@@ -23,7 +30,9 @@ class DocumentProcessingService:
     def __init__(self):
         self.document_repository = DocumentRepository()
         self.chunk_repository = DocumentChunkRepository()
+        self.embedding_repository = DocumentEmbeddingRepository()
         self.chunking_service = DocumentChunkingService()
+        self.embedding_service = EmbeddingService()
 
     def process(
         self,
@@ -78,9 +87,22 @@ class DocumentProcessingService:
 
             db.add(document_chunk)
 
+            db.flush()
+
+            embedding = self.embedding_service.embed(
+                chunk_text,
+            )
+
+            document_embedding = DocumentEmbedding(
+                chunk_id=document_chunk.id,
+                embedding=embedding,
+            )
+
+            db.add(document_embedding)
+
         db.commit()
 
         return {
-            "document_id": str(document.id),
+            "document_id": document.id,
             "chunks_created": len(chunks),
         }

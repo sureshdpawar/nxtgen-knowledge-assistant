@@ -41,3 +41,10 @@ class DocumentChunk(Base, UUIDMixin, TimestampMixin):
         "Document",
         back_populates="chunks",
     )
+
+    embedding: Mapped["DocumentEmbedding | None"] = relationship(
+        "DocumentEmbedding",
+        back_populates="chunk",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
