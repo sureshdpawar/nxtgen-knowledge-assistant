@@ -55,6 +55,10 @@ def search(
                 document_name=document.original_filename,
                 chunk_id=chunk.id,
                 chunk_index=chunk.chunk_index,
+                page=chunk.chunk_metadata.get(
+                    "page",
+                    1,
+                ),
                 similarity=round(
                     1 - float(score),
                     3,

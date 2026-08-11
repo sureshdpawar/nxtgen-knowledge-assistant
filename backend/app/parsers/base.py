@@ -2,13 +2,15 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+ParsedPage = dict[str, Any]
 ParsedResult = dict[str, Any]
 
 
 class BaseParser(ABC):
     """
     Base class for all document parsers.
-    Every parser should extract plain text and return
+
+    Every parser should extract page-wise text and return
     parser-specific metadata.
     """
 
@@ -18,14 +20,24 @@ class BaseParser(ABC):
         file_path: Path,
     ) -> ParsedResult:
         """
-        Extract text and metadata from a document.
+        Extract pages and metadata from a document.
 
         Returns:
-            {
-                "text": "...",
-                "metadata": {
-                    ...
+
+        {
+            "pages": [
+                {
+                    "page": 1,
+                    "text": "..."
+                },
+                {
+                    "page": 2,
+                    "text": "..."
                 }
+            ],
+            "metadata": {
+                ...
             }
+        }
         """
         pass

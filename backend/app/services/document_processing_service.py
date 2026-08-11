@@ -67,7 +67,7 @@ class DocumentProcessingService:
         )
 
         chunks = self.chunking_service.chunk(
-            parsed_document["text"],
+            parsed_document["pages"],
         )
 
         self.chunk_repository.delete_by_document_id(
@@ -75,14 +75,16 @@ class DocumentProcessingService:
             document_id=document.id,
         )
 
-        for index, chunk_text in enumerate(chunks):
+        for index, chunk in enumerate(chunks):
 
             document_chunk = DocumentChunk(
                 document_id=document.id,
                 chunk_index=index,
-                text=chunk_text,
+                text=chunk["text"],
                 token_count=0,
-                chunk_metadata={},
+                chunk_metadata={
+                    "page": chunk["page"],
+                },
             )
 
             db.add(document_chunk)
@@ -90,7 +92,7 @@ class DocumentProcessingService:
             db.flush()
 
             embedding = self.embedding_service.embed(
-                chunk_text,
+                chunk["text"],
             )
 
             document_embedding = DocumentEmbedding(

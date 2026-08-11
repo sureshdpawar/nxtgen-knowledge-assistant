@@ -9,21 +9,29 @@ class DocumentChunkingService:
 
     def chunk(
         self,
-        text: str,
-    ) -> list[str]:
+        pages: list[dict],
+    ) -> list[dict]:
 
         chunks = []
 
-        start = 0
+        for page in pages:
 
-        while start < len(text):
+            page_number = page["page"]
+            text = page["text"]
 
-            end = start + self.chunk_size
+            start = 0
 
-            chunks.append(
-                text[start:end]
-            )
+            while start < len(text):
 
-            start = end - self.chunk_overlap
+                end = start + self.chunk_size
+
+                chunks.append(
+                    {
+                        "text": text[start:end],
+                        "page": page_number,
+                    }
+                )
+
+                start = end - self.chunk_overlap
 
         return chunks

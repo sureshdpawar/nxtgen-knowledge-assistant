@@ -17,6 +17,7 @@ class SearchResult(BaseModel):
 
     chunk_id: UUID
     chunk_index: int
+    page: int
 
     similarity: float
 

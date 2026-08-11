@@ -26,7 +26,7 @@ class ChatService:
         tenant_id: UUID,
         knowledge_base_id: UUID,
         query: str,
-    ) -> str:
+    ) -> dict:
 
         search_results = self.search_service.search(
             db=db,
@@ -62,4 +62,32 @@ class ChatService:
             max_tokens=config.max_tokens,
         )
 
-        return response.choices[0].message.content
+        sources = []
+
+        for (
+            chunk,
+            document,
+            knowledge_source,
+            similarity,
+        ) in search_results:
+
+            sources.append(
+                {
+                    "knowledge_source_name": knowledge_source.name,
+                    "document_name": document.original_filename,
+                    "chunk_index": chunk.chunk_index,
+                    "page": chunk.chunk_metadata.get(
+                        "page",
+                        1,
+                    ),
+                    "similarity": round(
+                        1 - float(similarity),
+                        3,
+                    ),
+                }
+            )
+
+        return {
+            "answer": response.choices[0].message.content,
+            "sources": sources,
+        }

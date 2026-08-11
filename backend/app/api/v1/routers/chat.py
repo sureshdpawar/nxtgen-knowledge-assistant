@@ -36,7 +36,7 @@ def chat(
     ),
 ):
 
-    answer = service.chat(
+    result = service.chat(
         db=db,
         tenant_id=current_user.tenant_id,
         knowledge_base_id=payload.knowledge_base_id,
@@ -44,5 +44,6 @@ def chat(
     )
 
     return ChatResponse(
-        answer=answer,
+        answer=result["answer"],
+        sources=result["sources"],
     )
