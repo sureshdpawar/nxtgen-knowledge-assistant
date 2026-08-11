@@ -2,6 +2,9 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.services.conversation_service import (
+    ConversationService,
+)
 from app.services.document_search_service import (
     DocumentSearchService,
 )
@@ -19,14 +22,42 @@ class ChatService:
         self.search_service = DocumentSearchService()
         self.prompt_builder = PromptBuilderService()
         self.client_factory = LLMClientFactory()
+        self.conversation_service = (
+            ConversationService()
+        )
 
     def chat(
         self,
         db: Session,
         tenant_id: UUID,
+        user_id: UUID,
         knowledge_base_id: UUID,
+        conversation_id: UUID | None,
         query: str,
     ) -> dict:
+
+        conversation = (
+            self.conversation_service.get_or_create_conversation(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                conversation_id=conversation_id,
+                title=query,
+            )
+        )
+
+        self.conversation_service.save_user_message(
+            db=db,
+            conversation_id=conversation.id,
+            content=query,
+        )
+
+        history = (
+            self.conversation_service.get_messages(
+                db=db,
+                conversation_id=conversation.id,
+            )
+        )
 
         search_results = self.search_service.search(
             db=db,
@@ -36,13 +67,18 @@ class ChatService:
 
         contexts = [
             chunk.text
-            for chunk, document, knowledge_source, similarity
-            in search_results
+            for (
+                chunk,
+                document,
+                knowledge_source,
+                similarity,
+            ) in search_results
         ]
 
         prompt = self.prompt_builder.build(
             query=query,
             contexts=contexts,
+            history=history,
         )
 
         client, config = self.client_factory.create(
@@ -60,6 +96,11 @@ class ChatService:
             ],
             temperature=config.temperature,
             max_tokens=config.max_tokens,
+        )
+
+        answer = (
+            response.choices[0]
+            .message.content
         )
 
         sources = []
@@ -87,7 +128,26 @@ class ChatService:
                 }
             )
 
+        usage = {}
+
+        if response.usage:
+
+            usage = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens,
+            }
+
+        self.conversation_service.save_assistant_message(
+            db=db,
+            conversation_id=conversation.id,
+            content=answer,
+            citations=sources,
+            token_usage=usage,
+        )
+
         return {
-            "answer": response.choices[0].message.content,
+            "conversation_id": conversation.id,
+            "answer": answer,
             "sources": sources,
         }

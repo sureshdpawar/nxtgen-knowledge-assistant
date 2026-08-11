@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 class ChatRequest(BaseModel):
     knowledge_base_id: UUID
+    conversation_id: UUID | None = None
     query: str
 
 
@@ -17,5 +18,6 @@ class ChatCitation(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    conversation_id: UUID
     answer: str
     sources: list[ChatCitation]

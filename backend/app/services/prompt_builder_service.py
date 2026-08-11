@@ -4,25 +4,52 @@ class PromptBuilderService:
         self,
         query: str,
         contexts: list[str],
+        history: list | None = None,
     ) -> str:
+
+        history = history or []
+
+        conversation = ""
+
+        if history:
+
+            conversation = "\n".join(
+                [
+                    f"{message.role.title()}: {message.content}"
+                    for message in history
+                ]
+            )
 
         context = "\n\n".join(contexts)
 
-        return f"""You are an AI assistant.
+        prompt = f"""
+You are an AI assistant.
 
-Answer the user's question using ONLY the provided context.
+Use ONLY the provided context to answer the user's question.
 
 If the answer cannot be found in the context, say:
 
-"I couldn't find that information in the provided documents."
+"I don't have enough information in the knowledge base."
 
-Context:
----------
+-------------------------
+Conversation History
+-------------------------
+
+{conversation}
+
+-------------------------
+Knowledge Base Context
+-------------------------
+
 {context}
 
-Question:
----------
+-------------------------
+Current Question
+-------------------------
+
 {query}
 
-Answer:
+Provide a concise and accurate answer.
 """
+
+        return prompt.strip()

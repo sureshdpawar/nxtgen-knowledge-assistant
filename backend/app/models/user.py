@@ -54,8 +54,8 @@ class User(Base, UUIDMixin, TimestampMixin):
     )
 
     tenant: Mapped["Tenant"] = relationship(
-    "Tenant",
-    back_populates="users",
+        "Tenant",
+        back_populates="users",
     )
 
     owned_knowledge_bases: Mapped[list["KnowledgeBase"]] = relationship(
@@ -71,4 +71,12 @@ class User(Base, UUIDMixin, TimestampMixin):
     uploaded_documents: Mapped[list["Document"]] = relationship(
         "Document",
         back_populates="uploader",
+    )
+
+    conversations: Mapped[
+        list["Conversation"]
+    ] = relationship(
+        "Conversation",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )

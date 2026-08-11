@@ -8,6 +8,8 @@ from app.api.v1.routers import user
 from app.api.v1.routers import document
 from app.api.v1.routers import search
 from app.api.v1.routers import chat
+from app.api.v1.routers import (tenant_llm_configuration)
+from app.api.v1.routers import conversation
 
 api_router = APIRouter()
 
@@ -19,3 +21,5 @@ api_router.include_router(knowledge_source.router)
 api_router.include_router(document.router)
 api_router.include_router(search.router,)
 api_router.include_router(chat.router,)
+api_router.include_router(tenant_llm_configuration.router,)
+api_router.include_router(conversation.router,)

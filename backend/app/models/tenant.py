@@ -53,3 +53,11 @@ class Tenant(Base, UUIDMixin, TimestampMixin):
         back_populates="tenant",
         cascade="all, delete-orphan",
     )
+
+    conversations: Mapped[
+        list["Conversation"]
+    ] = relationship(
+        "Conversation",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )

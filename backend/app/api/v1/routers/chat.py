@@ -39,11 +39,14 @@ def chat(
     result = service.chat(
         db=db,
         tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
         knowledge_base_id=payload.knowledge_base_id,
+        conversation_id=payload.conversation_id,
         query=payload.query,
     )
 
     return ChatResponse(
+        conversation_id=result["conversation_id"],
         answer=result["answer"],
         sources=result["sources"],
     )

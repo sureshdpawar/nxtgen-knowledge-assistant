@@ -6,6 +6,8 @@ from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.document_embedding import DocumentEmbedding
 from app.models.tenant_llm_configuration import (TenantLLMConfiguration)
+from app.models.conversation import Conversation
+from app.models.conversation_message import ConversationMessage
 
 __all__ = [
    "Tenant",
@@ -16,6 +18,8 @@ __all__ = [
     "DocumentChunk",
     "DocumentEmbedding",
     "TenantLLMConfiguration",
+    "Conversation",
+    "ConversationMessage"
 ]
 # Future imports
 # from app.models.user import User
