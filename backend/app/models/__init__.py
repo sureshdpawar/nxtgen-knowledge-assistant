@@ -3,6 +3,7 @@ from app.models.user import User
 from app.models.knowledge_base import KnowledgeBase
 from app.models.knowledge_source import KnowledgeSource
 from app.models.document import Document
+from app.models.document_chunk import DocumentChunk
 
 __all__ = [
    "Tenant",
@@ -10,6 +11,7 @@ __all__ = [
     "KnowledgeBase",
     "KnowledgeSource",
     "Document",
+    "DocumentChunk",
 ]
 # Future imports
 # from app.models.user import User

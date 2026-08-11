@@ -17,7 +17,10 @@ class Settings(BaseSettings):
     STORAGE_PATH: str = str(BASE_DIR / "storage")
     
     DOCUMENT_STORAGE_PATH: str = "./storage"
-
+    
+    CHUNK_SIZE: int = 1000
+    CHUNK_OVERLAP: int = 200
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive="ignore",

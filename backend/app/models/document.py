@@ -88,3 +88,9 @@ class Document(Base, UUIDMixin, TimestampMixin):
     uploader: Mapped["User"] = relationship(
         "User",
     )
+    
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        "DocumentChunk",
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
