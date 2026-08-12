@@ -7,6 +7,7 @@ import {
 import {
   createKnowledgeBase,
   deleteKnowledgeBase,
+  getKnowledgeBase,
   getKnowledgeBases,
   updateKnowledgeBase,
 } from "./api";
@@ -92,3 +93,17 @@ export function useDeleteKnowledgeBase() {
     },
   });
 }
+
+export function useKnowledgeBase(
+    id: string,
+  ) {
+    return useQuery({
+      queryKey: [
+        "knowledge-bases",
+        id,
+      ],
+      queryFn: () =>
+        getKnowledgeBase(id),
+      enabled: !!id,
+    });
+  }

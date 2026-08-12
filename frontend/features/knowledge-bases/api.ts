@@ -51,3 +51,14 @@ export async function deleteKnowledgeBase(
     `/knowledge-bases/${id}`,
   );
 }
+
+export async function getKnowledgeBase(
+  id: string,
+) {
+  const response =
+    await api.get<KnowledgeBase>(
+      `/knowledge-bases/${id}`,
+    );
+
+  return response.data;
+}
