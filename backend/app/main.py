@@ -1,6 +1,7 @@
 import app.models
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -18,13 +19,19 @@ app = FastAPI(
     version="1.0.0",
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def root():
     return {
         "message": "NXTGEN Knowledge Assistant API",
     }
-
 
 @app.get("/health")
 def health(
@@ -36,7 +43,6 @@ def health(
         "status": "healthy",
         "database": "connected",
     }
-
 
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(LoggingMiddleware)
