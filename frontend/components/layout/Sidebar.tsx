@@ -1,50 +1,64 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
 import {
   LayoutDashboard,
   Database,
   MessageSquare,
-  Search,
   Settings,
 } from "lucide-react";
 
 const menu = [
   {
     label: "Dashboard",
+    href: "/dashboard",
     icon: LayoutDashboard,
   },
   {
     label: "Knowledge Bases",
+    href: "/knowledge-bases",
     icon: Database,
   },
   {
-    label: "Conversations",
+    label: "Chat",
+    href: "/chat",
     icon: MessageSquare,
   },
   {
-    label: "Search",
-    icon: Search,
-  },
-  {
     label: "Settings",
+    href: "/settings",
     icon: Settings,
   },
 ];
 
 export default function Sidebar() {
+  const pathname = usePathname();
+
   return (
-    <aside className="w-64 border-r bg-slate-50">
+    <aside className="w-64 border-r bg-white">
       <nav className="space-y-2 p-4">
         {menu.map((item) => {
           const Icon = item.icon;
 
+          const active =
+            pathname === item.href;
+
           return (
-            <button
-              key={item.label}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-slate-200"
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 transition ${
+                active
+                  ? "bg-blue-600 text-white shadow"
+                  : "text-slate-700 hover:bg-slate-100"
+              }`}
             >
               <Icon className="h-5 w-5" />
 
-              {item.label}
-            </button>
+              <span>{item.label}</span>
+            </Link>
           );
         })}
       </nav>
