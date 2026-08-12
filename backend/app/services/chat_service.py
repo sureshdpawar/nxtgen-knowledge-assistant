@@ -2,6 +2,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from collections.abc import Generator
+
 from app.services.conversation_service import (
     ConversationService,
 )
@@ -151,3 +153,137 @@ class ChatService:
             "answer": answer,
             "sources": sources,
         }
+        
+    def chat_stream(
+        self,
+        db: Session,
+        tenant_id: UUID,
+        user_id: UUID,
+        knowledge_base_id: UUID,
+        conversation_id: UUID | None,
+        query: str,
+    ) -> Generator[str, None, None]:
+
+        conversation = (
+            self.conversation_service.get_or_create_conversation(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                conversation_id=conversation_id,
+                title=query,
+            )
+        )
+
+        self.conversation_service.save_user_message(
+            db=db,
+            conversation_id=conversation.id,
+            content=query,
+        )
+
+        history = (
+            self.conversation_service.get_messages(
+                db=db,
+                conversation_id=conversation.id,
+            )
+        )
+
+        search_results = self.search_service.search(
+            db=db,
+            knowledge_base_id=knowledge_base_id,
+            query=query,
+        )
+
+        contexts = [
+            chunk.text
+            for (
+                chunk,
+                document,
+                knowledge_source,
+                similarity,
+            ) in search_results
+        ]
+
+        prompt = self.prompt_builder.build(
+            query=query,
+            contexts=contexts,
+            history=history,
+        )
+
+        client, config = self.client_factory.create(
+            db=db,
+            tenant_id=tenant_id,
+        )
+
+        response = client.chat.completions.create(
+            model=config.model_name,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            stream=True,
+        )
+
+        answer = ""
+
+        for chunk in response:
+
+            if (
+                not chunk.choices
+                or chunk.choices[0].delta.content is None
+            ):
+                continue
+
+            token = chunk.choices[0].delta.content
+
+            answer += token
+
+            yield f"data: {token}\n\n"
+
+        sources = []
+
+        for (
+            chunk,
+            document,
+            knowledge_source,
+            similarity,
+        ) in search_results:
+
+            sources.append(
+                {
+                    "knowledge_source_name": knowledge_source.name,
+                    "document_name": document.original_filename,
+                    "chunk_index": chunk.chunk_index,
+                    "page": chunk.chunk_metadata.get(
+                        "page",
+                        1,
+                    ),
+                    "similarity": round(
+                        1 - float(similarity),
+                        3,
+                    ),
+                }
+            )
+
+        self.conversation_service.save_assistant_message(
+            db=db,
+            conversation_id=conversation.id,
+            content=answer,
+            citations=sources,
+            token_usage={},
+        )
+
+        import json
+
+        yield (
+            "event: metadata\n"
+            f"data: {json.dumps({
+                'conversation_id': str(conversation.id),
+                'sources': sources,
+            })}\n\n"
+        )
+
+        yield "event: done\ndata: [DONE]\n\n"

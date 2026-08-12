@@ -5,6 +5,8 @@ from fastapi import (
 
 from sqlalchemy.orm import Session
 
+from fastapi.responses import StreamingResponse
+
 from app.api.deps import get_db
 from app.auth.dependencies import get_current_active_user
 from app.models.user import User
@@ -49,4 +51,32 @@ def chat(
         conversation_id=result["conversation_id"],
         answer=result["answer"],
         sources=result["sources"],
+    )
+    
+@router.post("/stream")
+def chat_stream(
+    payload: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        get_current_active_user,
+    ),
+):
+
+    generator = service.chat_stream(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        knowledge_base_id=payload.knowledge_base_id,
+        conversation_id=payload.conversation_id,
+        query=payload.query,
+    )
+
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
