@@ -52,7 +52,7 @@ export default function KnowledgeBaseDetailPage() {
     <div className="space-y-8">
 
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1 text-sm text-slate-500">
+      <nav className="flex flex-wrap items-center gap-1 text-sm text-slate-500">
 
         <Link
           href="/knowledge-bases"
@@ -64,7 +64,7 @@ export default function KnowledgeBaseDetailPage() {
         <ChevronRight className="h-4 w-4" />
 
         <span className="font-medium text-slate-900">
-          {knowledgeBase.name}
+          Knowledge Sources
         </span>
 
       </nav>
@@ -126,6 +126,7 @@ export default function KnowledgeBaseDetailPage() {
 
         </div>
 
+
         <KnowledgeSourceList
           knowledgeBaseId={
             knowledgeBase.id
@@ -155,7 +156,8 @@ export default function KnowledgeBaseDetailPage() {
 
           <p className="mt-4 text-sm text-slate-500">
             View and upload documents
-            for this knowledge base.
+            through the knowledge sources
+            connected to this knowledge base.
           </p>
 
         </div>

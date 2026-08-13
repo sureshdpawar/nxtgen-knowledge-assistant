@@ -1,3 +1,7 @@
+"use client";
+
+import Link from "next/link";
+
 import {
   Database,
   Pencil,
@@ -29,42 +33,47 @@ export default function KnowledgeSourceCard({
   onDelete,
 }: Props) {
   return (
-    <div className="rounded-xl border bg-white p-5 shadow-sm">
+    <div className="rounded-xl border bg-white p-5 shadow-sm transition hover:shadow-md">
 
-      <div className="flex items-start gap-4">
+      <Link
+        href={`/knowledge-sources/${knowledgeSource.id}`}
+        className="block"
+      >
+        <div className="flex items-start gap-4">
 
-        <div className="rounded-lg bg-blue-100 p-3">
-          <Database className="h-5 w-5 text-blue-600" />
-        </div>
+          <div className="rounded-lg bg-blue-100 p-3">
+            <Database className="h-5 w-5 text-blue-600" />
+          </div>
 
-        <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1">
 
-          <h3 className="font-semibold text-slate-900">
-            {knowledgeSource.name}
-          </h3>
+            <h3 className="font-semibold text-slate-900">
+              {knowledgeSource.name}
+            </h3>
 
-          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            <div className="mt-2 flex flex-wrap gap-2 text-xs">
 
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">
-              {knowledgeSource.type}
-            </span>
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">
+                {knowledgeSource.type}
+              </span>
 
-            <span className="rounded-full bg-green-100 px-2 py-1 text-green-700">
-              {knowledgeSource.status}
-            </span>
+              <span className="rounded-full bg-green-100 px-2 py-1 text-green-700">
+                {knowledgeSource.status}
+              </span>
+
+            </div>
+
+            <p className="mt-3 text-xs text-slate-400">
+              Created{" "}
+              {new Date(
+                knowledgeSource.created_at,
+              ).toLocaleDateString()}
+            </p>
 
           </div>
 
-          <p className="mt-3 text-xs text-slate-400">
-            Created{" "}
-            {new Date(
-              knowledgeSource.created_at,
-            ).toLocaleDateString()}
-          </p>
-
         </div>
-
-      </div>
+      </Link>
 
       <div className="mt-5 flex justify-end gap-2">
 
