@@ -3,7 +3,9 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.conversation import Conversation
+from app.models.conversation import (
+    Conversation,
+)
 from app.models.conversation_message import (
     ConversationMessage,
 )
@@ -31,12 +33,15 @@ class ConversationService:
         db: Session,
         tenant_id: UUID,
         user_id: UUID,
+        knowledge_base_id: UUID,
         title: str,
     ) -> Conversation:
 
         conversation = Conversation(
             tenant_id=tenant_id,
             user_id=user_id,
+            knowledge_base_id=
+                knowledge_base_id,
             title=title,
         )
 
@@ -59,9 +64,12 @@ class ConversationService:
                 Conversation,
             )
             .where(
-                Conversation.id == conversation_id,
-                Conversation.tenant_id == tenant_id,
-                Conversation.user_id == user_id,
+                Conversation.id
+                == conversation_id,
+                Conversation.tenant_id
+                == tenant_id,
+                Conversation.user_id
+                == user_id,
             )
         )
 
@@ -72,26 +80,43 @@ class ConversationService:
         db: Session,
         tenant_id: UUID,
         user_id: UUID,
+        knowledge_base_id: UUID,
         conversation_id: UUID | None,
         title: str,
     ) -> Conversation:
 
         if conversation_id:
 
-            conversation = self.get_conversation(
-                db=db,
-                tenant_id=tenant_id,
-                user_id=user_id,
-                conversation_id=conversation_id,
+            conversation = (
+                self.get_conversation(
+                    db=db,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    conversation_id=
+                        conversation_id,
+                )
             )
 
             if conversation:
+                if (
+                    conversation
+                    .knowledge_base_id
+                    != knowledge_base_id
+                ):
+                    raise ValueError(
+                        "Conversation belongs "
+                        "to a different "
+                        "knowledge base."
+                    )
+
                 return conversation
 
         return self.create_conversation(
             db=db,
             tenant_id=tenant_id,
             user_id=user_id,
+            knowledge_base_id=
+                knowledge_base_id,
             title=title,
         )
 
@@ -105,12 +130,17 @@ class ConversationService:
         token_usage: dict | None = None,
     ) -> ConversationMessage:
 
-        message = ConversationMessage(
-            conversation_id=conversation_id,
-            role=role,
-            content=content,
-            citations=citations or [],
-            token_usage=token_usage or {},
+        message = (
+            ConversationMessage(
+                conversation_id=
+                    conversation_id,
+                role=role,
+                content=content,
+                citations=
+                    citations or [],
+                token_usage=
+                    token_usage or {},
+            )
         )
 
         db.add(message)
@@ -128,7 +158,8 @@ class ConversationService:
 
         return self.add_message(
             db=db,
-            conversation_id=conversation_id,
+            conversation_id=
+                conversation_id,
             role="user",
             content=content,
         )
@@ -144,7 +175,8 @@ class ConversationService:
 
         return self.add_message(
             db=db,
-            conversation_id=conversation_id,
+            conversation_id=
+                conversation_id,
             role="assistant",
             content=content,
             citations=citations,
@@ -155,18 +187,22 @@ class ConversationService:
         self,
         db: Session,
         conversation_id: UUID,
-    ) -> list[ConversationMessage]:
+    ) -> list[
+        ConversationMessage
+    ]:
 
         stmt = (
             select(
                 ConversationMessage,
             )
             .where(
-                ConversationMessage.conversation_id
+                ConversationMessage
+                .conversation_id
                 == conversation_id,
             )
             .order_by(
-                ConversationMessage.created_at,
+                ConversationMessage
+                .created_at,
             )
         )
 
@@ -186,11 +222,15 @@ class ConversationService:
                 Conversation,
             )
             .where(
-                Conversation.tenant_id == tenant_id,
-                Conversation.user_id == user_id,
+                Conversation.tenant_id
+                == tenant_id,
+                Conversation.user_id
+                == user_id,
             )
             .order_by(
-                Conversation.updated_at.desc(),
+                Conversation
+                .updated_at
+                .desc(),
             )
         )
 
@@ -206,17 +246,19 @@ class ConversationService:
         conversation_id: UUID,
     ) -> Conversation | None:
 
-        conversation = self.get_conversation(
-            db=db,
-            tenant_id=tenant_id,
-            user_id=user_id,
-            conversation_id=conversation_id,
+        conversation = (
+            self.get_conversation(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                conversation_id=
+                    conversation_id,
+            )
         )
 
         if conversation is None:
             return None
 
-        # Load relationship
         conversation.messages
 
         return conversation
@@ -229,11 +271,14 @@ class ConversationService:
         conversation_id: UUID,
     ) -> bool:
 
-        conversation = self.get_conversation(
-            db=db,
-            tenant_id=tenant_id,
-            user_id=user_id,
-            conversation_id=conversation_id,
+        conversation = (
+            self.get_conversation(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                conversation_id=
+                    conversation_id,
+            )
         )
 
         if conversation is None:

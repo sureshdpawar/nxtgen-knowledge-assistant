@@ -57,8 +57,7 @@ class ChatService:
 
         return any(
             phrase in normalized
-            for phrase
-            in no_answer_phrases
+            for phrase in no_answer_phrases
         )
 
     def _build_sources(
@@ -130,14 +129,18 @@ class ChatService:
                 db=db,
                 tenant_id=tenant_id,
                 user_id=user_id,
-                conversation_id=conversation_id,
+                knowledge_base_id=
+                    knowledge_base_id,
+                conversation_id=
+                    conversation_id,
                 title=query,
             )
         )
 
         self.conversation_service.save_user_message(
             db=db,
-            conversation_id=conversation.id,
+            conversation_id=
+                conversation.id,
             content=query,
         )
 
@@ -145,14 +148,16 @@ class ChatService:
             self.conversation_service
             .get_messages(
                 db=db,
-                conversation_id=conversation.id,
+                conversation_id=
+                    conversation.id,
             )
         )
 
         search_results = (
             self.search_service.search(
                 db=db,
-                knowledge_base_id=knowledge_base_id,
+                knowledge_base_id=
+                    knowledge_base_id,
                 query=query,
             )
         )
@@ -191,8 +196,10 @@ class ChatService:
                         "content": prompt,
                     }
                 ],
-                temperature=config.temperature,
-                max_tokens=config.max_tokens,
+                temperature=
+                    config.temperature,
+                max_tokens=
+                    config.max_tokens,
             )
         )
 
@@ -220,18 +227,25 @@ class ChatService:
         if response.usage:
             usage = {
                 "prompt_tokens":
-                    response.usage.prompt_tokens,
+                    response
+                    .usage
+                    .prompt_tokens,
 
                 "completion_tokens":
-                    response.usage.completion_tokens,
+                    response
+                    .usage
+                    .completion_tokens,
 
                 "total_tokens":
-                    response.usage.total_tokens,
+                    response
+                    .usage
+                    .total_tokens,
             }
 
         self.conversation_service.save_assistant_message(
             db=db,
-            conversation_id=conversation.id,
+            conversation_id=
+                conversation.id,
             content=answer,
             citations=sources,
             token_usage=usage,
@@ -256,7 +270,11 @@ class ChatService:
         knowledge_base_id: UUID,
         conversation_id: UUID | None,
         query: str,
-    ) -> Generator[str, None, None]:
+    ) -> Generator[
+        str,
+        None,
+        None,
+    ]:
 
         conversation = (
             self.conversation_service
@@ -264,14 +282,18 @@ class ChatService:
                 db=db,
                 tenant_id=tenant_id,
                 user_id=user_id,
-                conversation_id=conversation_id,
+                knowledge_base_id=
+                    knowledge_base_id,
+                conversation_id=
+                    conversation_id,
                 title=query,
             )
         )
 
         self.conversation_service.save_user_message(
             db=db,
-            conversation_id=conversation.id,
+            conversation_id=
+                conversation.id,
             content=query,
         )
 
@@ -279,14 +301,16 @@ class ChatService:
             self.conversation_service
             .get_messages(
                 db=db,
-                conversation_id=conversation.id,
+                conversation_id=
+                    conversation.id,
             )
         )
 
         search_results = (
             self.search_service.search(
                 db=db,
-                knowledge_base_id=knowledge_base_id,
+                knowledge_base_id=
+                    knowledge_base_id,
                 query=query,
             )
         )
@@ -325,8 +349,10 @@ class ChatService:
                         "content": prompt,
                     }
                 ],
-                temperature=config.temperature,
-                max_tokens=config.max_tokens,
+                temperature=
+                    config.temperature,
+                max_tokens=
+                    config.max_tokens,
                 stream=True,
             )
         )
@@ -371,7 +397,8 @@ class ChatService:
 
         self.conversation_service.save_assistant_message(
             db=db,
-            conversation_id=conversation.id,
+            conversation_id=
+                conversation.id,
             content=answer,
             citations=sources,
             token_usage={},
@@ -389,7 +416,9 @@ class ChatService:
 
         yield (
             "event: metadata\n"
-            f"data: {json.dumps(metadata)}\n\n"
+            f"data: "
+            f"{json.dumps(metadata)}"
+            "\n\n"
         )
 
         yield (

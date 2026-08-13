@@ -36,6 +36,12 @@ class Conversation(
         index=True,
     )
 
+    knowledge_base_id: Mapped[UUID] = mapped_column(
+        ForeignKey("knowledge_base.id"),
+        nullable=False,
+        index=True,
+    )
+
     title: Mapped[str] = mapped_column(
         String(500),
         nullable=False,
@@ -51,9 +57,16 @@ class Conversation(
         back_populates="conversations",
     )
 
-    messages: Mapped[list["ConversationMessage"]] = relationship(
+    knowledge_base: Mapped["KnowledgeBase"] = relationship(
+        "KnowledgeBase",
+    )
+
+    messages: Mapped[
+        list["ConversationMessage"]
+    ] = relationship(
         "ConversationMessage",
         back_populates="conversation",
         cascade="all, delete-orphan",
-        order_by="ConversationMessage.created_at",
+        order_by=
+            "ConversationMessage.created_at",
     )

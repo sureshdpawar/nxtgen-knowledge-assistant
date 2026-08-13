@@ -1,7 +1,10 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+)
 
 
 class ConversationSummary(BaseModel):
@@ -10,12 +13,17 @@ class ConversationSummary(BaseModel):
     )
 
     id: UUID
+    knowledge_base_id: UUID
+
     title: str
+
     created_at: datetime
     updated_at: datetime
 
 
-class ConversationMessageResponse(BaseModel):
+class ConversationMessageResponse(
+    BaseModel
+):
     model_config = ConfigDict(
         from_attributes=True,
     )
@@ -23,8 +31,10 @@ class ConversationMessageResponse(BaseModel):
     id: UUID
     role: str
     content: str
+
     citations: list
     token_usage: dict
+
     created_at: datetime
 
 
@@ -34,11 +44,21 @@ class ConversationResponse(BaseModel):
     )
 
     id: UUID
+    knowledge_base_id: UUID
+
     title: str
+
     created_at: datetime
     updated_at: datetime
-    messages: list[ConversationMessageResponse]
+
+    messages: list[
+        ConversationMessageResponse
+    ]
 
 
-class ConversationListResponse(BaseModel):
-    conversations: list[ConversationSummary]
+class ConversationListResponse(
+    BaseModel
+):
+    conversations: list[
+        ConversationSummary
+    ]
