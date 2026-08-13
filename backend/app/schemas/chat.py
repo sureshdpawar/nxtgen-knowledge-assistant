@@ -10,8 +10,12 @@ class ChatRequest(BaseModel):
 
 
 class ChatCitation(BaseModel):
+    knowledge_source_id: UUID
     knowledge_source_name: str
+
+    document_id: UUID
     document_name: str
+
     chunk_index: int
     page: int
     similarity: float

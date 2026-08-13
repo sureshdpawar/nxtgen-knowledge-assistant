@@ -1,8 +1,9 @@
+import json
+
+from collections.abc import Generator
 from uuid import UUID
 
 from sqlalchemy.orm import Session
-
-from collections.abc import Generator
 
 from app.services.conversation_service import (
     ConversationService,
@@ -21,12 +22,97 @@ from app.services.prompt_builder_service import (
 class ChatService:
 
     def __init__(self):
-        self.search_service = DocumentSearchService()
-        self.prompt_builder = PromptBuilderService()
-        self.client_factory = LLMClientFactory()
+        self.search_service = (
+            DocumentSearchService()
+        )
+
+        self.prompt_builder = (
+            PromptBuilderService()
+        )
+
+        self.client_factory = (
+            LLMClientFactory()
+        )
+
         self.conversation_service = (
             ConversationService()
         )
+
+    def _is_no_answer(
+        self,
+        answer: str,
+    ) -> bool:
+        normalized = (
+            answer
+            .strip()
+            .lower()
+        )
+
+        no_answer_phrases = [
+            "i don't have enough information",
+            "i do not have enough information",
+            "not enough information in the knowledge base",
+            "the knowledge base does not contain enough information",
+        ]
+
+        return any(
+            phrase in normalized
+            for phrase
+            in no_answer_phrases
+        )
+
+    def _build_sources(
+        self,
+        search_results,
+    ) -> list[dict]:
+
+        sources = []
+
+        for (
+            chunk,
+            document,
+            knowledge_source,
+            similarity,
+        ) in search_results:
+
+            sources.append(
+                {
+                    "knowledge_source_id":
+                        str(
+                            knowledge_source.id
+                        ),
+
+                    "knowledge_source_name":
+                        knowledge_source.name,
+
+                    "document_id":
+                        str(
+                            document.id
+                        ),
+
+                    "document_name":
+                        document.original_filename,
+
+                    "chunk_index":
+                        chunk.chunk_index,
+
+                    "page":
+                        chunk.chunk_metadata.get(
+                            "page",
+                            1,
+                        ),
+
+                    "similarity":
+                        round(
+                            1 - float(
+                                similarity
+                            ),
+                            3,
+                        ),
+                }
+            )
+
+        return sources
 
     def chat(
         self,
@@ -39,7 +125,8 @@ class ChatService:
     ) -> dict:
 
         conversation = (
-            self.conversation_service.get_or_create_conversation(
+            self.conversation_service
+            .get_or_create_conversation(
                 db=db,
                 tenant_id=tenant_id,
                 user_id=user_id,
@@ -55,16 +142,19 @@ class ChatService:
         )
 
         history = (
-            self.conversation_service.get_messages(
+            self.conversation_service
+            .get_messages(
                 db=db,
                 conversation_id=conversation.id,
             )
         )
 
-        search_results = self.search_service.search(
-            db=db,
-            knowledge_base_id=knowledge_base_id,
-            query=query,
+        search_results = (
+            self.search_service.search(
+                db=db,
+                knowledge_base_id=knowledge_base_id,
+                query=query,
+            )
         )
 
         contexts = [
@@ -77,67 +167,66 @@ class ChatService:
             ) in search_results
         ]
 
-        prompt = self.prompt_builder.build(
-            query=query,
-            contexts=contexts,
-            history=history,
+        prompt = (
+            self.prompt_builder.build(
+                query=query,
+                contexts=contexts,
+                history=history,
+            )
         )
 
-        client, config = self.client_factory.create(
-            db=db,
-            tenant_id=tenant_id,
+        client, config = (
+            self.client_factory.create(
+                db=db,
+                tenant_id=tenant_id,
+            )
         )
 
-        response = client.chat.completions.create(
-            model=config.model_name,
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
+        response = (
+            client.chat.completions.create(
+                model=config.model_name,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+            )
         )
 
         answer = (
-            response.choices[0]
-            .message.content
+            response
+            .choices[0]
+            .message
+            .content
+            or ""
         )
 
-        sources = []
-
-        for (
-            chunk,
-            document,
-            knowledge_source,
-            similarity,
-        ) in search_results:
-
-            sources.append(
-                {
-                    "knowledge_source_name": knowledge_source.name,
-                    "document_name": document.original_filename,
-                    "chunk_index": chunk.chunk_index,
-                    "page": chunk.chunk_metadata.get(
-                        "page",
-                        1,
-                    ),
-                    "similarity": round(
-                        1 - float(similarity),
-                        3,
-                    ),
-                }
+        sources = (
+            self._build_sources(
+                search_results,
             )
+        )
+
+        if self._is_no_answer(
+            answer,
+        ):
+            sources = []
 
         usage = {}
 
         if response.usage:
-
             usage = {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
+                "prompt_tokens":
+                    response.usage.prompt_tokens,
+
+                "completion_tokens":
+                    response.usage.completion_tokens,
+
+                "total_tokens":
+                    response.usage.total_tokens,
             }
 
         self.conversation_service.save_assistant_message(
@@ -149,11 +238,16 @@ class ChatService:
         )
 
         return {
-            "conversation_id": conversation.id,
-            "answer": answer,
-            "sources": sources,
+            "conversation_id":
+                conversation.id,
+
+            "answer":
+                answer,
+
+            "sources":
+                sources,
         }
-        
+
     def chat_stream(
         self,
         db: Session,
@@ -165,7 +259,8 @@ class ChatService:
     ) -> Generator[str, None, None]:
 
         conversation = (
-            self.conversation_service.get_or_create_conversation(
+            self.conversation_service
+            .get_or_create_conversation(
                 db=db,
                 tenant_id=tenant_id,
                 user_id=user_id,
@@ -181,16 +276,19 @@ class ChatService:
         )
 
         history = (
-            self.conversation_service.get_messages(
+            self.conversation_service
+            .get_messages(
                 db=db,
                 conversation_id=conversation.id,
             )
         )
 
-        search_results = self.search_service.search(
-            db=db,
-            knowledge_base_id=knowledge_base_id,
-            query=query,
+        search_results = (
+            self.search_service.search(
+                db=db,
+                knowledge_base_id=knowledge_base_id,
+                query=query,
+            )
         )
 
         contexts = [
@@ -203,70 +301,73 @@ class ChatService:
             ) in search_results
         ]
 
-        prompt = self.prompt_builder.build(
-            query=query,
-            contexts=contexts,
-            history=history,
+        prompt = (
+            self.prompt_builder.build(
+                query=query,
+                contexts=contexts,
+                history=history,
+            )
         )
 
-        client, config = self.client_factory.create(
-            db=db,
-            tenant_id=tenant_id,
+        client, config = (
+            self.client_factory.create(
+                db=db,
+                tenant_id=tenant_id,
+            )
         )
 
-        response = client.chat.completions.create(
-            model=config.model_name,
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
-            stream=True,
+        response = (
+            client.chat.completions.create(
+                model=config.model_name,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                stream=True,
+            )
         )
 
         answer = ""
 
-        for chunk in response:
+        for response_chunk in response:
 
             if (
-                not chunk.choices
-                or chunk.choices[0].delta.content is None
+                not response_chunk.choices
+                or response_chunk
+                .choices[0]
+                .delta
+                .content
+                is None
             ):
                 continue
 
-            token = chunk.choices[0].delta.content
+            token = (
+                response_chunk
+                .choices[0]
+                .delta
+                .content
+            )
 
             answer += token
 
-            yield f"data: {token}\n\n"
-
-        sources = []
-
-        for (
-            chunk,
-            document,
-            knowledge_source,
-            similarity,
-        ) in search_results:
-
-            sources.append(
-                {
-                    "knowledge_source_name": knowledge_source.name,
-                    "document_name": document.original_filename,
-                    "chunk_index": chunk.chunk_index,
-                    "page": chunk.chunk_metadata.get(
-                        "page",
-                        1,
-                    ),
-                    "similarity": round(
-                        1 - float(similarity),
-                        3,
-                    ),
-                }
+            yield (
+                f"data: {token}\n\n"
             )
+
+        sources = (
+            self._build_sources(
+                search_results,
+            )
+        )
+
+        if self._is_no_answer(
+            answer,
+        ):
+            sources = []
 
         self.conversation_service.save_assistant_message(
             db=db,
@@ -276,14 +377,22 @@ class ChatService:
             token_usage={},
         )
 
-        import json
+        metadata = {
+            "conversation_id":
+                str(
+                    conversation.id
+                ),
+
+            "sources":
+                sources,
+        }
 
         yield (
             "event: metadata\n"
-            f"data: {json.dumps({
-                'conversation_id': str(conversation.id),
-                'sources': sources,
-            })}\n\n"
+            f"data: {json.dumps(metadata)}\n\n"
         )
 
-        yield "event: done\ndata: [DONE]\n\n"
+        yield (
+            "event: done\n"
+            "data: [DONE]\n\n"
+        )
