@@ -1,10 +1,16 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Response,
+    status,
+)
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_active_user
-from app.auth.permissions import require_admin
+from app.auth.permissions import (
+    require_admin,
+)
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user import (
@@ -12,12 +18,16 @@ from app.schemas.user import (
     UserResponse,
     UserUpdate,
 )
-from app.services.user_service import UserService
+from app.services.user_service import (
+    UserService,
+)
+
 
 router = APIRouter(
     prefix="/users",
     tags=["Users"],
 )
+
 
 service = UserService()
 
@@ -27,10 +37,17 @@ service = UserService()
     response_model=list[UserResponse],
 )
 def list_users(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
 ):
-    return service.list(db)
+    return service.list(
+        db=db,
+        current_user=current_user,
+    )
 
 
 @router.get(
@@ -39,28 +56,39 @@ def list_users(
 )
 def get_user(
     user_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
 ):
     return service.get(
-        db,
-        user_id,
+        db=db,
+        current_user=current_user,
+        user_id=user_id,
     )
 
 
 @router.post(
     "/",
     response_model=UserResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=
+        status.HTTP_201_CREATED,
 )
 def create_user(
     user: UserCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
 ):
     return service.create(
-        db,
-        user,
+        db=db,
+        current_user=current_user,
+        user_create=user,
     )
 
 
@@ -71,30 +99,42 @@ def create_user(
 def update_user(
     user_id: UUID,
     user: UserUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
 ):
     return service.update(
-        db,
-        user_id,
-        user,
+        db=db,
+        current_user=current_user,
+        user_id=user_id,
+        user_update=user,
     )
 
 
 @router.delete(
     "/{user_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=
+        status.HTTP_204_NO_CONTENT,
 )
 def delete_user(
     user_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
 ):
     service.delete(
-        db,
-        user_id,
+        db=db,
+        current_user=current_user,
+        user_id=user_id,
     )
 
     return Response(
-        status_code=status.HTTP_204_NO_CONTENT,
+        status_code=
+            status.HTTP_204_NO_CONTENT,
     )

@@ -11,9 +11,9 @@ from app.db.mixins import TimestampMixin, UUIDMixin
 class User(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "app_user"
 
-    tenant_id: Mapped[UUID] = mapped_column(
+    tenant_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("tenant.id"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 

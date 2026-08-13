@@ -36,8 +36,12 @@ class KnowledgeBaseAccessService:
         self,
         db: Session,
         current_user: User,
-    ):
-        if current_user.role == UserRole.ADMIN:
+    ) -> list[KnowledgeBase]:
+
+        if (
+            current_user.role
+            == UserRole.ADMIN
+        ):
             stmt = (
                 select(
                     KnowledgeBase,
@@ -55,9 +59,28 @@ class KnowledgeBaseAccessService:
                 db.scalars(stmt).all()
             )
 
-        return self.repository.list_for_user(
-            db=db,
-            user_id=current_user.id,
+        if (
+            current_user.role
+            == UserRole.USER
+        ):
+            return (
+                self.repository.list_for_user(
+                    db=db,
+                    user_id=current_user.id,
+                )
+            )
+
+        if (
+            current_user.role
+            == UserRole.SUPERADMIN
+        ):
+            return []
+
+        raise (
+            KnowledgeBaseAccessDeniedError(
+                "You do not have access "
+                "to knowledge bases."
+            )
         )
 
     def assign(
@@ -99,6 +122,18 @@ class KnowledgeBaseAccessService:
             user=user,
             knowledge_base=knowledge_base,
         )
+
+        if (
+            user.role
+            != UserRole.USER
+        ):
+            raise (
+                KnowledgeBaseAccessDeniedError(
+                    "Knowledge base access "
+                    "can only be assigned "
+                    "to USER accounts."
+                )
+            )
 
         existing = (
             self.repository.get_assignment(
@@ -198,27 +233,44 @@ class KnowledgeBaseAccessService:
             return False
 
         if (
-            knowledge_base.tenant_id
-            != current_user.tenant_id
-        ):
-            return False
-
-        if (
             current_user.role
             == UserRole.ADMIN
         ):
-            return True
-
-        assignment = (
-            self.repository.get_assignment(
-                db=db,
-                user_id=current_user.id,
-                knowledge_base_id=
-                    knowledge_base_id,
+            return (
+                knowledge_base.tenant_id
+                == current_user.tenant_id
             )
-        )
 
-        return assignment is not None
+        if (
+            current_user.role
+            == UserRole.USER
+        ):
+            if (
+                knowledge_base.tenant_id
+                != current_user.tenant_id
+            ):
+                return False
+
+            assignment = (
+                self.repository.get_assignment(
+                    db=db,
+                    user_id=current_user.id,
+                    knowledge_base_id=
+                        knowledge_base_id,
+                )
+            )
+
+            return (
+                assignment is not None
+            )
+
+        if (
+            current_user.role
+            == UserRole.SUPERADMIN
+        ):
+            return False
+
+        return False
 
     def require_access(
         self,

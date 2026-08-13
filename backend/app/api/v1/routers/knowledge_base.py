@@ -39,7 +39,9 @@ router = APIRouter(
 )
 
 
-service = KnowledgeBaseService()
+service = (
+    KnowledgeBaseService()
+)
 
 access_service = (
     KnowledgeBaseAccessService()
@@ -79,7 +81,7 @@ def list_knowledge_bases(
         get_db,
     ),
     current_user: User = Depends(
-        get_current_active_user,
+        require_admin,
     ),
 ):
     return service.list(
@@ -90,7 +92,8 @@ def list_knowledge_bases(
 
 @router.get(
     "/{knowledge_base_id}",
-    response_model=KnowledgeBaseResponse,
+    response_model=
+        KnowledgeBaseResponse,
 )
 def get_knowledge_base(
     knowledge_base_id: UUID,
@@ -98,7 +101,7 @@ def get_knowledge_base(
         get_db,
     ),
     current_user: User = Depends(
-        get_current_active_user,
+        require_admin,
     ),
 ):
     return service.get(
@@ -110,8 +113,10 @@ def get_knowledge_base(
 
 @router.post(
     "/",
-    response_model=KnowledgeBaseResponse,
-    status_code=status.HTTP_201_CREATED,
+    response_model=
+        KnowledgeBaseResponse,
+    status_code=
+        status.HTTP_201_CREATED,
 )
 def create_knowledge_base(
     payload: KnowledgeBaseCreate,
@@ -131,7 +136,8 @@ def create_knowledge_base(
 
 @router.put(
     "/{knowledge_base_id}",
-    response_model=KnowledgeBaseResponse,
+    response_model=
+        KnowledgeBaseResponse,
 )
 def update_knowledge_base(
     knowledge_base_id: UUID,
@@ -153,7 +159,8 @@ def update_knowledge_base(
 
 @router.delete(
     "/{knowledge_base_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=
+        status.HTTP_204_NO_CONTENT,
 )
 def delete_knowledge_base(
     knowledge_base_id: UUID,
@@ -206,7 +213,8 @@ def assign_user_to_knowledge_base(
 
 @router.delete(
     "/{knowledge_base_id}/users/{user_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=
+        status.HTTP_204_NO_CONTENT,
 )
 def revoke_user_from_knowledge_base(
     knowledge_base_id: UUID,

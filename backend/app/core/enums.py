@@ -2,9 +2,9 @@ from enum import Enum
 
 
 class UserRole(str, Enum):
+    SUPERADMIN = "SUPERADMIN"
     ADMIN = "ADMIN"
     USER = "USER"
-    VIEWER = "VIEWER"
 
 
 class TenantStatus(str, Enum):
