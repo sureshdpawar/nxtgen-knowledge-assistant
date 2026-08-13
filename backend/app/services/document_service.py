@@ -1,9 +1,14 @@
+from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.document import Document
+from app.models.knowledge_source import (
+    KnowledgeSource,
+)
 from app.repositories.document_repository import (
     DocumentRepository,
 )
@@ -66,3 +71,44 @@ class DocumentService:
         db.commit()
 
         return True
+
+    def get_knowledge_base_id(
+        self,
+        db: Session,
+        document: Document,
+    ) -> UUID:
+
+        stmt = (
+            select(
+                KnowledgeSource
+                .knowledge_base_id,
+            )
+            .where(
+                KnowledgeSource.id
+                == document.knowledge_source_id,
+            )
+        )
+
+        knowledge_base_id = (
+            db.scalar(stmt)
+        )
+
+        if knowledge_base_id is None:
+            raise ValueError(
+                "Knowledge source not found "
+                "for document."
+            )
+
+        return knowledge_base_id
+
+    def get_file_path(
+        self,
+        document: Document,
+    ) -> Path:
+
+        return (
+            Path(
+                settings.DOCUMENT_STORAGE_PATH,
+            )
+            / document.storage_path
+        )
