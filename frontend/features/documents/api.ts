@@ -65,3 +65,37 @@ export async function deleteDocument(
     `/documents/${documentId}`,
   );
 }
+
+export async function openDocumentFile(
+  documentId: string,
+  page?: number,
+) {
+  const response = await api.get(
+    `/documents/${documentId}/file`,
+    {
+      responseType: "blob",
+    },
+  );
+
+  const blobUrl =
+    URL.createObjectURL(
+      response.data,
+    );
+
+  const targetUrl =
+    page
+      ? `${blobUrl}#page=${page}`
+      : blobUrl;
+
+  window.open(
+    targetUrl,
+    "_blank",
+    "noopener,noreferrer",
+  );
+
+  setTimeout(() => {
+    URL.revokeObjectURL(
+      blobUrl,
+    );
+  }, 60_000);
+}

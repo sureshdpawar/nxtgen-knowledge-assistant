@@ -7,6 +7,7 @@ import {
 import {
   createKnowledgeBase,
   deleteKnowledgeBase,
+  getAccessibleKnowledgeBases,
   getKnowledgeBase,
   getKnowledgeBases,
   updateKnowledgeBase,
@@ -107,3 +108,16 @@ export function useKnowledgeBase(
       enabled: !!id,
     });
   }
+
+ export function useAccessibleKnowledgeBases() {
+  return useQuery({
+    queryKey: [
+      "knowledge-bases",
+      "accessible",
+    ],
+    queryFn:
+      getAccessibleKnowledgeBases,
+  });
+} 
+
+  

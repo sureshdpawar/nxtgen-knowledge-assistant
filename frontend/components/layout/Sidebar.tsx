@@ -10,6 +10,10 @@ import {
   Settings,
 } from "lucide-react";
 
+import {
+  Search,
+} from "lucide-react";
+
 const menu = [
   {
     label: "Dashboard",
@@ -20,6 +24,11 @@ const menu = [
     label: "Knowledge Bases",
     href: "/knowledge-bases",
     icon: Database,
+  },
+  {
+  label: "Search",
+  href: "/search",
+  icon: Search,
   },
   {
     label: "Chat",

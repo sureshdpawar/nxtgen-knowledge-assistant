@@ -62,3 +62,12 @@ export async function getKnowledgeBase(
 
   return response.data;
 }
+
+export async function getAccessibleKnowledgeBases() {
+  const response =
+    await api.get<KnowledgeBase[]>(
+      "/knowledge-bases/accessible",
+    );
+
+  return response.data;
+}
