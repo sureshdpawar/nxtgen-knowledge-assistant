@@ -68,3 +68,7 @@ class LLMProvider(Enum):
     GOOGLE = "GOOGLE"
     VLLM = "VLLM"
     OLLAMA = "OLLAMA"
+    
+class KnowledgeBaseAccessLevel(str, Enum):
+    READ = "READ"
+    MANAGE = "MANAGE"    
