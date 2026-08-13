@@ -1,3 +1,5 @@
+# app/schemas/user.py
+
 from datetime import datetime
 from uuid import UUID
 
@@ -22,6 +24,12 @@ class TenantAdminCreate(BaseModel):
     last_name: str
     email: EmailStr
     password: str
+
+
+class TenantAdminUpdate(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    is_active: bool | None = None
 
 
 class UserUpdate(BaseModel):

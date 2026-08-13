@@ -1,3 +1,5 @@
+# app/api/v1/routers/tenant.py
+
 from uuid import UUID
 
 from fastapi import (
@@ -20,6 +22,7 @@ from app.schemas.tenant import (
 )
 from app.schemas.user import (
     TenantAdminCreate,
+    TenantAdminUpdate,
     UserResponse,
 )
 from app.services.tenant_service import (
@@ -77,6 +80,31 @@ def get_tenant(
     return service.get(
         db,
         tenant_id,
+    )
+
+
+@router.get(
+    "/{tenant_id}/admins",
+    response_model=list[
+        UserResponse
+    ],
+)
+def list_tenant_admins(
+    tenant_id: UUID,
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_superadmin,
+    ),
+):
+    return (
+        user_service
+        .list_tenant_admins(
+            db=db,
+            tenant_id=
+                tenant_id,
+        )
     )
 
 
@@ -146,8 +174,41 @@ def create_tenant_admin(
         user_service
         .create_tenant_admin(
             db=db,
-            tenant_id=tenant_id,
-            admin_create=admin,
+            tenant_id=
+                tenant_id,
+            admin_create=
+                admin,
+        )
+    )
+
+
+@router.put(
+    "/{tenant_id}/admins/{user_id}",
+    response_model=
+        UserResponse,
+)
+def update_tenant_admin(
+    tenant_id: UUID,
+    user_id: UUID,
+    admin:
+        TenantAdminUpdate,
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_superadmin,
+    ),
+):
+    return (
+        user_service
+        .update_tenant_admin(
+            db=db,
+            tenant_id=
+                tenant_id,
+            user_id=
+                user_id,
+            admin_update=
+                admin,
         )
     )
 

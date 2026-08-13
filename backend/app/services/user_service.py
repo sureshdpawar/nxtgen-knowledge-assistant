@@ -1,3 +1,5 @@
+# app/services/user_service.py
+
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -22,6 +24,7 @@ from app.repositories.user_repository import (
 )
 from app.schemas.user import (
     TenantAdminCreate,
+    TenantAdminUpdate,
     UserCreate,
     UserUpdate,
 )
@@ -62,24 +65,18 @@ class UserService:
         user = User(
             tenant_id=
                 current_user.tenant_id,
-
             first_name=
                 user_create.first_name,
-
             last_name=
                 user_create.last_name,
-
             email=
                 user_create.email,
-
             password_hash=
                 hash_password(
                     user_create.password,
                 ),
-
             role=
                 UserRole.USER,
-
             is_active=True,
         )
 
@@ -102,7 +99,8 @@ class UserService:
     ) -> User:
 
         tenant = (
-            self.tenant_repository.get(
+            self.tenant_repository
+            .get(
                 db,
                 tenant_id,
             )
@@ -123,30 +121,130 @@ class UserService:
             raise DuplicateUserEmailError()
 
         user = User(
-            tenant_id=
-                tenant_id,
-
+            tenant_id=tenant_id,
             first_name=
                 admin_create.first_name,
-
             last_name=
                 admin_create.last_name,
-
             email=
                 admin_create.email,
-
             password_hash=
                 hash_password(
                     admin_create.password,
                 ),
-
             role=
                 UserRole.ADMIN,
-
             is_active=True,
         )
 
         self.user_repository.create(
+            db,
+            user,
+        )
+
+        db.commit()
+        db.refresh(user)
+
+        return user
+
+    def list_tenant_admins(
+        self,
+        db: Session,
+        tenant_id: UUID,
+    ) -> list[User]:
+
+        tenant = (
+            self.tenant_repository
+            .get(
+                db,
+                tenant_id,
+            )
+        )
+
+        if tenant is None:
+            raise TenantNotFoundError()
+
+        return (
+            self.user_repository
+            .list_admins_by_tenant(
+                db=db,
+                tenant_id=
+                    tenant_id,
+            )
+        )
+
+    def get_tenant_admin(
+        self,
+        db: Session,
+        tenant_id: UUID,
+        user_id: UUID,
+    ) -> User:
+
+        tenant = (
+            self.tenant_repository
+            .get(
+                db,
+                tenant_id,
+            )
+        )
+
+        if tenant is None:
+            raise TenantNotFoundError()
+
+        user = (
+            self.user_repository
+            .get(
+                db,
+                user_id,
+            )
+        )
+
+        if (
+            user is None
+            or user.tenant_id
+            != tenant_id
+            or user.role
+            != UserRole.ADMIN
+        ):
+            raise UserNotFoundError()
+
+        return user
+
+    def update_tenant_admin(
+        self,
+        db: Session,
+        tenant_id: UUID,
+        user_id: UUID,
+        admin_update:
+            TenantAdminUpdate,
+    ) -> User:
+
+        user = (
+            self.get_tenant_admin(
+                db=db,
+                tenant_id=
+                    tenant_id,
+                user_id=user_id,
+            )
+        )
+
+        update_data = (
+            admin_update.model_dump(
+                exclude_unset=True,
+            )
+        )
+
+        for (
+            field,
+            value,
+        ) in update_data.items():
+            setattr(
+                user,
+                field,
+                value,
+            )
+
+        self.user_repository.update(
             db,
             user,
         )
@@ -164,7 +262,8 @@ class UserService:
     ) -> User:
 
         user = (
-            self.user_repository.get(
+            self.user_repository
+            .get(
                 db,
                 user_id,
             )
@@ -205,12 +304,14 @@ class UserService:
         db: Session,
         current_user: User,
         user_id: UUID,
-        user_update: UserUpdate,
+        user_update:
+            UserUpdate,
     ) -> User:
 
         user = self.get(
             db=db,
-            current_user=current_user,
+            current_user=
+                current_user,
             user_id=user_id,
         )
 
@@ -249,7 +350,8 @@ class UserService:
 
         user = self.get(
             db=db,
-            current_user=current_user,
+            current_user=
+                current_user,
             user_id=user_id,
         )
 
