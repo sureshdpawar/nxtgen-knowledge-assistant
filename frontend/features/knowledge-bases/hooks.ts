@@ -11,9 +11,11 @@ import {
   getKnowledgeBase,
   getKnowledgeBases,
   updateKnowledgeBase,
+  updateKnowledgeBaseLLMProfile,
 } from "./api";
 
 import type {
+  UpdateKnowledgeBaseLLMProfileRequest,
   UpdateKnowledgeBaseRequest,
 } from "./types";
 
@@ -63,6 +65,7 @@ export function useUpdateKnowledgeBase() {
       data,
     }: {
       id: string;
+
       data:
         UpdateKnowledgeBaseRequest;
     }) =>
@@ -144,5 +147,45 @@ export function useAccessibleKnowledgeBases(
       getAccessibleKnowledgeBases,
 
     enabled,
+  });
+}
+
+
+export function useUpdateKnowledgeBaseLLMProfile() {
+  const queryClient =
+    useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      knowledgeBaseId,
+      data,
+    }: {
+      knowledgeBaseId: string;
+
+      data:
+        UpdateKnowledgeBaseLLMProfileRequest;
+    }) =>
+      updateKnowledgeBaseLLMProfile(
+        knowledgeBaseId,
+        data,
+      ),
+
+    onSuccess(
+      _data,
+      variables,
+    ) {
+      queryClient.invalidateQueries({
+        queryKey: [
+          "knowledge-bases",
+        ],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          "knowledge-bases",
+          variables.knowledgeBaseId,
+        ],
+      });
+    },
   });
 }

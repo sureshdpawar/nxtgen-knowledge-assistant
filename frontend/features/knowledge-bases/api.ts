@@ -3,6 +3,8 @@ import api from "@/services/api";
 import type {
   CreateKnowledgeBaseRequest,
   KnowledgeBase,
+  UpdateKnowledgeBaseLLMProfileRequest,
+  UpdateKnowledgeBaseLLMProfileResponse,
   UpdateKnowledgeBaseRequest,
 } from "./types";
 
@@ -18,7 +20,8 @@ export async function getKnowledgeBases() {
 
 
 export async function createKnowledgeBase(
-  payload: CreateKnowledgeBaseRequest,
+  payload:
+    CreateKnowledgeBaseRequest,
 ) {
   const response =
     await api.post<KnowledgeBase>(
@@ -32,7 +35,8 @@ export async function createKnowledgeBase(
 
 export async function updateKnowledgeBase(
   id: string,
-  payload: UpdateKnowledgeBaseRequest,
+  payload:
+    UpdateKnowledgeBaseRequest,
 ) {
   const response =
     await api.put<KnowledgeBase>(
@@ -52,6 +56,7 @@ export async function deleteKnowledgeBase(
   );
 }
 
+
 export async function getKnowledgeBase(
   id: string,
 ) {
@@ -63,10 +68,28 @@ export async function getKnowledgeBase(
   return response.data;
 }
 
+
 export async function getAccessibleKnowledgeBases() {
   const response =
     await api.get<KnowledgeBase[]>(
       "/knowledge-bases/accessible",
+    );
+
+  return response.data;
+}
+
+
+export async function updateKnowledgeBaseLLMProfile(
+  knowledgeBaseId: string,
+  payload:
+    UpdateKnowledgeBaseLLMProfileRequest,
+) {
+  const response =
+    await api.put<
+      UpdateKnowledgeBaseLLMProfileResponse
+    >(
+      `/llm-config/knowledge-bases/${knowledgeBaseId}`,
+      payload,
     );
 
   return response.data;
