@@ -83,6 +83,54 @@ class KnowledgeBaseAccessService:
             )
         )
 
+    def list_for_user(
+        self,
+        db: Session,
+        current_user: User,
+        user_id: UUID,
+    ) -> list[KnowledgeBase]:
+
+        self._require_admin(
+            current_user,
+        )
+
+        user = db.get(
+            User,
+            user_id,
+        )
+
+        if user is None:
+            raise (
+                KnowledgeBaseAccessUserNotFoundError()
+            )
+
+        if (
+            user.tenant_id
+            != current_user.tenant_id
+        ):
+            raise (
+                CrossTenantKnowledgeBaseAccessError()
+            )
+
+        if (
+            user.role
+            != UserRole.USER
+        ):
+            raise (
+                KnowledgeBaseAccessDeniedError(
+                    "Knowledge base access "
+                    "can only be viewed "
+                    "for USER accounts."
+                )
+            )
+
+        return (
+            self.repository.list_for_user(
+                db=db,
+                user_id=user_id,
+            )
+        )
+
     def assign(
         self,
         db: Session,
