@@ -63,7 +63,8 @@ def list_accessible_knowledge_bases(
     ),
 ):
     return (
-        access_service.list_accessible(
+        access_service
+        .list_accessible(
             db=db,
             current_user=current_user,
         )
@@ -71,7 +72,7 @@ def list_accessible_knowledge_bases(
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[
         KnowledgeBaseResponse
     ],
@@ -112,7 +113,7 @@ def get_knowledge_base(
 
 
 @router.post(
-    "/",
+    "",
     response_model=
         KnowledgeBaseResponse,
     status_code=

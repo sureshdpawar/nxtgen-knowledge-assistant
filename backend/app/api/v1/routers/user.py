@@ -43,7 +43,7 @@ access_service = (
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[
         UserResponse
     ],
@@ -89,7 +89,8 @@ def list_user_knowledge_bases(
 
 @router.get(
     "/{user_id}",
-    response_model=UserResponse,
+    response_model=
+        UserResponse,
 )
 def get_user(
     user_id: UUID,
@@ -108,7 +109,7 @@ def get_user(
 
 
 @router.post(
-    "/",
+    "",
     response_model=
         UserResponse,
     status_code=

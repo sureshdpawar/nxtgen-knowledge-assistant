@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 from app.core.enums import (
     LLMProvider,
 )
+from app.exceptions.llm import (
+    LLMConfigurationNotFoundError,
+)
 from app.models.knowledge_base import (
     KnowledgeBase,
 )
@@ -116,9 +119,10 @@ class LLMClientFactory:
                 and not configuration.is_active
             ):
                 logger.warning(
-                    "Inactive LLM profile '%s' "
-                    "(%s) assigned to KB %s; "
-                    "falling back to tenant default",
+                    "Inactive LLM profile "
+                    "'%s' (%s) assigned "
+                    "to KB %s; falling "
+                    "back to tenant default",
                     configuration.name,
                     configuration.id,
                     knowledge_base.id,
@@ -141,9 +145,16 @@ class LLMClientFactory:
             )
 
         if configuration is None:
-            raise ValueError(
-                "No active default LLM "
-                "configuration found."
+            logger.error(
+                "No active LLM "
+                "configuration available "
+                "tenant=%s kb=%s",
+                tenant_id,
+                knowledge_base_id,
+            )
+
+            raise (
+                LLMConfigurationNotFoundError()
             )
 
         logger.info(
@@ -170,8 +181,7 @@ class LLMClientFactory:
             configuration,
         )
 
-    # Keep old method temporarily
-    # so other services do not break.
+    # Temporary compatibility method.
     def create(
         self,
         db: Session,
@@ -190,9 +200,15 @@ class LLMClientFactory:
         )
 
         if configuration is None:
-            raise ValueError(
-                "No active default LLM "
-                "configuration found."
+            logger.error(
+                "No active tenant "
+                "default LLM profile "
+                "tenant=%s",
+                tenant_id,
+            )
+
+            raise (
+                LLMConfigurationNotFoundError()
             )
 
         logger.info(

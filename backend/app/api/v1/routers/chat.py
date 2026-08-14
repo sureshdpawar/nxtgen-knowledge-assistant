@@ -2,13 +2,15 @@ from fastapi import (
     APIRouter,
     Depends,
 )
-
+from fastapi.responses import (
+    StreamingResponse,
+)
 from sqlalchemy.orm import Session
 
-from fastapi.responses import StreamingResponse
-
 from app.api.deps import get_db
-from app.auth.dependencies import get_current_active_user
+from app.auth.dependencies import (
+    get_current_active_user,
+)
 from app.models.user import User
 from app.schemas.chat import (
     ChatRequest,
@@ -18,65 +20,104 @@ from app.services.chat_service import (
     ChatService,
 )
 
+
 router = APIRouter(
     prefix="/chat",
     tags=["Chat"],
 )
+
 
 service = ChatService()
 
 
 @router.post(
     "",
-    response_model=ChatResponse,
+    response_model=
+        ChatResponse,
 )
 def chat(
-    payload: ChatRequest,
-    db: Session = Depends(get_db),
+    payload:
+        ChatRequest,
+    db: Session = Depends(
+        get_db,
+    ),
     current_user: User = Depends(
         get_current_active_user,
     ),
 ):
-
-    result = service.chat(
-        db=db,
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
-        knowledge_base_id=payload.knowledge_base_id,
-        conversation_id=payload.conversation_id,
-        query=payload.query,
+    result = (
+        service.chat(
+            db=db,
+            tenant_id=
+                current_user.tenant_id,
+            user_id=
+                current_user.id,
+            knowledge_base_id=
+                payload.knowledge_base_id,
+            conversation_id=
+                payload.conversation_id,
+            query=
+                payload.query,
+        )
     )
 
     return ChatResponse(
-        conversation_id=result["conversation_id"],
-        answer=result["answer"],
-        sources=result["sources"],
+        conversation_id=
+            result[
+                "conversation_id"
+            ],
+        answer=
+            result[
+                "answer"
+            ],
+        sources=
+            result[
+                "sources"
+            ],
     )
-    
-@router.post("/stream")
+
+
+@router.post(
+    "/stream",
+)
 def chat_stream(
-    payload: ChatRequest,
-    db: Session = Depends(get_db),
+    payload:
+        ChatRequest,
+    db: Session = Depends(
+        get_db,
+    ),
     current_user: User = Depends(
         get_current_active_user,
     ),
 ):
-
-    generator = service.chat_stream(
-        db=db,
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
-        knowledge_base_id=payload.knowledge_base_id,
-        conversation_id=payload.conversation_id,
-        query=payload.query,
+    generator = (
+        service.chat_stream(
+            db=db,
+            tenant_id=
+                current_user.tenant_id,
+            user_id=
+                current_user.id,
+            knowledge_base_id=
+                payload.knowledge_base_id,
+            conversation_id=
+                payload.conversation_id,
+            query=
+                payload.query,
+        )
     )
 
     return StreamingResponse(
         generator,
-        media_type="text/event-stream",
+        media_type=
+            "text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
+            "Cache-Control":
+                "no-cache",
+
+            "Connection":
+                "keep-alive",
+
+            "X-Accel-Buffering":
+                "no",
         },
     )

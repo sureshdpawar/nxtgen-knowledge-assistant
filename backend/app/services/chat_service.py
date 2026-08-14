@@ -1,10 +1,26 @@
 import json
+import logging
+import time
 
 from collections.abc import Generator
 from uuid import UUID
 
+from openai import (
+    APIConnectionError,
+    APIError,
+    APITimeoutError,
+    AuthenticationError,
+    RateLimitError,
+)
 from sqlalchemy.orm import Session
 
+from app.exceptions.llm import (
+    LLMAuthenticationError,
+    LLMConnectionError,
+    LLMProviderError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+)
 from app.services.conversation_service import (
     ConversationService,
 )
@@ -16,6 +32,11 @@ from app.services.llm_client_factory import (
 )
 from app.services.prompt_builder_service import (
     PromptBuilderService,
+)
+
+
+logger = logging.getLogger(
+    "nxtgen.llm"
 )
 
 
@@ -42,6 +63,7 @@ class ChatService:
         self,
         answer: str,
     ) -> bool:
+
         normalized = (
             answer
             .strip()
@@ -57,7 +79,8 @@ class ChatService:
 
         return any(
             phrase in normalized
-            for phrase in no_answer_phrases
+            for phrase
+            in no_answer_phrases
         )
 
     def _build_sources(
@@ -76,33 +99,71 @@ class ChatService:
 
             sources.append(
                 {
-                    "knowledge_source_id": str(
-                        knowledge_source.id
-                    ),
+                    "knowledge_source_id":
+                        str(
+                            knowledge_source.id,
+                        ),
+
                     "knowledge_source_name":
                         knowledge_source.name,
-                    "document_id": str(
-                        document.id
-                    ),
+
+                    "document_id":
+                        str(
+                            document.id,
+                        ),
+
                     "document_name":
                         document.original_filename,
+
                     "chunk_index":
                         chunk.chunk_index,
+
                     "page":
                         chunk.chunk_metadata.get(
                             "page",
                             1,
                         ),
-                    "similarity": round(
-                        1 - float(
-                            similarity
+
+                    "similarity":
+                        round(
+                            1 - float(
+                                similarity,
+                            ),
+                            3,
                         ),
-                        3,
-                    ),
                 }
             )
 
         return sources
+
+    def _stream_error_event(
+        self,
+        code: str,
+        message: str,
+    ) -> str:
+
+        payload = {
+            "code":
+                code,
+
+            "message":
+                message,
+        }
+
+        return (
+            "event: error\n"
+            f"data: {json.dumps(payload)}"
+            "\n\n"
+        )
+
+    def _stream_done_event(
+        self,
+    ) -> str:
+
+        return (
+            "event: done\n"
+            "data: [DONE]\n\n"
+        )
 
     def chat(
         self,
@@ -118,8 +179,10 @@ class ChatService:
             self.conversation_service
             .get_or_create_conversation(
                 db=db,
-                tenant_id=tenant_id,
-                user_id=user_id,
+                tenant_id=
+                    tenant_id,
+                user_id=
+                    user_id,
                 knowledge_base_id=
                     knowledge_base_id,
                 conversation_id=
@@ -171,14 +234,6 @@ class ChatService:
             )
         )
 
-        # Resolve the LLM configuration
-        # for the selected knowledge base.
-        #
-        # If the KB has its own configuration,
-        # that configuration is used.
-        #
-        # Otherwise the tenant default
-        # configuration is used.
         client, config = (
             self.client_factory
             .create_for_knowledge_base(
@@ -190,21 +245,191 @@ class ChatService:
             )
         )
 
-        response = (
-            client.chat.completions.create(
-                model=
-                    config.model_name,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-                temperature=
-                    config.temperature,
-                max_tokens=
-                    config.max_tokens,
+        started_at = (
+            time.perf_counter()
+        )
+
+        try:
+            response = (
+                client.chat.completions.create(
+                    model=
+                        config.model_name,
+
+                    messages=[
+                        {
+                            "role":
+                                "user",
+
+                            "content":
+                                prompt,
+                        }
+                    ],
+
+                    temperature=
+                        config.temperature,
+
+                    max_tokens=
+                        config.max_tokens,
+                )
             )
+
+        except AuthenticationError as exc:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started_at
+                )
+                * 1000
+            )
+
+            logger.error(
+                "LLM authentication "
+                "failed profile='%s' "
+                "model='%s' "
+                "provider='%s' "
+                "kb=%s "
+                "duration_ms=%.2f",
+                config.name,
+                config.model_name,
+                config.provider.value,
+                knowledge_base_id,
+                elapsed_ms,
+            )
+
+            raise (
+                LLMAuthenticationError()
+            ) from exc
+
+        except RateLimitError as exc:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started_at
+                )
+                * 1000
+            )
+
+            logger.warning(
+                "LLM rate limited "
+                "profile='%s' "
+                "model='%s' "
+                "provider='%s' "
+                "kb=%s "
+                "duration_ms=%.2f",
+                config.name,
+                config.model_name,
+                config.provider.value,
+                knowledge_base_id,
+                elapsed_ms,
+            )
+
+            raise (
+                LLMRateLimitError()
+            ) from exc
+
+        except APITimeoutError as exc:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started_at
+                )
+                * 1000
+            )
+
+            logger.error(
+                "LLM timeout "
+                "profile='%s' "
+                "model='%s' "
+                "provider='%s' "
+                "kb=%s "
+                "duration_ms=%.2f",
+                config.name,
+                config.model_name,
+                config.provider.value,
+                knowledge_base_id,
+                elapsed_ms,
+            )
+
+            raise (
+                LLMTimeoutError()
+            ) from exc
+
+        except APIConnectionError as exc:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started_at
+                )
+                * 1000
+            )
+
+            logger.error(
+                "LLM connection failed "
+                "profile='%s' "
+                "model='%s' "
+                "provider='%s' "
+                "kb=%s "
+                "duration_ms=%.2f",
+                config.name,
+                config.model_name,
+                config.provider.value,
+                knowledge_base_id,
+                elapsed_ms,
+            )
+
+            raise (
+                LLMConnectionError()
+            ) from exc
+
+        except APIError as exc:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started_at
+                )
+                * 1000
+            )
+
+            logger.error(
+                "LLM provider error "
+                "profile='%s' "
+                "model='%s' "
+                "provider='%s' "
+                "kb=%s "
+                "duration_ms=%.2f "
+                "error_type='%s'",
+                config.name,
+                config.model_name,
+                config.provider.value,
+                knowledge_base_id,
+                elapsed_ms,
+                type(exc).__name__,
+            )
+
+            raise (
+                LLMProviderError()
+            ) from exc
+
+        elapsed_ms = (
+            (
+                time.perf_counter()
+                - started_at
+            )
+            * 1000
+        )
+
+        logger.info(
+            "LLM request completed "
+            "profile='%s' "
+            "model='%s' "
+            "provider='%s' "
+            "kb=%s "
+            "duration_ms=%.2f",
+            config.name,
+            config.model_name,
+            config.provider.value,
+            knowledge_base_id,
+            elapsed_ms,
         )
 
         answer = (
@@ -234,10 +459,12 @@ class ChatService:
                     response
                     .usage
                     .prompt_tokens,
+
                 "completion_tokens":
                     response
                     .usage
                     .completion_tokens,
+
                 "total_tokens":
                     response
                     .usage
@@ -256,8 +483,10 @@ class ChatService:
         return {
             "conversation_id":
                 conversation.id,
+
             "answer":
                 answer,
+
             "sources":
                 sources,
         }
@@ -335,8 +564,6 @@ class ChatService:
             )
         )
 
-        # Resolve the LLM configuration
-        # for the selected knowledge base.
         client, config = (
             self.client_factory
             .create_for_knowledge_base(
@@ -348,50 +575,295 @@ class ChatService:
             )
         )
 
-        response = (
-            client.chat.completions.create(
-                model=
-                    config.model_name,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-                temperature=
-                    config.temperature,
-                max_tokens=
-                    config.max_tokens,
-                stream=True,
-            )
+        started_at = (
+            time.perf_counter()
         )
 
         answer = ""
 
-        for response_chunk in response:
+        try:
+            response = (
+                client.chat.completions.create(
+                    model=
+                        config.model_name,
 
-            if (
-                not response_chunk.choices
-                or response_chunk
-                .choices[0]
-                .delta
-                .content
-                is None
-            ):
-                continue
+                    messages=[
+                        {
+                            "role":
+                                "user",
 
-            token = (
-                response_chunk
-                .choices[0]
-                .delta
-                .content
+                            "content":
+                                prompt,
+                        }
+                    ],
+
+                    temperature=
+                        config.temperature,
+
+                    max_tokens=
+                        config.max_tokens,
+
+                    stream=True,
+                )
             )
 
-            answer += token
+            for response_chunk in response:
+
+                if (
+                    not response_chunk.choices
+                    or response_chunk
+                    .choices[0]
+                    .delta
+                    .content
+                    is None
+                ):
+                    continue
+
+                token = (
+                    response_chunk
+                    .choices[0]
+                    .delta
+                    .content
+                )
+
+                answer += token
+
+                yield (
+                    f"data: {token}\n\n"
+                )
+
+        except AuthenticationError:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started_at
+                )
+                * 1000
+            )
+
+            logger.error(
+                "Streaming LLM "
+                "authentication failed "
+                "profile='%s' "
+                "model='%s' "
+                "provider='%s' "
+                "kb=%s "
+                "duration_ms=%.2f",
+                config.name,
+                config.model_name,
+                config.provider.value,
+                knowledge_base_id,
+                elapsed_ms,
+            )
 
             yield (
-                f"data: {token}\n\n"
+                self._stream_error_event(
+                    code=
+                        "LLM_AUTHENTICATION_FAILED",
+
+                    message=
+                        "The configured LLM "
+                        "credentials are invalid.",
+                )
             )
+
+            yield (
+                self._stream_done_event()
+            )
+
+            return
+
+        except RateLimitError:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started_at
+                )
+                * 1000
+            )
+
+            logger.warning(
+                "Streaming LLM "
+                "rate limited "
+                "profile='%s' "
+                "model='%s' "
+                "provider='%s' "
+                "kb=%s "
+                "duration_ms=%.2f",
+                config.name,
+                config.model_name,
+                config.provider.value,
+                knowledge_base_id,
+                elapsed_ms,
+            )
+
+            yield (
+                self._stream_error_event(
+                    code=
+                        "LLM_RATE_LIMITED",
+
+                    message=
+                        "The LLM provider "
+                        "rate limit has been "
+                        "reached. Please try "
+                        "again later.",
+                )
+            )
+
+            yield (
+                self._stream_done_event()
+            )
+
+            return
+
+        except APITimeoutError:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started_at
+                )
+                * 1000
+            )
+
+            logger.error(
+                "Streaming LLM timeout "
+                "profile='%s' "
+                "model='%s' "
+                "provider='%s' "
+                "kb=%s "
+                "duration_ms=%.2f",
+                config.name,
+                config.model_name,
+                config.provider.value,
+                knowledge_base_id,
+                elapsed_ms,
+            )
+
+            yield (
+                self._stream_error_event(
+                    code=
+                        "LLM_TIMEOUT",
+
+                    message=
+                        "The LLM provider did "
+                        "not respond within "
+                        "the expected time.",
+                )
+            )
+
+            yield (
+                self._stream_done_event()
+            )
+
+            return
+
+        except APIConnectionError:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started_at
+                )
+                * 1000
+            )
+
+            logger.error(
+                "Streaming LLM "
+                "connection failed "
+                "profile='%s' "
+                "model='%s' "
+                "provider='%s' "
+                "kb=%s "
+                "duration_ms=%.2f",
+                config.name,
+                config.model_name,
+                config.provider.value,
+                knowledge_base_id,
+                elapsed_ms,
+            )
+
+            yield (
+                self._stream_error_event(
+                    code=
+                        "LLM_CONNECTION_FAILED",
+
+                    message=
+                        "The configured LLM "
+                        "provider could not "
+                        "be reached.",
+                )
+            )
+
+            yield (
+                self._stream_done_event()
+            )
+
+            return
+
+        except APIError as exc:
+            elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started_at
+                )
+                * 1000
+            )
+
+            logger.error(
+                "Streaming LLM "
+                "provider error "
+                "profile='%s' "
+                "model='%s' "
+                "provider='%s' "
+                "kb=%s "
+                "duration_ms=%.2f "
+                "error_type='%s'",
+                config.name,
+                config.model_name,
+                config.provider.value,
+                knowledge_base_id,
+                elapsed_ms,
+                type(exc).__name__,
+            )
+
+            yield (
+                self._stream_error_event(
+                    code=
+                        "LLM_PROVIDER_ERROR",
+
+                    message=
+                        "The LLM provider "
+                        "returned an error.",
+                )
+            )
+
+            yield (
+                self._stream_done_event()
+            )
+
+            return
+
+        elapsed_ms = (
+            (
+                time.perf_counter()
+                - started_at
+            )
+            * 1000
+        )
+
+        logger.info(
+            "Streaming LLM request "
+            "completed "
+            "profile='%s' "
+            "model='%s' "
+            "provider='%s' "
+            "kb=%s "
+            "duration_ms=%.2f",
+            config.name,
+            config.model_name,
+            config.provider.value,
+            knowledge_base_id,
+            elapsed_ms,
+        )
 
         sources = (
             self._build_sources(
@@ -414,9 +886,11 @@ class ChatService:
         )
 
         metadata = {
-            "conversation_id": str(
-                conversation.id
-            ),
+            "conversation_id":
+                str(
+                    conversation.id,
+                ),
+
             "sources":
                 sources,
         }
@@ -429,6 +903,5 @@ class ChatService:
         )
 
         yield (
-            "event: done\n"
-            "data: [DONE]\n\n"
+            self._stream_done_event()
         )

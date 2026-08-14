@@ -25,11 +25,15 @@ class KnowledgeBaseUpdate(BaseModel):
 
 
 class KnowledgeBaseResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
 
     id: UUID
     tenant_id: UUID
     owner_user_id: UUID
+
+    llm_configuration_id: UUID | None
 
     name: str
     description: str | None
