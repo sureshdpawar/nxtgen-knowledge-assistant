@@ -1,5 +1,3 @@
-// features/users/hooks.ts
-
 import {
   useMutation,
   useQuery,
@@ -7,9 +5,12 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  assignKnowledgeBaseToUser,
   createUser,
   getUser,
+  getUserKnowledgeBases,
   getUsers,
+  revokeKnowledgeBaseFromUser,
   updateUser,
 } from "./api";
 
@@ -24,6 +25,7 @@ export function useUsers() {
     queryKey: [
       "users",
     ],
+
     queryFn:
       getUsers,
   });
@@ -104,6 +106,104 @@ export function useUpdateUser() {
         queryKey: [
           "users",
           variables.id,
+        ],
+      });
+    },
+  });
+}
+
+
+export function useUserKnowledgeBases(
+  userId: string,
+) {
+  return useQuery({
+    queryKey: [
+      "user-knowledge-bases",
+      userId,
+    ],
+
+    queryFn: () =>
+      getUserKnowledgeBases(
+        userId,
+      ),
+
+    enabled:
+      !!userId,
+  });
+}
+
+
+export function useAssignKnowledgeBase() {
+  const queryClient =
+    useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      userId,
+      knowledgeBaseId,
+    }: {
+      userId: string;
+      knowledgeBaseId: string;
+    }) =>
+      assignKnowledgeBaseToUser(
+        userId,
+        knowledgeBaseId,
+      ),
+
+    onSuccess(
+      _data,
+      variables,
+    ) {
+      queryClient.invalidateQueries({
+        queryKey: [
+          "user-knowledge-bases",
+          variables.userId,
+        ],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          "knowledge-bases",
+          "accessible",
+        ],
+      });
+    },
+  });
+}
+
+
+export function useRevokeKnowledgeBase() {
+  const queryClient =
+    useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      userId,
+      knowledgeBaseId,
+    }: {
+      userId: string;
+      knowledgeBaseId: string;
+    }) =>
+      revokeKnowledgeBaseFromUser(
+        userId,
+        knowledgeBaseId,
+      ),
+
+    onSuccess(
+      _data,
+      variables,
+    ) {
+      queryClient.invalidateQueries({
+        queryKey: [
+          "user-knowledge-bases",
+          variables.userId,
+        ],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          "knowledge-bases",
+          "accessible",
         ],
       });
     },

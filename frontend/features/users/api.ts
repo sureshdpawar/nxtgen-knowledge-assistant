@@ -1,6 +1,8 @@
-// features/users/api.ts
-
 import api from "@/services/api";
+
+import type {
+  KnowledgeBase,
+} from "@/features/knowledge-bases/types";
 
 import type {
   CreateUserRequest,
@@ -55,4 +57,42 @@ export async function updateUser(
     );
 
   return response.data;
+}
+
+
+export async function getUserKnowledgeBases(
+  userId: string,
+) {
+  const response =
+    await api.get<KnowledgeBase[]>(
+      `/users/${userId}/knowledge-bases`,
+    );
+
+  return response.data;
+}
+
+
+export async function assignKnowledgeBaseToUser(
+  userId: string,
+  knowledgeBaseId: string,
+) {
+  const response =
+    await api.post(
+      `/knowledge-bases/${knowledgeBaseId}/users/${userId}`,
+      {
+        access_level: "READ",
+      },
+    );
+
+  return response.data;
+}
+
+
+export async function revokeKnowledgeBaseFromUser(
+  userId: string,
+  knowledgeBaseId: string,
+) {
+  await api.delete(
+    `/knowledge-bases/${knowledgeBaseId}/users/${userId}`,
+  );
 }

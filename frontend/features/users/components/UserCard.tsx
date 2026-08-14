@@ -9,6 +9,7 @@ import type {
 } from "../types";
 
 import EditUserDialog from "./EditUserDialog";
+import ManageKnowledgeBaseAccess from "./ManageKnowledgeBaseAccess";
 
 
 type Props = {
@@ -72,13 +73,16 @@ export default function UserCard({
           </span>
 
 
-          {user.role ===
-            "USER" && (
-            <EditUserDialog
-              user={
-                user
-              }
-            />
+          {user.role === "USER" && (
+            <>
+              <ManageKnowledgeBaseAccess
+                user={user}
+              />
+
+              <EditUserDialog
+                user={user}
+              />
+            </>
           )}
 
         </div>
