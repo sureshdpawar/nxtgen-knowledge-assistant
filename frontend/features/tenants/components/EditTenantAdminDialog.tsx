@@ -1,13 +1,30 @@
 "use client";
 
 import {
-  FormEvent,
+  useEffect,
   useState,
+} from "react";
+
+import type {
+  FormEvent,
 } from "react";
 
 import {
   Pencil,
 } from "lucide-react";
+
+import {
+  Button,
+} from "@/components/ui/button";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import {
   useUpdateTenantAdmin,
@@ -33,181 +50,272 @@ export default function EditTenantAdminDialog({
       tenantId,
     );
 
-
   const [
     open,
     setOpen,
-  ] =
-    useState(false);
-
+  ] = useState(false);
 
   const [
     firstName,
     setFirstName,
-  ] =
-    useState(
-      admin.first_name,
-    );
-
+  ] = useState(
+    admin.first_name,
+  );
 
   const [
     lastName,
     setLastName,
-  ] =
-    useState(
-      admin.last_name,
-    );
-
+  ] = useState(
+    admin.last_name,
+  );
 
   const [
     isActive,
     setIsActive,
-  ] =
-    useState(
+  ] = useState(
+    admin.is_active,
+  );
+
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setFirstName(
+      admin.first_name,
+    );
+
+    setLastName(
+      admin.last_name,
+    );
+
+    setIsActive(
       admin.is_active,
     );
+  }, [
+    open,
+    admin,
+  ]);
 
 
   async function submit(
-    event: FormEvent,
+    event:
+      FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault();
 
-    await mutation.mutateAsync({
-      userId:
-        admin.id,
+    try {
+      await mutation.mutateAsync({
+        userId:
+          admin.id,
 
-      data: {
-        first_name:
-          firstName.trim(),
+        data: {
+          first_name:
+            firstName.trim(),
 
-        last_name:
-          lastName.trim(),
+          last_name:
+            lastName.trim(),
 
-        is_active:
-          isActive,
-      },
-    });
+          is_active:
+            isActive,
+        },
+      });
 
-    setOpen(false);
-  }
-
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() =>
-          setOpen(true)
-        }
-        className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
-      >
-        <Pencil className="h-3.5 w-3.5" />
-
-        Edit
-      </button>
-    );
+      setOpen(
+        false,
+      );
+    } catch {
+      // Error displayed below.
+    }
   }
 
 
   return (
-    <div className="mt-4 rounded-lg border bg-slate-50 p-4">
-
-      <div className="flex items-center justify-between">
-
-        <h4 className="font-medium text-slate-900">
-          Edit Administrator
-        </h4>
-
-        <button
-          type="button"
-          onClick={() =>
-            setOpen(false)
-          }
-          className="text-xs text-slate-500"
-        >
-          Cancel
-        </button>
-
-      </div>
-
-
-      <form
-        onSubmit={submit}
-        className="mt-4 space-y-4"
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() =>
+          setOpen(
+            true,
+          )
+        }
+        className="h-8 px-3 text-xs"
       >
+        <Pencil className="mr-2 h-3.5 w-3.5" />
 
-        <div className="grid gap-4 md:grid-cols-2">
+        Edit
+      </Button>
 
-          <input
-            value={
-              firstName
+
+      <Dialog
+        open={
+          open
+        }
+        onOpenChange={
+          setOpen
+        }
+      >
+        <DialogContent className="sm:max-w-lg">
+
+          <DialogHeader>
+
+            <DialogTitle>
+              Edit Tenant Administrator
+            </DialogTitle>
+
+            <DialogDescription>
+              Update administrator
+              account details and status.
+            </DialogDescription>
+
+          </DialogHeader>
+
+
+          <form
+            onSubmit={
+              submit
             }
-            onChange={(event) =>
-              setFirstName(
-                event.target.value,
-              )
-            }
-            placeholder="First name"
-            className="h-10 rounded-md border bg-white px-3 text-sm"
-          />
+            className="space-y-5"
+          >
 
-          <input
-            value={
-              lastName
-            }
-            onChange={(event) =>
-              setLastName(
-                event.target.value,
-              )
-            }
-            placeholder="Last name"
-            className="h-10 rounded-md border bg-white px-3 text-sm"
-          />
+            <div className="grid gap-4 md:grid-cols-2">
 
-        </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">
+                  First Name
+                </label>
 
-
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-
-          <input
-            type="checkbox"
-            checked={
-              isActive
-            }
-            onChange={(event) =>
-              setIsActive(
-                event.target.checked,
-              )
-            }
-          />
-
-          Active administrator
-
-        </label>
+                <input
+                  value={
+                    firstName
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setFirstName(
+                      event.target.value,
+                    )
+                  }
+                  className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
+                  required
+                />
+              </div>
 
 
-        {mutation.isError && (
-          <p className="text-sm text-red-600">
-            Failed to update administrator.
-          </p>
-        )}
+              <div>
+                <label className="text-sm font-medium text-slate-700">
+                  Last Name
+                </label>
+
+                <input
+                  value={
+                    lastName
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setLastName(
+                      event.target.value,
+                    )
+                  }
+                  className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
+                  required
+                />
+              </div>
+
+            </div>
 
 
-        <button
-          type="submit"
-          disabled={
-            mutation.isPending
-          }
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {mutation.isPending
-            ? "Saving..."
-            : "Save Changes"}
-        </button>
+            <div>
+              <label className="text-sm font-medium text-slate-700">
+                Email
+              </label>
 
-      </form>
+              <input
+                value={
+                  admin.email
+                }
+                disabled
+                className="mt-2 h-10 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500"
+              />
 
-    </div>
+              <p className="mt-1 text-xs text-slate-400">
+                Email cannot be changed
+                from this screen.
+              </p>
+            </div>
+
+
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+
+              <input
+                type="checkbox"
+                checked={
+                  isActive
+                }
+                onChange={(
+                  event,
+                ) =>
+                  setIsActive(
+                    event.target.checked,
+                  )
+                }
+              />
+
+              Active administrator
+
+            </label>
+
+
+            {mutation.isError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                Failed to update
+                administrator.
+              </div>
+            )}
+
+
+            <DialogFooter>
+
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
+                  mutation.isPending
+                }
+                onClick={() =>
+                  setOpen(
+                    false,
+                  )
+                }
+              >
+                Cancel
+              </Button>
+
+
+              <Button
+                type="submit"
+                disabled={
+                  mutation.isPending ||
+                  !firstName.trim() ||
+                  !lastName.trim()
+                }
+              >
+                {
+                  mutation.isPending
+                    ? "Saving..."
+                    : "Save Changes"
+                }
+              </Button>
+
+            </DialogFooter>
+
+          </form>
+
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

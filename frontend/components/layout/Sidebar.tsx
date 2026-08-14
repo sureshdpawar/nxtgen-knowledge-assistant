@@ -55,18 +55,18 @@ const menu: MenuItem[] = [
   },
 
   {
-    label: "Users",
-    href: "/users",
-    icon: Users,
+    label: "Knowledge Bases",
+    href: "/knowledge-bases",
+    icon: Database,
     roles: [
       "ADMIN",
     ],
   },
 
   {
-    label: "Knowledge Bases",
-    href: "/knowledge-bases",
-    icon: Database,
+    label: "Users",
+    href: "/users",
+    icon: Users,
     roles: [
       "ADMIN",
     ],
@@ -97,7 +97,6 @@ const menu: MenuItem[] = [
     href: "/settings",
     icon: Settings,
     roles: [
-      "SUPERADMIN",
       "ADMIN",
     ],
   },
