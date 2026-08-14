@@ -6,7 +6,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 
-from app.models.document import Document
+from app.core.enums import (
+    DocumentStatus,
+)
+from app.models.document import (
+    Document,
+)
 from app.models.document_chunk import (
     DocumentChunk,
 )
@@ -22,7 +27,9 @@ from app.repositories.base_repository import (
 
 
 class DocumentEmbeddingRepository(
-    BaseRepository[DocumentEmbedding],
+    BaseRepository[
+        DocumentEmbedding
+    ],
 ):
 
     def __init__(self):
@@ -34,11 +41,13 @@ class DocumentEmbeddingRepository(
         self,
         db: Session,
         knowledge_base_id: UUID,
-        query_embedding: list[float],
+        query_embedding:
+            list[float],
         top_k: int = 5,
     ):
         distance = (
-            DocumentEmbedding.embedding
+            DocumentEmbedding
+            .embedding
             .cosine_distance(
                 query_embedding,
             )
@@ -69,8 +78,12 @@ class DocumentEmbeddingRepository(
                 == Document.knowledge_source_id,
             )
             .where(
-                KnowledgeSource.knowledge_base_id
+                KnowledgeSource
+                .knowledge_base_id
                 == knowledge_base_id,
+
+                Document.status
+                == DocumentStatus.READY,
             )
             .order_by(
                 distance,
@@ -81,7 +94,9 @@ class DocumentEmbeddingRepository(
         )
 
         return list(
-            db.execute(stmt).all()
+            db.execute(
+                stmt,
+            ).all()
         )
 
     def delete_by_document_id(
@@ -105,12 +120,16 @@ class DocumentEmbeddingRepository(
                 DocumentEmbedding,
             )
             .where(
-                DocumentEmbedding.chunk_id.in_(
+                DocumentEmbedding
+                .chunk_id
+                .in_(
                     chunk_ids,
                 ),
             )
         )
 
-        db.execute(stmt)
+        db.execute(
+            stmt,
+        )
 
         db.flush()

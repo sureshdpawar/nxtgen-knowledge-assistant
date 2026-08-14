@@ -1,3 +1,6 @@
+import logging
+import time
+
 from pathlib import Path
 from uuid import UUID
 
@@ -5,10 +8,18 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.enums import DocumentStatus
-from app.exceptions.document import DocumentNotFoundError
-from app.models.document_chunk import DocumentChunk
-from app.models.document_embedding import DocumentEmbedding
-from app.parsers.parser_factory import ParserFactory
+from app.exceptions.document import (
+    DocumentNotFoundError,
+)
+from app.models.document_chunk import (
+    DocumentChunk,
+)
+from app.models.document_embedding import (
+    DocumentEmbedding,
+)
+from app.parsers.parser_factory import (
+    ParserFactory,
+)
 from app.repositories.document_chunk_repository import (
     DocumentChunkRepository,
 )
@@ -23,6 +34,11 @@ from app.services.document_chunking_service import (
 )
 from app.services.embedding_service import (
     EmbeddingService,
+)
+
+
+logger = logging.getLogger(
+    "nxtgen.document_processing"
 )
 
 
@@ -49,6 +65,44 @@ class DocumentProcessingService:
             EmbeddingService()
         )
 
+    def _sanitize_text(
+        self,
+        text: str,
+    ) -> str:
+        return (
+            text
+            .replace(
+                "\x00",
+                "",
+            )
+            .strip()
+        )
+
+    def _is_usable_text(
+        self,
+        text: str,
+    ) -> bool:
+        if not text:
+            return False
+
+        alphanumeric_count = sum(
+            character.isalnum()
+            for character in text
+        )
+
+        alphanumeric_ratio = (
+            alphanumeric_count
+            / max(
+                len(text),
+                1,
+            )
+        )
+
+        return (
+            alphanumeric_ratio
+            >= 0.15
+        )
+
     def process(
         self,
         db: Session,
@@ -65,20 +119,26 @@ class DocumentProcessingService:
         if document is None:
             raise DocumentNotFoundError()
 
+        started_at = (
+            time.perf_counter()
+        )
+
         try:
-            #
-            # 1. Mark document as processing
-            #
             document.status = (
                 DocumentStatus.PROCESSING
             )
 
             db.commit()
-            db.refresh(document)
+            db.refresh(
+                document,
+            )
 
-            #
-            # 2. Resolve document path
-            #
+            logger.info(
+                "Document processing started "
+                "document=%s",
+                document.id,
+            )
+
             full_path = (
                 Path(
                     settings.DOCUMENT_STORAGE_PATH,
@@ -88,12 +148,14 @@ class DocumentProcessingService:
 
             if not full_path.exists():
                 raise FileNotFoundError(
-                    f"Document not found: {full_path}"
+                    f"Document not found: "
+                    f"{full_path}"
                 )
 
-            #
-            # 3. Parse document
-            #
+            parse_started_at = (
+                time.perf_counter()
+            )
+
             parser = (
                 ParserFactory.get_parser(
                     full_path,
@@ -106,28 +168,129 @@ class DocumentProcessingService:
                 )
             )
 
-            #
-            # 4. Chunk document
-            #
-            chunks = (
-                self.chunking_service.chunk(
-                    parsed_document[
-                        "pages"
-                    ],
+            parse_elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - parse_started_at
+                )
+                * 1000
+            )
+
+            pages = (
+                parsed_document.get(
+                    "pages",
+                    [],
                 )
             )
 
-            #
-            # 5. Delete old embeddings FIRST
-            #
+            if not pages:
+                raise ValueError(
+                    "Document contains "
+                    "no parsable pages."
+                )
+
+            chunk_started_at = (
+                time.perf_counter()
+            )
+
+            raw_chunks = (
+                self.chunking_service.chunk(
+                    pages,
+                )
+            )
+
+            chunk_elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - chunk_started_at
+                )
+                * 1000
+            )
+
+            if not raw_chunks:
+                raise ValueError(
+                    "Document produced "
+                    "no searchable chunks."
+                )
+
+            chunks = []
+
+            skipped_chunks = 0
+
+            for chunk in raw_chunks:
+                raw_text = (
+                    chunk.get(
+                        "text",
+                        "",
+                    )
+                )
+
+                clean_text = (
+                    self._sanitize_text(
+                        raw_text,
+                    )
+                )
+
+                if not self._is_usable_text(
+                    clean_text,
+                ):
+                    skipped_chunks += 1
+                    continue
+
+                chunks.append(
+                    {
+                        **chunk,
+                        "text":
+                            clean_text,
+                    }
+                )
+
+            if not chunks:
+                raise ValueError(
+                    "Document produced "
+                    "no usable searchable chunks."
+                )
+
+            if skipped_chunks > 0:
+                logger.warning(
+                    "Skipped unusable chunks "
+                    "document=%s "
+                    "skipped=%s "
+                    "usable=%s",
+                    document.id,
+                    skipped_chunks,
+                    len(chunks),
+                )
+
+            texts = [
+                chunk["text"]
+                for chunk in chunks
+            ]
+
+            embedding_started_at = (
+                time.perf_counter()
+            )
+
+            embeddings = (
+                self.embedding_service
+                .embed_batch(
+                    texts,
+                )
+            )
+
+            embedding_elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - embedding_started_at
+                )
+                * 1000
+            )
+
             self.embedding_repository.delete_by_document_id(
                 db=db,
                 document_id=document.id,
             )
 
-            #
-            # 6. Delete old chunks
-            #
             self.chunk_repository.delete_by_document_id(
                 db=db,
                 document_id=document.id,
@@ -135,31 +298,34 @@ class DocumentProcessingService:
 
             db.flush()
 
-            #
-            # 7. Recreate chunks and embeddings
-            #
-            for index, chunk in enumerate(
+            for (
+                index,
+                chunk,
+            ) in enumerate(
                 chunks,
             ):
-
                 document_chunk = (
                     DocumentChunk(
                         document_id=
                             document.id,
 
-                        chunk_index=index,
+                        chunk_index=
+                            index,
 
-                        text=chunk[
-                            "text"
-                        ],
+                        text=
+                            chunk[
+                                "text"
+                            ],
 
-                        token_count=0,
+                        token_count=
+                            0,
 
                         chunk_metadata={
                             "page":
-                                chunk[
-                                    "page"
-                                ],
+                                chunk.get(
+                                    "page",
+                                    1,
+                                ),
                         },
                     )
                 )
@@ -170,21 +336,15 @@ class DocumentProcessingService:
 
                 db.flush()
 
-                embedding = (
-                    self.embedding_service.embed(
-                        chunk[
-                            "text"
-                        ],
-                    )
-                )
-
                 document_embedding = (
                     DocumentEmbedding(
                         chunk_id=
                             document_chunk.id,
 
                         embedding=
-                            embedding,
+                            embeddings[
+                                index
+                            ],
                     )
                 )
 
@@ -192,15 +352,42 @@ class DocumentProcessingService:
                     document_embedding,
                 )
 
-            #
-            # 8. Mark document as ready
-            #
             document.status = (
                 DocumentStatus.READY
             )
 
             db.commit()
-            db.refresh(document)
+            db.refresh(
+                document,
+            )
+
+            total_elapsed_ms = (
+                (
+                    time.perf_counter()
+                    - started_at
+                )
+                * 1000
+            )
+
+            logger.info(
+                "Document processing completed "
+                "document=%s "
+                "raw_chunks=%s "
+                "chunks=%s "
+                "skipped=%s "
+                "parse_ms=%.2f "
+                "chunk_ms=%.2f "
+                "embedding_ms=%.2f "
+                "total_ms=%.2f",
+                document.id,
+                len(raw_chunks),
+                len(chunks),
+                skipped_chunks,
+                parse_elapsed_ms,
+                chunk_elapsed_ms,
+                embedding_elapsed_ms,
+                total_elapsed_ms,
+            )
 
             return {
                 "document_id":
@@ -209,19 +396,24 @@ class DocumentProcessingService:
                 "chunks_created":
                     len(chunks),
 
+                "chunks_skipped":
+                    skipped_chunks,
+
                 "status":
                     document.status.value,
             }
 
-        except Exception:
-            #
-            # Roll back processing work
-            #
+        except Exception as exc:
             db.rollback()
 
-            #
-            # Reload document in a clean transaction
-            #
+            logger.exception(
+                "Document processing failed "
+                "document=%s "
+                "error_type=%s",
+                document_id,
+                type(exc).__name__,
+            )
+
             document = (
                 self.document_repository.get(
                     db,
@@ -229,9 +421,6 @@ class DocumentProcessingService:
                 )
             )
 
-            #
-            # Mark document failed
-            #
             if document is not None:
                 document.status = (
                     DocumentStatus.FAILED

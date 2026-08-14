@@ -12,6 +12,9 @@ def setup_logging() -> None:
         ),
     )
 
+    #
+    # Reduce noisy third-party logs
+    #
     logging.getLogger(
         "sqlalchemy.engine"
     ).setLevel(
@@ -42,6 +45,9 @@ def setup_logging() -> None:
         logging.WARNING
     )
 
+    #
+    # Application logs
+    #
     logging.getLogger(
         "nxtgen.request"
     ).setLevel(
@@ -62,6 +68,12 @@ def setup_logging() -> None:
 
     logging.getLogger(
         "nxtgen.llm"
+    ).setLevel(
+        logging.INFO
+    )
+
+    logging.getLogger(
+        "nxtgen.document_processing"
     ).setLevel(
         logging.INFO
     )
