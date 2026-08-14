@@ -56,11 +56,13 @@ export async function streamChat(
         await response.json();
 
       message =
+        error?.error?.message ??
         error?.detail ??
         error?.message ??
         message;
+
     } catch {
-      // Ignore parsing error.
+      // Keep generic fallback.
     }
 
     throw new Error(
@@ -164,6 +166,7 @@ function processEventBlock(
       continue;
     }
 
+
     if (
       line.startsWith(
         "data:",
@@ -174,12 +177,11 @@ function processEventBlock(
           "data:".length,
         );
 
+
       /*
        * SSE allows:
-       * data: hello
        *
-       * Your backend currently emits:
-       * data: token
+       * data: hello
        *
        * Remove one separator space,
        * but preserve meaningful spaces
@@ -191,6 +193,7 @@ function processEventBlock(
         data =
           data.slice(1);
       }
+
 
       dataLines.push(
         data,
@@ -221,7 +224,8 @@ function processEventBlock(
 
 
   if (
-    eventType === "done"
+    eventType ===
+    "done"
   ) {
     return;
   }

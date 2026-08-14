@@ -20,6 +20,7 @@ export default function SearchPage() {
   const searchMutation =
     useSearchKnowledgeBase();
 
+
   const [
     results,
     setResults,
@@ -40,19 +41,34 @@ export default function SearchPage() {
     knowledgeBaseId: string,
     query: string,
   ) {
-    const response =
-      await searchMutation
-        .mutateAsync({
-          knowledge_base_id:
-            knowledgeBaseId,
-          query,
-        });
+    try {
+      const response =
+        await searchMutation
+          .mutateAsync({
+            knowledge_base_id:
+              knowledgeBaseId,
 
-    setResults(
-      response.results,
-    );
+            query,
+          });
 
-    setSearched(true);
+
+      setResults(
+        response.results,
+      );
+
+      setSearched(
+        true,
+      );
+
+    } catch {
+      /*
+       * React Query stores the
+       * mutation error in
+       * searchMutation.error.
+       *
+       * The UI below renders it.
+       */
+    }
   }
 
 
@@ -91,8 +107,17 @@ export default function SearchPage() {
 
       {searchMutation.isError && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          Search failed. Please
-          try again.
+
+          {searchMutation.error
+            instanceof Error
+            ? searchMutation
+                .error
+                .message
+            : (
+                "Search failed. "
+                + "Please try again."
+              )}
+
         </div>
       )}
 
