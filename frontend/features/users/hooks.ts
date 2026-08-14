@@ -20,7 +20,9 @@ import type {
 } from "./types";
 
 
-export function useUsers() {
+export function useUsers(
+  enabled = true,
+) {
   return useQuery({
     queryKey: [
       "users",
@@ -28,6 +30,8 @@ export function useUsers() {
 
     queryFn:
       getUsers,
+
+    enabled,
   });
 }
 

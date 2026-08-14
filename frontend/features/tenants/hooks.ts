@@ -22,13 +22,18 @@ import type {
 } from "./types";
 
 
-export function useTenants() {
+export function useTenants(
+  enabled = true,
+) {
   return useQuery({
     queryKey: [
       "tenants",
     ],
+
     queryFn:
       getTenants,
+
+    enabled,
   });
 }
 
@@ -43,7 +48,9 @@ export function useTenant(
     ],
 
     queryFn: () =>
-      getTenant(id),
+      getTenant(
+        id,
+      ),
 
     enabled:
       !!id,
