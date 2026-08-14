@@ -8,8 +8,8 @@ from fastapi.responses import (
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.auth.dependencies import (
-    get_current_active_user,
+from app.api.dependencies.rate_limit import (
+    enforce_chat_rate_limit,
 )
 from app.models.user import User
 from app.schemas.chat import (
@@ -42,7 +42,7 @@ def chat(
         get_db,
     ),
     current_user: User = Depends(
-        get_current_active_user,
+        enforce_chat_rate_limit,
     ),
 ):
     result = (
@@ -87,7 +87,7 @@ def chat_stream(
         get_db,
     ),
     current_user: User = Depends(
-        get_current_active_user,
+        enforce_chat_rate_limit,
     ),
 ):
     generator = (
