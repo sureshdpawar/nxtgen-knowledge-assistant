@@ -76,38 +76,29 @@ class ChatService:
 
             sources.append(
                 {
-                    "knowledge_source_id":
-                        str(
-                            knowledge_source.id
-                        ),
-
+                    "knowledge_source_id": str(
+                        knowledge_source.id
+                    ),
                     "knowledge_source_name":
                         knowledge_source.name,
-
-                    "document_id":
-                        str(
-                            document.id
-                        ),
-
+                    "document_id": str(
+                        document.id
+                    ),
                     "document_name":
                         document.original_filename,
-
                     "chunk_index":
                         chunk.chunk_index,
-
                     "page":
                         chunk.chunk_metadata.get(
                             "page",
                             1,
                         ),
-
-                    "similarity":
-                        round(
-                            1 - float(
-                                similarity
-                            ),
-                            3,
+                    "similarity": round(
+                        1 - float(
+                            similarity
                         ),
+                        3,
+                    ),
                 }
             )
 
@@ -180,16 +171,29 @@ class ChatService:
             )
         )
 
+        # Resolve the LLM configuration
+        # for the selected knowledge base.
+        #
+        # If the KB has its own configuration,
+        # that configuration is used.
+        #
+        # Otherwise the tenant default
+        # configuration is used.
         client, config = (
-            self.client_factory.create(
+            self.client_factory
+            .create_for_knowledge_base(
                 db=db,
-                tenant_id=tenant_id,
+                tenant_id=
+                    tenant_id,
+                knowledge_base_id=
+                    knowledge_base_id,
             )
         )
 
         response = (
             client.chat.completions.create(
-                model=config.model_name,
+                model=
+                    config.model_name,
                 messages=[
                     {
                         "role": "user",
@@ -230,12 +234,10 @@ class ChatService:
                     response
                     .usage
                     .prompt_tokens,
-
                 "completion_tokens":
                     response
                     .usage
                     .completion_tokens,
-
                 "total_tokens":
                     response
                     .usage
@@ -254,10 +256,8 @@ class ChatService:
         return {
             "conversation_id":
                 conversation.id,
-
             "answer":
                 answer,
-
             "sources":
                 sources,
         }
@@ -280,8 +280,10 @@ class ChatService:
             self.conversation_service
             .get_or_create_conversation(
                 db=db,
-                tenant_id=tenant_id,
-                user_id=user_id,
+                tenant_id=
+                    tenant_id,
+                user_id=
+                    user_id,
                 knowledge_base_id=
                     knowledge_base_id,
                 conversation_id=
@@ -333,16 +335,23 @@ class ChatService:
             )
         )
 
+        # Resolve the LLM configuration
+        # for the selected knowledge base.
         client, config = (
-            self.client_factory.create(
+            self.client_factory
+            .create_for_knowledge_base(
                 db=db,
-                tenant_id=tenant_id,
+                tenant_id=
+                    tenant_id,
+                knowledge_base_id=
+                    knowledge_base_id,
             )
         )
 
         response = (
             client.chat.completions.create(
-                model=config.model_name,
+                model=
+                    config.model_name,
                 messages=[
                     {
                         "role": "user",
@@ -405,11 +414,9 @@ class ChatService:
         )
 
         metadata = {
-            "conversation_id":
-                str(
-                    conversation.id
-                ),
-
+            "conversation_id": str(
+                conversation.id
+            ),
             "sources":
                 sources,
         }

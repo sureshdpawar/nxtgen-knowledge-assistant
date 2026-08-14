@@ -35,6 +35,13 @@ class TenantLLMConfiguration(
         index=True,
     )
 
+    name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        default="Default",
+        server_default="Default",
+    )
+
     provider: Mapped[LLMProvider] = mapped_column(
         Enum(LLMProvider),
         nullable=False,
@@ -70,10 +77,25 @@ class TenantLLMConfiguration(
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
+        server_default="true",
+        nullable=False,
+    )
+
+    is_default: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
         nullable=False,
     )
 
     tenant: Mapped["Tenant"] = relationship(
         "Tenant",
         back_populates="llm_configurations",
+    )
+
+    knowledge_bases: Mapped[
+        list["KnowledgeBase"]
+    ] = relationship(
+        "KnowledgeBase",
+        back_populates="llm_configuration",
     )

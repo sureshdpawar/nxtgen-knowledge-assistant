@@ -1,14 +1,26 @@
+import logging
+
 from uuid import UUID
 
 from openai import OpenAI
 from sqlalchemy.orm import Session
 
-from app.core.enums import LLMProvider
+from app.core.enums import (
+    LLMProvider,
+)
+from app.models.knowledge_base import (
+    KnowledgeBase,
+)
 from app.models.tenant_llm_configuration import (
     TenantLLMConfiguration,
 )
 from app.repositories.tenant_llm_configuration_repository import (
     TenantLLMConfigurationRepository,
+)
+
+
+logger = logging.getLogger(
+    "nxtgen.llm"
 )
 
 
@@ -19,37 +31,189 @@ class LLMClientFactory:
             TenantLLMConfigurationRepository()
         )
 
-    def create(
+    def _build_client(
         self,
-        db: Session,
-        tenant_id: UUID,
-    ) -> tuple[OpenAI, TenantLLMConfiguration]:
-
-        config = self.repository.get_active_by_tenant_id(
-            db=db,
-            tenant_id=tenant_id,
-        )
-
-        if config is None:
-            raise ValueError(
-                "No active LLM configuration found."
-            )
+        config:
+            TenantLLMConfiguration,
+    ) -> OpenAI:
 
         if config.provider in (
             LLMProvider.OPENAI,
             LLMProvider.AZURE_OPENAI,
             LLMProvider.VLLM,
         ):
-            client = OpenAI(
-                api_key=config.api_key,
-                base_url=config.base_url,
-            )
+            return OpenAI(
+                api_key=
+                    config.api_key,
 
-            return (
-                client,
-                config,
+                base_url=
+                    config.base_url,
             )
 
         raise NotImplementedError(
-            f"LLM provider '{config.provider.value}' is not supported."
+            "LLM provider "
+            f"'{config.provider.value}' "
+            "is not supported."
+        )
+
+    def create_for_knowledge_base(
+        self,
+        db: Session,
+        tenant_id: UUID,
+        knowledge_base_id: UUID,
+    ) -> tuple[
+        OpenAI,
+        TenantLLMConfiguration,
+    ]:
+
+        knowledge_base = db.get(
+            KnowledgeBase,
+            knowledge_base_id,
+        )
+
+        if (
+            knowledge_base is None
+            or knowledge_base.tenant_id
+            != tenant_id
+        ):
+            raise ValueError(
+                "Knowledge base not found."
+            )
+
+        configuration = None
+
+        resolution_source = (
+            "tenant_default"
+        )
+
+        if (
+            knowledge_base
+            .llm_configuration_id
+            is not None
+        ):
+            configuration = (
+                self.repository
+                .get_by_id_and_tenant(
+                    db=db,
+                    tenant_id=
+                        tenant_id,
+                    configuration_id=
+                        knowledge_base
+                        .llm_configuration_id,
+                )
+            )
+
+            if (
+                configuration is not None
+                and configuration.is_active
+            ):
+                resolution_source = (
+                    "knowledge_base_override"
+                )
+
+            elif (
+                configuration is not None
+                and not configuration.is_active
+            ):
+                logger.warning(
+                    "Inactive LLM profile '%s' "
+                    "(%s) assigned to KB %s; "
+                    "falling back to tenant default",
+                    configuration.name,
+                    configuration.id,
+                    knowledge_base.id,
+                )
+
+                configuration = None
+
+        if configuration is None:
+            configuration = (
+                self.repository
+                .get_default_by_tenant_id(
+                    db=db,
+                    tenant_id=
+                        tenant_id,
+                )
+            )
+
+            resolution_source = (
+                "tenant_default"
+            )
+
+        if configuration is None:
+            raise ValueError(
+                "No active default LLM "
+                "configuration found."
+            )
+
+        logger.info(
+            "Resolved LLM profile "
+            "'%s' (%s), model '%s', "
+            "provider '%s' for KB %s "
+            "using %s",
+            configuration.name,
+            configuration.id,
+            configuration.model_name,
+            configuration.provider.value,
+            knowledge_base.id,
+            resolution_source,
+        )
+
+        client = (
+            self._build_client(
+                configuration,
+            )
+        )
+
+        return (
+            client,
+            configuration,
+        )
+
+    # Keep old method temporarily
+    # so other services do not break.
+    def create(
+        self,
+        db: Session,
+        tenant_id: UUID,
+    ) -> tuple[
+        OpenAI,
+        TenantLLMConfiguration,
+    ]:
+
+        configuration = (
+            self.repository
+            .get_default_by_tenant_id(
+                db=db,
+                tenant_id=tenant_id,
+            )
+        )
+
+        if configuration is None:
+            raise ValueError(
+                "No active default LLM "
+                "configuration found."
+            )
+
+        logger.info(
+            "Resolved tenant default "
+            "LLM profile '%s' (%s), "
+            "model '%s', provider '%s' "
+            "for tenant %s",
+            configuration.name,
+            configuration.id,
+            configuration.model_name,
+            configuration.provider.value,
+            tenant_id,
+        )
+
+        client = (
+            self._build_client(
+                configuration,
+            )
+        )
+
+        return (
+            client,
+            configuration,
         )
