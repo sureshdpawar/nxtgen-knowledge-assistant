@@ -93,7 +93,7 @@ const menu: MenuItem[] = [
   },
 
   {
-    label: "Settings",
+    label: "LLM Profiles",
     href: "/settings",
     icon: Settings,
     roles: [
