@@ -72,3 +72,23 @@ class LLMProvider(Enum):
 class KnowledgeBaseAccessLevel(str, Enum):
     READ = "READ"
     MANAGE = "MANAGE"    
+    
+class AgentStatus(str, Enum):
+    DRAFT = "DRAFT"
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    
+class AgentRunStatus(str, Enum):
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class AgentRunStepType(str, Enum):
+    LLM = "LLM"
+    TOOL = "TOOL"
+
+
+class AgentRunStepStatus(str, Enum):
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"    

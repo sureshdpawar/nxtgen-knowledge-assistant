@@ -9,6 +9,11 @@ from app.models.tenant_llm_configuration import (TenantLLMConfiguration)
 from app.models.conversation import Conversation
 from app.models.conversation_message import ConversationMessage
 from app.models.user_knowledge_base_access import (UserKnowledgeBaseAccess,)
+from app.models.agent import Agent 
+from app.models.agent_knowledge_base import (AgentKnowledgeBase,)
+from app.models.agent_run import (AgentRun,)
+from app.models.agent_run_step import (AgentRunStep,)
+
 
 __all__ = [
    "Tenant",
@@ -21,7 +26,11 @@ __all__ = [
     "TenantLLMConfiguration",
     "Conversation",
     "ConversationMessage",
-    "UserKnowledgeBaseAccess"
+    "UserKnowledgeBaseAccess",
+    "Agent",
+    "AgentKnowledgeBase",
+    "AgentRun",
+    "AgentRunStep",
 ]
 # Future imports
 # from app.models.user import User
