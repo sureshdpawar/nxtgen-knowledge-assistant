@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import {
+  Bot,
   Building2,
   Database,
   LayoutDashboard,
@@ -58,6 +59,15 @@ const menu: MenuItem[] = [
     label: "Knowledge Bases",
     href: "/knowledge-bases",
     icon: Database,
+    roles: [
+      "ADMIN",
+    ],
+  },
+
+  {
+    label: "Agents",
+    href: "/agents",
+    icon: Bot,
     roles: [
       "ADMIN",
     ],
