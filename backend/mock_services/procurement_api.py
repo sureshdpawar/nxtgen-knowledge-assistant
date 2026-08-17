@@ -17,6 +17,8 @@ PURCHASE_ORDERS = {
     "PO-10482": {
         "purchase_order_id":
             "PO-10482",
+            
+        "vendor_id": "V-100",    
 
         "vendor":
             "Acme Hardware",
