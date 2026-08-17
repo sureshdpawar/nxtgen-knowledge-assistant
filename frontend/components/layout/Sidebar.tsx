@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   Bot,
   Building2,
+  BrainCircuit,
   Cable,
   Database,
   LayoutDashboard,
@@ -142,7 +143,7 @@ const menu: MenuItem[] = [
   {
     label: "LLM Profiles",
     href: "/settings",
-    icon: Settings,
+    icon: BrainCircuit,
     roles: [
       "ADMIN",
     ],
