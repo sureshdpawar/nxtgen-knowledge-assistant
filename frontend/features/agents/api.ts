@@ -6,6 +6,7 @@ import type {
 
 import type {
   Agent,
+  AgentProgressEvent,
   AgentRun,
   AgentRunDetail,
   AgentRunRequest,
@@ -39,7 +40,8 @@ export async function getAgent(
 
 
 export async function createAgent(
-  payload: CreateAgentRequest,
+  payload:
+    CreateAgentRequest,
 ) {
   const response =
     await api.post<Agent>(
@@ -53,7 +55,8 @@ export async function createAgent(
 
 export async function updateAgent(
   id: string,
-  payload: UpdateAgentRequest,
+  payload:
+    UpdateAgentRequest,
 ) {
   const response =
     await api.put<Agent>(
@@ -76,7 +79,8 @@ export async function deleteAgent(
 
 export async function assignAgentTools(
   agentId: string,
-  payload: AssignAgentToolsRequest,
+  payload:
+    AssignAgentToolsRequest,
 ) {
   const response =
     await api.put<
@@ -92,7 +96,8 @@ export async function assignAgentTools(
 
 export async function runAgent(
   id: string,
-  payload: AgentRunRequest,
+  payload:
+    AgentRunRequest,
 ) {
   const response =
     await api.post<
@@ -103,6 +108,177 @@ export async function runAgent(
     );
 
   return response.data;
+}
+
+
+export async function runAgentStream(
+  id: string,
+  payload:
+    AgentRunRequest,
+  onEvent: (
+    event:
+      AgentProgressEvent,
+  ) => void,
+) {
+  let consumedLength = 0;
+
+  let buffer = "";
+
+
+  function processBuffer() {
+    while (true) {
+      const boundary =
+        buffer.indexOf(
+          "\n\n",
+        );
+
+      if (
+        boundary === -1
+      ) {
+        break;
+      }
+
+      const block =
+        buffer.slice(
+          0,
+          boundary,
+        );
+
+      buffer =
+        buffer.slice(
+          boundary + 2,
+        );
+
+      const lines =
+        block.split(
+          "\n",
+        );
+
+      const dataLines =
+        lines.filter(
+          (line) =>
+            line.startsWith(
+              "data:",
+            ),
+        );
+
+      if (
+        dataLines.length ===
+        0
+      ) {
+        continue;
+      }
+
+      const json =
+        dataLines
+          .map(
+            (line) =>
+              line
+                .slice(
+                  5,
+                )
+                .trimStart(),
+          )
+          .join(
+            "\n",
+          );
+
+      if (!json) {
+        continue;
+      }
+
+      try {
+        const event =
+          JSON.parse(
+            json,
+          ) as AgentProgressEvent;
+
+        onEvent(
+          event,
+        );
+
+      } catch {
+        /*
+         * Ignore malformed or
+         * incomplete SSE frames.
+         */
+      }
+    }
+  }
+
+
+  await api.post(
+    `/agents/${id}/run/stream`,
+    payload,
+    {
+      responseType:
+        "text",
+
+      transformResponse: [
+        (
+          data,
+        ) => data,
+      ],
+
+      onDownloadProgress(
+        progressEvent,
+      ) {
+        const event =
+          progressEvent.event;
+
+        if (!event) {
+          return;
+        }
+
+        const rawEvent =
+          event as ProgressEvent<
+            XMLHttpRequest
+          >;
+
+        const xhr =
+          rawEvent.currentTarget
+          ?? rawEvent.target;
+
+        if (
+          !(xhr instanceof
+            XMLHttpRequest)
+        ) {
+          return;
+        }
+
+        const responseText =
+          xhr.responseText
+          ?? "";
+
+        if (
+          responseText.length
+          <= consumedLength
+        ) {
+          return;
+        }
+
+        const chunk =
+          responseText.slice(
+            consumedLength,
+          );
+
+        consumedLength =
+          responseText.length;
+
+        buffer += chunk;
+
+        processBuffer();
+      },
+    },
+  );
+
+
+  /*
+   * Process any remaining
+   * complete frame after Axios
+   * reports the request finished.
+   */
+  processBuffer();
 }
 
 

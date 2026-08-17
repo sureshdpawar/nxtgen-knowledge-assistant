@@ -206,3 +206,105 @@ export interface AgentRunDetail
   steps:
     AgentRunStep[];
 }
+
+export type AgentProgressEvent =
+  | {
+      type:
+        "run_started";
+
+      run_id:
+        string;
+
+      agent_id:
+        string;
+
+      agent_name:
+        string;
+
+      tools:
+        string[];
+    }
+  | {
+      type:
+        "llm_started";
+
+      iteration:
+        number;
+    }
+  | {
+      type:
+        "llm_completed";
+
+      iteration:
+        number;
+
+      duration_ms:
+        number;
+
+      has_tool_calls:
+        boolean;
+
+      tools:
+        string[];
+    }
+  | {
+      type:
+        "tool_started";
+
+      name:
+        string;
+
+      args:
+        Record<
+          string,
+          unknown
+        >;
+    }
+  | {
+      type:
+        "tool_completed";
+
+      name:
+        string;
+
+      duration_ms:
+        number;
+
+      output:
+        unknown;
+    }
+  | {
+      type:
+        "completed";
+
+      result:
+        AgentRunResponse;
+    }
+  | {
+      type:
+        "failed";
+
+      run_id?:
+        string;
+
+      message:
+        string;
+    };
+
+
+export interface AgentProgressItem {
+  id: string;
+
+  type:
+    | "LLM"
+    | "TOOL";
+
+  name: string;
+
+  status:
+    | "RUNNING"
+    | "COMPLETED";
+
+  duration_ms?:
+    number;
+}

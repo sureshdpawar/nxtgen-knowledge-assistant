@@ -9,11 +9,16 @@ import {
   Bot,
   CheckCircle2,
   Clock3,
+  LoaderCircle,
   Play,
   Search,
   Wrench,
   XCircle,
 } from "lucide-react";
+
+import {
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import {
   Button,
@@ -28,12 +33,18 @@ import {
 } from "@/components/ui/dialog";
 
 import {
+  runAgentStream,
+} from "../api";
+
+import {
   useAgentRun,
-  useRunAgent,
 } from "../hooks";
 
 import type {
   Agent,
+  AgentProgressEvent,
+  AgentProgressItem,
+  AgentRunResponse,
 } from "../types";
 
 
@@ -45,6 +56,9 @@ type Props = {
 export default function TestAgentDialog({
   agent,
 }: Props) {
+  const queryClient =
+    useQueryClient();
+
   const [
     open,
     setOpen,
@@ -62,10 +76,31 @@ export default function TestAgentDialog({
     string | null
   >(null);
 
-  const runMutation =
-    useRunAgent(
-      agent.id,
-    );
+  const [
+    running,
+    setRunning,
+  ] = useState(false);
+
+  const [
+    result,
+    setResult,
+  ] = useState<
+    AgentRunResponse | null
+  >(null);
+
+  const [
+    progress,
+    setProgress,
+  ] = useState<
+    AgentProgressItem[]
+  >([]);
+
+  const [
+    error,
+    setError,
+  ] = useState<
+    string | null
+  >(null);
 
   const runDetailsQuery =
     useAgentRun(
@@ -76,7 +111,10 @@ export default function TestAgentDialog({
   function resetState() {
     setQuery("");
     setRunId(null);
-    runMutation.reset();
+    setRunning(false);
+    setResult(null);
+    setProgress([]);
+    setError(null);
   }
 
 
@@ -93,6 +131,193 @@ export default function TestAgentDialog({
   }
 
 
+  function handleProgressEvent(
+    event:
+      AgentProgressEvent,
+  ) {
+    if (
+      event.type ===
+      "run_started"
+    ) {
+      setRunId(
+        event.run_id,
+      );
+
+      return;
+    }
+
+
+    if (
+      event.type ===
+      "llm_started"
+    ) {
+      setProgress(
+        (current) => [
+          ...current,
+          {
+            id:
+              `llm-${event.iteration}`,
+
+            type:
+              "LLM",
+
+            name:
+              event.iteration === 1
+                ? "Thinking"
+                : "Generating response",
+
+            status:
+              "RUNNING",
+          },
+        ],
+      );
+
+      return;
+    }
+
+
+    if (
+      event.type ===
+      "llm_completed"
+    ) {
+      setProgress(
+        (current) =>
+          current.map(
+            (item) =>
+              item.id ===
+              `llm-${event.iteration}`
+                ? {
+                    ...item,
+
+                    status:
+                      "COMPLETED",
+
+                    duration_ms:
+                      event.duration_ms,
+                  }
+                : item,
+          ),
+      );
+
+      return;
+    }
+
+
+    if (
+      event.type ===
+      "tool_started"
+    ) {
+      setProgress(
+        (current) => [
+          ...current,
+          {
+            id:
+              `tool-${event.name}-${Date.now()}`,
+
+            type:
+              "TOOL",
+
+            name:
+              event.name,
+
+            status:
+              "RUNNING",
+          },
+        ],
+      );
+
+      return;
+    }
+
+
+    if (
+      event.type ===
+      "tool_completed"
+    ) {
+      setProgress(
+        (current) => {
+          const next = [
+            ...current,
+          ];
+
+          const index =
+            next.findLastIndex(
+              (item) =>
+                item.type ===
+                  "TOOL"
+                && item.name ===
+                  event.name
+                && item.status ===
+                  "RUNNING",
+            );
+
+          if (
+            index !== -1
+          ) {
+            next[index] = {
+              ...next[index],
+
+              status:
+                "COMPLETED",
+
+              duration_ms:
+                event.duration_ms,
+            };
+          }
+
+          return next;
+        },
+      );
+
+      return;
+    }
+
+
+    if (
+      event.type ===
+      "completed"
+    ) {
+      setResult(
+        event.result,
+      );
+
+      setRunId(
+        event.result.run_id,
+      );
+
+      setRunning(false);
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          "agent-runs",
+          agent.id,
+        ],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          "agent-run",
+          event.result.run_id,
+        ],
+      });
+
+      return;
+    }
+
+
+    if (
+      event.type ===
+      "failed"
+    ) {
+      setError(
+        event.message,
+      );
+
+      setRunning(false);
+    }
+  }
+
+
   async function submit(
     event:
       FormEvent<HTMLFormElement>,
@@ -102,23 +327,35 @@ export default function TestAgentDialog({
     const cleanQuery =
       query.trim();
 
-    if (!cleanQuery) {
+    if (
+      !cleanQuery
+      || running
+    ) {
       return;
     }
 
+    setRunId(null);
+    setResult(null);
+    setProgress([]);
+    setError(null);
+    setRunning(true);
+
     try {
-      const response =
-        await runMutation.mutateAsync({
+      await runAgentStream(
+        agent.id,
+        {
           query:
             cleanQuery,
-        });
-
-      setRunId(
-        response.run_id,
+        },
+        handleProgressEvent,
       );
 
     } catch {
-      // Mutation error is rendered below.
+      setError(
+        "Agent execution failed.",
+      );
+
+      setRunning(false);
     }
   }
 
@@ -152,10 +389,13 @@ export default function TestAgentDialog({
           <DialogHeader>
 
             <DialogTitle className="flex items-center gap-2">
+
               <Bot className="h-5 w-5 text-violet-600" />
 
               Test Agent
+
             </DialogTitle>
+
 
             <DialogDescription>
               Run{" "}
@@ -192,8 +432,9 @@ export default function TestAgentDialog({
                       )
                     }
                     rows={6}
+                    disabled={running}
                     placeholder="Ask the agent something..."
-                    className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                    className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 disabled:bg-slate-50"
                   />
 
                 </div>
@@ -202,28 +443,131 @@ export default function TestAgentDialog({
                 <Button
                   type="submit"
                   disabled={
-                    runMutation.isPending ||
-                    !query.trim()
+                    running
+                    || !query.trim()
                   }
                 >
-                  <Play className="mr-2 h-4 w-4" />
 
-                  {runMutation.isPending
+                  {running ? (
+                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="mr-2 h-4 w-4" />
+                  )}
+
+                  {running
                     ? "Running..."
                     : "Run Agent"}
+
                 </Button>
 
               </form>
 
 
-              {runMutation.isError && (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                  Agent execution failed.
+              {(running
+                || progress.length >
+                  0) && (
+                <div className="rounded-xl border bg-white p-5">
+
+                  <div className="flex items-center justify-between">
+
+                    <h3 className="font-semibold text-slate-900">
+                      Live Execution
+                    </h3>
+
+
+                    {running && (
+                      <span className="flex items-center gap-2 text-xs font-medium text-blue-600">
+
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-blue-600" />
+
+                        Running
+
+                      </span>
+                    )}
+
+                  </div>
+
+
+                  <div className="mt-4 space-y-3">
+
+                    {progress.map(
+                      (item) => (
+                        <div
+                          key={
+                            item.id
+                          }
+                          className="flex items-start gap-3"
+                        >
+
+                          <div className="mt-0.5">
+
+                            {item.status ===
+                            "RUNNING" ? (
+                              <LoaderCircle className="h-4 w-4 animate-spin text-blue-600" />
+                            ) : (
+                              <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            )}
+
+                          </div>
+
+
+                          <div className="min-w-0 flex-1">
+
+                            <div className="flex items-center gap-2">
+
+                              {item.type ===
+                              "TOOL" ? (
+                                <Wrench className="h-3.5 w-3.5 text-violet-600" />
+                              ) : (
+                                <Bot className="h-3.5 w-3.5 text-blue-600" />
+                              )}
+
+
+                              <p className="text-sm font-medium text-slate-700">
+                                {item.name}
+                              </p>
+
+                            </div>
+
+
+                            {item.duration_ms !==
+                              undefined && (
+                              <p className="mt-1 text-xs text-slate-400">
+                                {item.duration_ms.toFixed(
+                                  2,
+                                )}{" "}
+                                ms
+                              </p>
+                            )}
+
+                          </div>
+
+                        </div>
+                      ),
+                    )}
+
+                  </div>
+
                 </div>
               )}
 
 
-              {runMutation.data && (
+              {error && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+
+                  <div className="flex items-center gap-2">
+
+                    <XCircle className="h-4 w-4" />
+
+                    {error}
+
+                  </div>
+
+                </div>
+              )}
+
+
+              {result && (
                 <div className="space-y-4 rounded-xl border bg-white p-5">
 
                   <div className="flex items-center justify-between">
@@ -233,17 +577,8 @@ export default function TestAgentDialog({
                     </h3>
 
 
-                    <span
-                      className={
-                        runMutation.data.status ===
-                        "COMPLETED"
-                          ? "rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700"
-                          : "rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700"
-                      }
-                    >
-                      {
-                        runMutation.data.status
-                      }
+                    <span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
+                      {result.status}
                     </span>
 
                   </div>
@@ -252,9 +587,7 @@ export default function TestAgentDialog({
                   <div className="rounded-lg bg-slate-50 p-4">
 
                     <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                      {
-                        runMutation.data.answer
-                      }
+                      {result.answer}
                     </p>
 
                   </div>
@@ -269,9 +602,7 @@ export default function TestAgentDialog({
                       </p>
 
                       <p className="mt-1 text-lg font-semibold text-slate-900">
-                        {
-                          runMutation.data.llm_calls
-                        }
+                        {result.llm_calls}
                       </p>
 
                     </div>
@@ -285,7 +616,8 @@ export default function TestAgentDialog({
 
                       <p className="mt-1 text-lg font-semibold text-slate-900">
                         {
-                          runMutation.data.tools_used.length
+                          result.tools_used
+                            .length
                         }
                       </p>
 
@@ -299,14 +631,13 @@ export default function TestAgentDialog({
                       </p>
 
                       <p className="mt-1 text-lg font-semibold text-slate-900">
-                        {
-                          (
-                            runMutation.data.duration_ms
-                            / 1000
-                          ).toFixed(
-                            2,
-                          )
-                        }s
+                        {(
+                          result.duration_ms
+                          / 1000
+                        ).toFixed(
+                          2,
+                        )}
+                        s
                       </p>
 
                     </div>
@@ -314,7 +645,8 @@ export default function TestAgentDialog({
                   </div>
 
 
-                  {runMutation.data.tools_used.length > 0 && (
+                  {result.tools_used.length >
+                    0 && (
                     <div>
 
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
@@ -323,12 +655,12 @@ export default function TestAgentDialog({
 
                       <div className="mt-2 flex flex-wrap gap-2">
 
-                        {runMutation.data.tools_used.map(
-                          (
-                            tool,
-                          ) => (
+                        {result.tools_used.map(
+                          (tool) => (
                             <span
-                              key={tool}
+                              key={
+                                tool
+                              }
                               className="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700"
                             >
                               {tool}
@@ -349,9 +681,7 @@ export default function TestAgentDialog({
                     </p>
 
                     <p className="mt-1 break-all font-mono text-xs text-slate-500">
-                      {
-                        runMutation.data.run_id
-                      }
+                      {result.run_id}
                     </p>
 
                   </div>
@@ -385,12 +715,16 @@ export default function TestAgentDialog({
                 {!runId && (
                   <div className="mt-6 rounded-lg border border-dashed bg-white p-6 text-center">
 
-                    <Search className="mx-auto h-8 w-8 text-slate-300" />
+                    {running ? (
+                      <LoaderCircle className="mx-auto h-8 w-8 animate-spin text-blue-400" />
+                    ) : (
+                      <Search className="mx-auto h-8 w-8 text-slate-300" />
+                    )}
 
                     <p className="mt-3 text-sm text-slate-500">
-                      Run the agent to see
-                      LLM and tool execution
-                      steps.
+                      {running
+                        ? "Execution is in progress..."
+                        : "Run the agent to see LLM and tool execution steps."}
                     </p>
 
                   </div>
@@ -408,18 +742,8 @@ export default function TestAgentDialog({
                 {runDetailsQuery.data && (
                   <div className="mt-5 space-y-3">
 
-                    {runDetailsQuery.data.steps.length === 0 && (
-                      <p className="text-sm text-slate-500">
-                        No execution steps
-                        were recorded.
-                      </p>
-                    )}
-
-
                     {runDetailsQuery.data.steps.map(
-                      (
-                        step,
-                      ) => (
+                      (step) => (
                         <div
                           key={
                             step.id
@@ -439,38 +763,29 @@ export default function TestAgentDialog({
                                     : "rounded-lg bg-blue-50 p-2"
                                 }
                               >
+
                                 {step.step_type ===
                                 "TOOL" ? (
                                   <Wrench className="h-4 w-4 text-violet-600" />
                                 ) : (
                                   <Bot className="h-4 w-4 text-blue-600" />
                                 )}
+
                               </div>
 
 
                               <div>
 
-                                <div className="flex flex-wrap items-center gap-2">
-
-                                  <p className="text-sm font-semibold text-slate-900">
-                                    Step{" "}
-                                    {
-                                      step.step_number
-                                    }
-                                    {" · "}
-                                    {
-                                      step.name
-                                    }
-                                  </p>
-
-
-                                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                                    {
-                                      step.step_type
-                                    }
-                                  </span>
-
-                                </div>
+                                <p className="text-sm font-semibold text-slate-900">
+                                  Step{" "}
+                                  {
+                                    step.step_number
+                                  }
+                                  {" · "}
+                                  {
+                                    step.name
+                                  }
+                                </p>
 
 
                                 <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-500">
@@ -497,11 +812,9 @@ export default function TestAgentDialog({
 
                                       <Clock3 className="h-3.5 w-3.5" />
 
-                                      {
-                                        step.duration_ms.toFixed(
-                                          2,
-                                        )
-                                      }{" "}
+                                      {step.duration_ms.toFixed(
+                                        2,
+                                      )}{" "}
                                       ms
 
                                     </span>
@@ -517,8 +830,8 @@ export default function TestAgentDialog({
 
 
                           {step.step_type ===
-                            "TOOL" &&
-                            step.input_data && (
+                            "TOOL"
+                            && step.input_data && (
                             <div className="mt-4">
 
                               <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
@@ -538,8 +851,8 @@ export default function TestAgentDialog({
 
 
                           {step.step_type ===
-                            "TOOL" &&
-                            step.output_data && (
+                            "TOOL"
+                            && step.output_data && (
                             <div className="mt-4">
 
                               <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
