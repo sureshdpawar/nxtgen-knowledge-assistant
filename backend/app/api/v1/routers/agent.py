@@ -1,3 +1,6 @@
+import asyncio
+import json
+
 from uuid import UUID
 
 from fastapi import (
@@ -5,6 +8,9 @@ from fastapi import (
     Depends,
     Response,
     status,
+)
+from fastapi.responses import (
+    StreamingResponse,
 )
 from sqlalchemy.orm import Session
 
@@ -63,6 +69,27 @@ def list_agents(
     )
 
 
+@router.get(
+    "/{agent_id}",
+    response_model=
+        AgentResponse,
+)
+def get_agent(
+    agent_id: UUID,
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    return service.get(
+        db=db,
+        current_user=current_user,
+        agent_id=agent_id,
+    )
+
+
 @router.post(
     "",
     response_model=
@@ -83,55 +110,6 @@ def create_agent(
         db=db,
         current_user=current_user,
         payload=payload,
-    )
-
-
-@router.post(
-    "/{agent_id}/run",
-    response_model=
-        AgentRunResponse,
-)
-def run_agent(
-    agent_id: UUID,
-    payload: AgentRunRequest,
-    db: Session = Depends(
-        get_db,
-    ),
-    current_user: User = Depends(
-        require_admin,
-    ),
-):
-    return (
-        execution_service.run(
-            db=db,
-            current_user=
-                current_user,
-            agent_id=
-                agent_id,
-            query=
-                payload.query,
-        )
-    )
-
-
-@router.get(
-    "/{agent_id}",
-    response_model=
-        AgentResponse,
-)
-def get_agent(
-    agent_id: UUID,
-    db: Session = Depends(
-        get_db,
-    ),
-    current_user: User = Depends(
-        require_admin,
-    ),
-):
-    return service.get(
-        db=db,
-        current_user=current_user,
-        agent_id=agent_id,
     )
 
 
@@ -181,4 +159,130 @@ def delete_agent(
     return Response(
         status_code=
             status.HTTP_204_NO_CONTENT,
+    )
+
+
+@router.post(
+    "/{agent_id}/run",
+    response_model=
+        AgentRunResponse,
+)
+async def run_agent(
+    agent_id: UUID,
+    payload: AgentRunRequest,
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    return await execution_service.run(
+        db=db,
+        current_user=current_user,
+        agent_id=agent_id,
+        query=payload.query,
+    )
+
+
+@router.post(
+    "/{agent_id}/run/stream",
+)
+async def stream_agent(
+    agent_id: UUID,
+    payload: AgentRunRequest,
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    queue: asyncio.Queue[
+        dict | None
+    ] = asyncio.Queue()
+
+    async def progress_callback(
+        event: dict,
+    ):
+        await queue.put(
+            event,
+        )
+
+    async def execute():
+        try:
+            await execution_service.run(
+                db=db,
+                current_user=
+                    current_user,
+                agent_id=
+                    agent_id,
+                query=
+                    payload.query,
+                progress_callback=
+                    progress_callback,
+            )
+
+        except Exception:
+            #
+            # AgentExecutionService already
+            # emitted a safe failed event
+            # and persisted the failed run.
+            #
+            pass
+
+        finally:
+            await queue.put(
+                None,
+            )
+
+    async def event_stream():
+        task = asyncio.create_task(
+            execute()
+        )
+
+        try:
+            while True:
+                event = (
+                    await queue.get()
+                )
+
+                if event is None:
+                    break
+
+                payload_json = (
+                    json.dumps(
+                        event,
+                        default=str,
+                    )
+                )
+
+                yield (
+                    "event: progress\n"
+                    f"data: {payload_json}\n\n"
+                )
+
+        finally:
+            #
+            # We intentionally do not cancel
+            # an already-running agent if the
+            # browser disconnects.
+            #
+            if task.done():
+                try:
+                    task.result()
+                except Exception:
+                    pass
+
+    return StreamingResponse(
+        event_stream(),
+        media_type=
+            "text/event-stream",
+        headers={
+            "Cache-Control":
+                "no-cache",
+
+            "X-Accel-Buffering":
+                "no",
+        },
     )

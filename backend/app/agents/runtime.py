@@ -1,5 +1,14 @@
+from __future__ import annotations
+
+import inspect
 import logging
 import time
+
+from collections.abc import (
+    Awaitable,
+    Callable,
+)
+from typing import Any
 
 from langchain_core.messages import (
     HumanMessage,
@@ -30,13 +39,39 @@ logger = logging.getLogger(
 MAX_TRACE_OUTPUT_LENGTH = 4000
 
 
+ProgressCallback = Callable[
+    [dict[str, Any]],
+    Awaitable[None] | None,
+]
+
+
 class AgentRuntime:
+
+    async def _emit(
+        self,
+        callback:
+            ProgressCallback | None,
+        event: dict[
+            str,
+            Any,
+        ],
+    ) -> None:
+        if callback is None:
+            return
+
+        result = callback(
+            event,
+        )
+
+        if inspect.isawaitable(
+            result,
+        ):
+            await result
 
     def _safe_output(
         self,
         value,
     ) -> str:
-
         text = str(
             value,
         )
@@ -54,14 +89,18 @@ class AgentRuntime:
             + "...[truncated]"
         )
 
-    def run(
+    async def run(
         self,
         *,
         model,
-        tools: list[BaseTool],
+        tools: list[
+            BaseTool
+        ],
         system_prompt: str,
         query: str,
         max_iterations: int,
+        progress_callback:
+            ProgressCallback | None = None,
     ) -> dict:
 
         if tools:
@@ -86,7 +125,7 @@ class AgentRuntime:
                 None
             )
 
-        def call_model(
+        async def call_model(
             state: AgentState,
         ):
             llm_calls = (
@@ -112,11 +151,24 @@ class AgentRuntime:
                     content=
                         system_prompt,
                 ),
-                *state["messages"],
+                *state[
+                    "messages"
+                ],
             ]
 
             iteration = (
                 llm_calls + 1
+            )
+
+            await self._emit(
+                progress_callback,
+                {
+                    "type":
+                        "llm_started",
+
+                    "iteration":
+                        iteration,
+                },
             )
 
             logger.info(
@@ -132,7 +184,9 @@ class AgentRuntime:
             )
 
             response = (
-                model_with_tools.invoke(
+                await
+                model_with_tools
+                .ainvoke(
                     messages,
                 )
             )
@@ -170,6 +224,37 @@ class AgentRuntime:
                 for tool_call
                 in tool_calls
             ]
+
+            await self._emit(
+                progress_callback,
+                {
+                    "type":
+                        "llm_completed",
+
+                    "iteration":
+                        iteration,
+
+                    "duration_ms":
+                        duration_ms,
+
+                    "has_tool_calls":
+                        bool(
+                            tool_calls
+                        ),
+
+                    "tools":
+                        [
+                            item[
+                                "name"
+                            ]
+                            for item
+                            in requested_tools
+                            if item[
+                                "name"
+                            ]
+                        ],
+                },
+            )
 
             trace_step = {
                 "step_type":
@@ -223,7 +308,7 @@ class AgentRuntime:
                 ],
             }
 
-        def execute_tools(
+        async def execute_tools(
             state: AgentState,
         ):
             if (
@@ -267,13 +352,36 @@ class AgentRuntime:
                 in tool_calls
             ]
 
+            for tool_call in (
+                requested_tools
+            ):
+                await self._emit(
+                    progress_callback,
+                    {
+                        "type":
+                            "tool_started",
+
+                        "name":
+                            tool_call.get(
+                                "name"
+                            ),
+
+                        "args":
+                            tool_call.get(
+                                "args",
+                                {},
+                            ),
+                    },
+                )
+
             started_at = (
                 time.perf_counter()
             )
 
             result = (
+                await
                 langgraph_tool_node
-                .invoke(
+                .ainvoke(
                     state,
                 )
             )
@@ -318,6 +426,47 @@ class AgentRuntime:
                     }
                 )
 
+            for tool_call in (
+                requested_tools
+            ):
+                tool_name = (
+                    tool_call.get(
+                        "name"
+                    )
+                )
+
+                matching_output = next(
+                    (
+                        output
+                        for output
+                        in outputs
+                        if (
+                            output.get(
+                                "name"
+                            )
+                            == tool_name
+                        )
+                    ),
+                    None,
+                )
+
+                await self._emit(
+                    progress_callback,
+                    {
+                        "type":
+                            "tool_completed",
+
+                        "name":
+                            tool_name,
+
+                        "duration_ms":
+                            duration_ms,
+
+                        "output":
+                            matching_output,
+                    },
+                )
+
             trace_step = {
                 "step_type":
                     "TOOL",
@@ -326,7 +475,9 @@ class AgentRuntime:
                     (
                         requested_tools[
                             0
-                        ]["name"]
+                        ][
+                            "name"
+                        ]
                         if len(
                             requested_tools
                         ) == 1
@@ -468,19 +619,23 @@ class AgentRuntime:
             graph_builder.compile()
         )
 
-        result = graph.invoke(
-            {
-                "messages": [
-                    HumanMessage(
-                        content=
-                            query,
-                    ),
-                ],
+        result = (
+            await graph.ainvoke(
+                {
+                    "messages": [
+                        HumanMessage(
+                            content=
+                                query,
+                        ),
+                    ],
 
-                "llm_calls": 0,
+                    "llm_calls":
+                        0,
 
-                "trace": [],
-            }
+                    "trace":
+                        [],
+                }
+            )
         )
 
         messages = (

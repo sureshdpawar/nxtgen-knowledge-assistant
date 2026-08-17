@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from collections import defaultdict
 from uuid import UUID
 
 from langchain_core.tools import (
@@ -15,6 +16,9 @@ from sqlalchemy.orm import (
     selectinload,
 )
 
+from app.agents.mcp_tool_provider import (
+    MCPToolProvider,
+)
 from app.agents.rest_tool_factory import (
     RESTToolFactory,
 )
@@ -41,6 +45,10 @@ class AgentToolRegistry:
             RESTToolFactory()
         )
 
+        self.mcp_tool_provider = (
+            MCPToolProvider()
+        )
+
     def _get_assigned_tools(
         self,
         db: Session,
@@ -48,6 +56,7 @@ class AgentToolRegistry:
         tenant_id: UUID,
         tool_ids: list[UUID],
     ) -> list[ToolDefinition]:
+
         if not tool_ids:
             return []
 
@@ -64,8 +73,10 @@ class AgentToolRegistry:
                 ToolDefinition.id.in_(
                     tool_ids,
                 ),
+
                 ToolDefinition.tenant_id
                 == tenant_id,
+
                 ToolDefinition.is_active
                 .is_(True),
             )
@@ -77,7 +88,7 @@ class AgentToolRegistry:
             ).all()
         )
 
-    def get_tools(
+    async def get_tools(
         self,
         db: Session,
         tenant_id: UUID,
@@ -86,12 +97,13 @@ class AgentToolRegistry:
         tool_ids:
             list[UUID],
     ) -> list[BaseTool]:
+
         tools: list[
             BaseTool
         ] = []
 
         #
-        # Native NXTGEN knowledge tool.
+        # Native NXTGEN tool.
         #
         if knowledge_base_ids:
             tools.append(
@@ -103,7 +115,7 @@ class AgentToolRegistry:
             )
 
         #
-        # Tenant-configured tools.
+        # Load assigned tenant tools.
         #
         definitions = (
             self._get_assigned_tools(
@@ -115,98 +127,170 @@ class AgentToolRegistry:
             )
         )
 
+        #
+        # REST tools.
+        #
         for definition in definitions:
+
             if (
                 definition.tool_type
-                == ToolType.REST
+                != ToolType.REST
             ):
-                integration = (
-                    definition.integration
+                continue
+
+            integration = (
+                definition.integration
+            )
+
+            if integration is None:
+                logger.warning(
+                    "REST tool skipped "
+                    "tool=%s "
+                    "reason=no_integration",
+                    definition.id,
                 )
 
-                if integration is None:
-                    logger.warning(
-                        "REST tool skipped "
-                        "tool=%s "
-                        "reason=no_integration",
-                        definition.id,
-                    )
+                continue
 
-                    continue
+            if (
+                not
+                integration.is_active
+            ):
+                logger.warning(
+                    "REST tool skipped "
+                    "tool=%s "
+                    "integration=%s "
+                    "reason=inactive_integration",
+                    definition.id,
+                    integration.id,
+                )
 
-                if (
-                    not
-                    integration.is_active
-                ):
-                    logger.warning(
-                        "REST tool skipped "
-                        "tool=%s "
-                        "integration=%s "
-                        "reason=inactive_integration",
-                        definition.id,
-                        integration.id,
-                    )
+                continue
 
-                    continue
+            rest_tool = (
+                self.rest_tool_factory
+                .create(
+                    tool=
+                        definition,
+                    integration=
+                        integration,
+                )
+            )
 
-                rest_tool = (
-                    self.rest_tool_factory
-                    .create(
-                        tool=
-                            definition,
+            tools.append(
+                rest_tool,
+            )
+
+        #
+        # Group MCP tool definitions
+        # by MCP integration.
+        #
+        mcp_definitions_by_integration: dict[
+            UUID,
+            list[ToolDefinition],
+        ] = defaultdict(
+            list,
+        )
+
+        for definition in definitions:
+
+            if (
+                definition.tool_type
+                != ToolType.MCP
+            ):
+                continue
+
+            integration = (
+                definition.integration
+            )
+
+            if integration is None:
+                logger.warning(
+                    "MCP tool skipped "
+                    "tool=%s "
+                    "reason=no_integration",
+                    definition.id,
+                )
+
+                continue
+
+            if (
+                not
+                integration.is_active
+            ):
+                logger.warning(
+                    "MCP tool skipped "
+                    "tool=%s "
+                    "integration=%s "
+                    "reason=inactive_integration",
+                    definition.id,
+                    integration.id,
+                )
+
+                continue
+
+            mcp_definitions_by_integration[
+                integration.id
+            ].append(
+                definition,
+            )
+
+        #
+        # Discover MCP tools once
+        # per MCP server.
+        #
+        for (
+            integration_id,
+            mcp_definitions,
+        ) in (
+            mcp_definitions_by_integration
+            .items()
+        ):
+
+            integration = (
+                mcp_definitions[
+                    0
+                ].integration
+            )
+
+            if integration is None:
+                continue
+
+            try:
+                selected_tools = (
+                    await
+                    self.mcp_tool_provider
+                    .get_assigned_tools(
                         integration=
                             integration,
+                        definitions=
+                            mcp_definitions,
                     )
                 )
 
-                tools.append(
-                    rest_tool,
+                tools.extend(
+                    selected_tools
                 )
 
-                continue
-
-            if (
-                definition.tool_type
-                == ToolType.MCP
-            ):
-                logger.info(
-                    "MCP tool skipped "
-                    "for now "
-                    "tool=%s "
-                    "name=%s",
-                    definition.id,
-                    definition.name,
+            except Exception:
+                logger.exception(
+                    "MCP tool discovery failed "
+                    "integration=%s",
+                    integration_id,
                 )
 
-                continue
-
-            if (
-                definition.tool_type
-                == ToolType.NATIVE
-            ):
-                logger.info(
-                    "Configured native "
-                    "tool skipped "
-                    "tool=%s "
-                    "name=%s",
-                    definition.id,
-                    definition.name,
-                )
+                raise
 
         logger.info(
             "Agent tools resolved "
             "knowledge_bases=%s "
             "assigned_definitions=%s "
-            "total_tools=%s "
-            "tools=%s",
+            "runtime_tools=%s",
             len(
                 knowledge_base_ids
             ),
             len(
                 definitions
-            ),
-            len(
-                tools
             ),
             [
                 tool.name

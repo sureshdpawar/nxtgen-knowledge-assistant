@@ -1,10 +1,15 @@
 import logging
 import time
 
+from collections.abc import (
+    Awaitable,
+    Callable,
+)
 from datetime import (
     datetime,
     timezone,
 )
+from typing import Any
 from uuid import UUID
 
 from fastapi import (
@@ -52,6 +57,12 @@ logger = logging.getLogger(
 )
 
 
+ProgressCallback = Callable[
+    [dict[str, Any]],
+    Awaitable[None] | None,
+]
+
+
 class AgentExecutionService:
 
     def __init__(self):
@@ -70,6 +81,31 @@ class AgentExecutionService:
         self.runtime = (
             AgentRuntime()
         )
+
+    async def _emit_progress(
+        self,
+        progress_callback:
+            ProgressCallback | None,
+        event: dict[
+            str,
+            Any,
+        ],
+    ) -> None:
+        if progress_callback is None:
+            return
+
+        result = progress_callback(
+            event,
+        )
+
+        if (
+            result is not None
+            and hasattr(
+                result,
+                "__await__",
+            )
+        ):
+            await result
 
     def _resolve_llm_configuration(
         self,
@@ -224,12 +260,14 @@ class AgentExecutionService:
                 step,
             )
 
-    def run(
+    async def run(
         self,
         db: Session,
         current_user: User,
         agent_id: UUID,
         query: str,
+        progress_callback:
+            ProgressCallback | None = None,
     ) -> dict:
 
         agent = (
@@ -265,64 +303,6 @@ class AgentExecutionService:
                 ),
             )
 
-        configuration = (
-            self._resolve_llm_configuration(
-                db=db,
-                agent=agent,
-            )
-        )
-
-        model = (
-            self.model_factory.create(
-                configuration,
-            )
-        )
-
-        #
-        # Resolve knowledge bases assigned
-        # to this agent.
-        #
-        knowledge_base_ids = [
-            link.knowledge_base_id
-            for link
-            in agent.knowledge_base_links
-        ]
-
-        #
-        # Resolve dynamic tools assigned
-        # to this agent.
-        #
-        tool_ids = [
-            link.tool_id
-            for link
-            in agent.tool_links
-        ]
-
-        #
-        # Build the final LangChain tool
-        # collection.
-        #
-        # This currently supports:
-        #
-        # - native search_knowledge
-        # - configured REST tools
-        #
-        # MCP tools will plug into this
-        # same registry later.
-        #
-        tools = (
-            self.tool_registry
-            .get_tools(
-                db=db,
-                tenant_id=
-                    agent.tenant_id,
-                knowledge_base_ids=
-                    knowledge_base_ids,
-                tool_ids=
-                    tool_ids,
-            )
-        )
-
         clean_query = (
             query.strip()
         )
@@ -336,6 +316,45 @@ class AgentExecutionService:
                     "be empty."
                 ),
             )
+
+        configuration = (
+            self._resolve_llm_configuration(
+                db=db,
+                agent=agent,
+            )
+        )
+
+        model = (
+            self.model_factory.create(
+                configuration,
+            )
+        )
+
+        knowledge_base_ids = [
+            link.knowledge_base_id
+            for link
+            in agent.knowledge_base_links
+        ]
+
+        tool_ids = [
+            link.tool_id
+            for link
+            in agent.tool_links
+        ]
+
+        tools = (
+            await
+            self.tool_registry
+            .get_tools(
+                db=db,
+                tenant_id=
+                    agent.tenant_id,
+                knowledge_base_ids=
+                    knowledge_base_ids,
+                tool_ids=
+                    tool_ids,
+            )
+        )
 
         run = AgentRun(
             tenant_id=
@@ -376,6 +395,34 @@ class AgentExecutionService:
             time.perf_counter()
         )
 
+        await self._emit_progress(
+            progress_callback,
+            {
+                "type":
+                    "run_started",
+
+                "run_id":
+                    str(
+                        run_id
+                    ),
+
+                "agent_id":
+                    str(
+                        agent.id
+                    ),
+
+                "agent_name":
+                    agent.name,
+
+                "tools":
+                    [
+                        tool.name
+                        for tool
+                        in tools
+                    ],
+            },
+        )
+
         logger.info(
             "Agent execution started "
             "run=%s "
@@ -405,6 +452,7 @@ class AgentExecutionService:
 
         try:
             result = (
+                await
                 self.runtime.run(
                     model=model,
                     tools=tools,
@@ -414,10 +462,14 @@ class AgentExecutionService:
                         clean_query,
                     max_iterations=
                         agent.max_iterations,
+                    progress_callback=
+                        progress_callback,
                 )
             )
 
-            tools_used = []
+            tools_used: list[
+                str
+            ] = []
 
             for message in (
                 result[
@@ -519,7 +571,7 @@ class AgentExecutionService:
                 duration_ms,
             )
 
-            return {
+            response = {
                 "run_id":
                     run_id,
 
@@ -542,6 +594,43 @@ class AgentExecutionService:
                 "duration_ms":
                     duration_ms,
             }
+
+            await self._emit_progress(
+                progress_callback,
+                {
+                    "type":
+                        "completed",
+
+                    "result":
+                        {
+                            "run_id":
+                                str(
+                                    run_id
+                                ),
+
+                            "answer":
+                                result[
+                                    "answer"
+                                ],
+
+                            "status":
+                                "COMPLETED",
+
+                            "llm_calls":
+                                result[
+                                    "llm_calls"
+                                ],
+
+                            "tools_used":
+                                tools_used,
+
+                            "duration_ms":
+                                duration_ms,
+                        },
+                },
+            )
+
+            return response
 
         except Exception as exc:
             db.rollback()
@@ -594,6 +683,25 @@ class AgentExecutionService:
                 type(
                     exc
                 ).__name__,
+            )
+
+            await self._emit_progress(
+                progress_callback,
+                {
+                    "type":
+                        "failed",
+
+                    "run_id":
+                        str(
+                            run_id
+                        ),
+
+                    "message":
+                        (
+                            "Agent execution "
+                            "failed."
+                        ),
+                },
             )
 
             raise

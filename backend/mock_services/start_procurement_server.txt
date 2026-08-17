@@ -1,0 +1,4 @@
+uvicorn mock_services.procurement_api:app \
+  --host 127.0.0.1 \
+  --port 8200 \
+  --reload
