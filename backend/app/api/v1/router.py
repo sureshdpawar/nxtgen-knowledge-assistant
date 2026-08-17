@@ -15,6 +15,7 @@ from app.api.v1.routers import agent
 from app.api.v1.routers import (agent_runs,)
 from app.api.v1.routers import integration
 from app.api.v1.routers import tool_definition
+from app.api.v1.routers import (account,)
 
 api_router = APIRouter()
 
@@ -33,3 +34,4 @@ api_router.include_router(agent.router,)
 api_router.include_router(agent_runs.router,)
 api_router.include_router(integration.router,)
 api_router.include_router(tool_definition.router,)
+api_router.include_router(account.router,)
