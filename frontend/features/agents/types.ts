@@ -63,6 +63,9 @@ export interface Agent {
   knowledge_base_ids:
     string[];
 
+  tool_ids:
+    string[];
+
   created_at: string;
 
   updated_at: string;
@@ -91,7 +94,8 @@ export interface CreateAgentRequest {
 export interface UpdateAgentRequest {
   name?: string;
 
-  description?: string | null;
+  description?:
+    string | null;
 
   system_prompt?: string;
 
@@ -104,6 +108,11 @@ export interface UpdateAgentRequest {
 
   knowledge_base_ids?:
     string[];
+}
+
+
+export interface AssignAgentToolsRequest {
+  tool_ids: string[];
 }
 
 

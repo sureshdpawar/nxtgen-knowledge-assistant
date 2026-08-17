@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  assignAgentTools,
   createAgent,
   deleteAgent,
   getAgent,
@@ -17,6 +18,7 @@ import {
 
 import type {
   AgentRunRequest,
+  AssignAgentToolsRequest,
   CreateAgentRequest,
   UpdateAgentRequest,
 } from "./types";
@@ -136,6 +138,58 @@ export function useDeleteAgent() {
       queryClient.invalidateQueries({
         queryKey: [
           "agents",
+        ],
+      });
+    },
+  });
+}
+
+
+export function useAssignAgentTools() {
+  const queryClient =
+    useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      agentId,
+      toolIds,
+    }: {
+      agentId: string;
+
+      toolIds: string[];
+    }) => {
+      const payload:
+        AssignAgentToolsRequest = {
+          tool_ids:
+            toolIds,
+        };
+
+      return assignAgentTools(
+        agentId,
+        payload,
+      );
+    },
+
+    onSuccess(
+      _assignedTools,
+      variables,
+    ) {
+      queryClient.invalidateQueries({
+        queryKey: [
+          "agents",
+        ],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          "agents",
+          variables.agentId,
+        ],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          "tools",
         ],
       });
     },

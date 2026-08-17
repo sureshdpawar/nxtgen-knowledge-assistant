@@ -1,11 +1,16 @@
 import api from "@/services/api";
 
 import type {
+  ToolDefinition,
+} from "@/features/tools/types";
+
+import type {
   Agent,
   AgentRun,
   AgentRunDetail,
   AgentRunRequest,
   AgentRunResponse,
+  AssignAgentToolsRequest,
   CreateAgentRequest,
   UpdateAgentRequest,
 } from "./types";
@@ -66,6 +71,22 @@ export async function deleteAgent(
   await api.delete(
     `/agents/${id}`,
   );
+}
+
+
+export async function assignAgentTools(
+  agentId: string,
+  payload: AssignAgentToolsRequest,
+) {
+  const response =
+    await api.put<
+      ToolDefinition[]
+    >(
+      `/agents/${agentId}/tools`,
+      payload,
+    );
+
+  return response.data;
 }
 
 

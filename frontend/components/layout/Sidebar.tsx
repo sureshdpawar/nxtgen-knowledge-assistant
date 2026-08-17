@@ -6,12 +6,14 @@ import { usePathname } from "next/navigation";
 import {
   Bot,
   Building2,
+  Cable,
   Database,
   LayoutDashboard,
   MessageSquare,
   Search,
   Settings,
   Users,
+  Wrench,
 } from "lucide-react";
 
 import {
@@ -25,13 +27,21 @@ import type {
 
 type MenuItem = {
   label: string;
+
   href: string;
+
   icon:
     React.ComponentType<{
       className?: string;
     }>;
 
   roles: UserRole[];
+
+  section:
+    | "main"
+    | "knowledge"
+    | "studio"
+    | "administration";
 };
 
 
@@ -44,15 +54,7 @@ const menu: MenuItem[] = [
       "SUPERADMIN",
       "ADMIN",
     ],
-  },
-
-  {
-    label: "Tenants",
-    href: "/tenants",
-    icon: Building2,
-    roles: [
-      "SUPERADMIN",
-    ],
+    section: "main",
   },
 
   {
@@ -62,24 +64,7 @@ const menu: MenuItem[] = [
     roles: [
       "ADMIN",
     ],
-  },
-
-  {
-    label: "Agents",
-    href: "/agents",
-    icon: Bot,
-    roles: [
-      "ADMIN",
-    ],
-  },
-
-  {
-    label: "Users",
-    href: "/users",
-    icon: Users,
-    roles: [
-      "ADMIN",
-    ],
+    section: "knowledge",
   },
 
   {
@@ -90,6 +75,7 @@ const menu: MenuItem[] = [
       "ADMIN",
       "USER",
     ],
+    section: "knowledge",
   },
 
   {
@@ -100,6 +86,57 @@ const menu: MenuItem[] = [
       "ADMIN",
       "USER",
     ],
+    section: "knowledge",
+  },
+
+  {
+    label: "Agents",
+    href: "/agents",
+    icon: Bot,
+    roles: [
+      "ADMIN",
+    ],
+    section: "studio",
+  },
+
+  {
+    label: "Integrations",
+    href: "/integrations",
+    icon: Cable,
+    roles: [
+      "ADMIN",
+    ],
+    section: "studio",
+  },
+
+  {
+    label: "Tools",
+    href: "/tools",
+    icon: Wrench,
+    roles: [
+      "ADMIN",
+    ],
+    section: "studio",
+  },
+
+  {
+    label: "Tenants",
+    href: "/tenants",
+    icon: Building2,
+    roles: [
+      "SUPERADMIN",
+    ],
+    section: "administration",
+  },
+
+  {
+    label: "Users",
+    href: "/users",
+    icon: Users,
+    roles: [
+      "ADMIN",
+    ],
+    section: "administration",
   },
 
   {
@@ -109,8 +146,26 @@ const menu: MenuItem[] = [
     roles: [
       "ADMIN",
     ],
+    section: "administration",
   },
 ];
+
+
+const sectionLabels = {
+  main: "",
+  knowledge: "Knowledge",
+  studio: "Agent Studio",
+  administration: "Administration",
+} as const;
+
+
+const sectionOrder:
+  MenuItem["section"][] = [
+    "main",
+    "knowledge",
+    "studio",
+    "administration",
+  ];
 
 
 export default function Sidebar() {
@@ -119,8 +174,7 @@ export default function Sidebar() {
 
   const {
     user,
-  } =
-    useAuth();
+  } = useAuth();
 
 
   if (!user) {
@@ -137,10 +191,22 @@ export default function Sidebar() {
     );
 
 
-  return (
-    <aside className="w-64 border-r bg-white">
+  function isActive(
+    href: string,
+  ) {
+    return (
+      pathname === href ||
+      pathname.startsWith(
+        `${href}/`,
+      )
+    );
+  }
 
-      <div className="border-b px-4 py-3">
+
+  return (
+    <aside className="flex w-64 flex-col border-r bg-white">
+
+      <div className="border-b px-4 py-4">
 
         <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
           Signed in as
@@ -158,46 +224,95 @@ export default function Sidebar() {
       </div>
 
 
-      <nav className="space-y-2 p-4">
+      <nav className="flex-1 overflow-y-auto p-4">
 
-        {visibleMenu.map(
-          (item) => {
-            const Icon =
-              item.icon;
+        <div className="space-y-6">
 
-            const active =
-              pathname ===
-                item.href ||
-              pathname.startsWith(
-                `${item.href}/`,
-              );
+          {sectionOrder.map(
+            (section) => {
+              const items =
+                visibleMenu.filter(
+                  (item) =>
+                    item.section ===
+                    section,
+                );
 
 
-            return (
-              <Link
-                key={
-                  item.href
-                }
-                href={
-                  item.href
-                }
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 transition ${
-                  active
-                    ? "bg-blue-600 text-white shadow"
-                    : "text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                <Icon className="h-5 w-5" />
+              if (
+                items.length === 0
+              ) {
+                return null;
+              }
 
-                <span>
-                  {
-                    item.label
+
+              return (
+                <div
+                  key={
+                    section
                   }
-                </span>
-              </Link>
-            );
-          },
-        )}
+                >
+
+                  {sectionLabels[
+                    section
+                  ] && (
+                    <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      {
+                        sectionLabels[
+                          section
+                        ]
+                      }
+                    </p>
+                  )}
+
+
+                  <div className="space-y-1">
+
+                    {items.map(
+                      (item) => {
+                        const Icon =
+                          item.icon;
+
+                        const active =
+                          isActive(
+                            item.href,
+                          );
+
+
+                        return (
+                          <Link
+                            key={
+                              item.href
+                            }
+                            href={
+                              item.href
+                            }
+                            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                              active
+                                ? "bg-blue-600 text-white shadow-sm"
+                                : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                            }`}
+                          >
+                            <Icon className="h-5 w-5 shrink-0" />
+
+                            <span className="truncate">
+                              {
+                                item.label
+                              }
+                            </span>
+
+                          </Link>
+                        );
+                      },
+                    )}
+
+                  </div>
+
+                </div>
+              );
+            },
+          )}
+
+        </div>
 
       </nav>
 
