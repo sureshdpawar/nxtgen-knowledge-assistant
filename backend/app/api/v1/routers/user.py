@@ -31,11 +31,15 @@ from app.services.user_service import (
 
 router = APIRouter(
     prefix="/users",
-    tags=["Users"],
+    tags=[
+        "Users",
+    ],
 )
 
 
-service = UserService()
+service = (
+    UserService()
+)
 
 access_service = (
     KnowledgeBaseAccessService()
@@ -58,7 +62,8 @@ def list_users(
 ):
     return service.list(
         db=db,
-        current_user=current_user,
+        current_user=
+            current_user,
     )
 
 
@@ -81,8 +86,10 @@ def list_user_knowledge_bases(
         access_service
         .list_for_user(
             db=db,
-            current_user=current_user,
-            user_id=user_id,
+            current_user=
+                current_user,
+            user_id=
+                user_id,
         )
     )
 
@@ -103,8 +110,10 @@ def get_user(
 ):
     return service.get(
         db=db,
-        current_user=current_user,
-        user_id=user_id,
+        current_user=
+            current_user,
+        user_id=
+            user_id,
     )
 
 
@@ -126,8 +135,10 @@ def create_user(
 ):
     return service.create(
         db=db,
-        current_user=current_user,
-        user_create=user,
+        current_user=
+            current_user,
+        user_create=
+            user,
     )
 
 
@@ -148,9 +159,12 @@ def update_user(
 ):
     return service.update(
         db=db,
-        current_user=current_user,
-        user_id=user_id,
-        user_update=user,
+        current_user=
+            current_user,
+        user_id=
+            user_id,
+        user_update=
+            user,
     )
 
 
@@ -170,8 +184,10 @@ def delete_user(
 ):
     service.delete(
         db=db,
-        current_user=current_user,
-        user_id=user_id,
+        current_user=
+            current_user,
+        user_id=
+            user_id,
     )
 
     return Response(
