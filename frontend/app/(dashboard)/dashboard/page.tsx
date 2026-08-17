@@ -11,14 +11,18 @@ import {
 } from "next/navigation";
 
 import {
+  Bot,
   Building2,
+  Cable,
   ChevronRight,
   Database,
   FileText,
   Library,
+  Settings,
   ShieldCheck,
   UserCheck,
   Users,
+  Wrench,
 } from "lucide-react";
 
 import {
@@ -26,17 +30,33 @@ import {
 } from "@/hooks/useAuth";
 
 import {
+  useAgents,
+} from "@/features/agents/hooks";
+
+import {
   useDashboardStats,
   usePlatformDashboardStats,
 } from "@/features/dashboard/hooks";
+
+import {
+  useIntegrations,
+} from "@/features/integrations/hooks";
 
 import {
   useKnowledgeBases,
 } from "@/features/knowledge-bases/hooks";
 
 import {
+  useLLMProfiles,
+} from "@/features/llm-config/hooks";
+
+import {
   useTenants,
 } from "@/features/tenants/hooks";
+
+import {
+  useTools,
+} from "@/features/tools/hooks";
 
 import {
   useUsers,
@@ -129,6 +149,66 @@ export default function DashboardPage() {
     );
 
 
+  const {
+    data:
+      agents,
+
+    isLoading:
+      agentsLoading,
+
+    isError:
+      agentsError,
+  } =
+    useAgents(
+      isAdmin,
+    );
+
+
+  const {
+    data:
+      integrations,
+
+    isLoading:
+      integrationsLoading,
+
+    isError:
+      integrationsError,
+  } =
+    useIntegrations(
+      isAdmin,
+    );
+
+
+  const {
+    data:
+      tools,
+
+    isLoading:
+      toolsLoading,
+
+    isError:
+      toolsError,
+  } =
+    useTools(
+      isAdmin,
+    );
+
+
+  const {
+    data:
+      llmProfiles,
+
+    isLoading:
+      llmProfilesLoading,
+
+    isError:
+      llmProfilesError,
+  } =
+    useLLMProfiles(
+      isAdmin,
+    );
+
+
   useEffect(() => {
     if (
       isUser
@@ -216,6 +296,7 @@ export default function DashboardPage() {
           </p>
         ) : (
           <>
+
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
 
               <StatCard
@@ -304,7 +385,8 @@ export default function DashboardPage() {
               </div>
 
 
-              {recentTenants.length === 0 ? (
+              {recentTenants.length ===
+              0 ? (
                 <div className="p-6 text-sm text-slate-500">
                   No tenants yet.
                 </div>
@@ -433,7 +515,18 @@ export default function DashboardPage() {
   const loading =
     adminStatsLoading ||
     usersLoading ||
-    knowledgeBasesLoading;
+    knowledgeBasesLoading ||
+    agentsLoading ||
+    integrationsLoading ||
+    toolsLoading ||
+    llmProfilesLoading;
+
+
+  const studioError =
+    agentsError ||
+    integrationsError ||
+    toolsError ||
+    llmProfilesError;
 
 
   return (
@@ -465,84 +558,190 @@ export default function DashboardPage() {
       )}
 
 
+      {studioError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+          Some Agent Studio statistics
+          could not be loaded.
+        </div>
+      )}
+
+
       {loading ? (
         <p className="text-sm text-slate-500">
           Loading dashboard...
         </p>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
 
-            <StatCard
-              label="Total Users"
-              value={
-                adminStats
-                  ?.total_users ??
-                0
-              }
-              icon={
-                Users
-              }
-              href="/users"
-            />
+          <section>
 
+            <div className="mb-4">
 
-            <StatCard
-              label="Active Users"
-              value={
-                adminStats
-                  ?.active_users ??
-                0
-              }
-              icon={
-                UserCheck
-              }
-              href="/users"
-            />
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Tenant Overview
+              </p>
+
+              <h2 className="mt-1 text-xl font-semibold text-slate-900">
+                Knowledge & Users
+              </h2>
+
+            </div>
 
 
-            <StatCard
-              label="Knowledge Bases"
-              value={
-                adminStats
-                  ?.knowledge_bases ??
-                0
-              }
-              icon={
-                Database
-              }
-              href="/knowledge-bases"
-            />
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+
+              <StatCard
+                label="Total Users"
+                value={
+                  adminStats
+                    ?.total_users ??
+                  0
+                }
+                icon={
+                  Users
+                }
+                href="/users"
+              />
 
 
-            <StatCard
-              label="Knowledge Sources"
-              value={
-                adminStats
-                  ?.knowledge_sources ??
-                0
-              }
-              icon={
-                Library
-              }
-              href="/knowledge-bases"
-            />
+              <StatCard
+                label="Active Users"
+                value={
+                  adminStats
+                    ?.active_users ??
+                  0
+                }
+                icon={
+                  UserCheck
+                }
+                href="/users"
+              />
 
 
-            <StatCard
-              label="Documents"
-              value={
-                adminStats
-                  ?.documents ??
-                0
-              }
-              icon={
-                FileText
-              }
-              href="/knowledge-bases"
-            />
+              <StatCard
+                label="Knowledge Bases"
+                value={
+                  adminStats
+                    ?.knowledge_bases ??
+                  0
+                }
+                icon={
+                  Database
+                }
+                href="/knowledge-bases"
+              />
 
-          </div>
+
+              <StatCard
+                label="Knowledge Sources"
+                value={
+                  adminStats
+                    ?.knowledge_sources ??
+                  0
+                }
+                icon={
+                  Library
+                }
+                href="/knowledge-bases"
+              />
+
+
+              <StatCard
+                label="Documents"
+                value={
+                  adminStats
+                    ?.documents ??
+                  0
+                }
+                icon={
+                  FileText
+                }
+                href="/knowledge-bases"
+              />
+
+            </div>
+
+          </section>
+
+
+          <section>
+
+            <div className="mb-4">
+
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Agent Studio
+              </p>
+
+              <h2 className="mt-1 text-xl font-semibold text-slate-900">
+                AI Platform
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Manage agents, integrations,
+                tools, and model profiles.
+              </p>
+
+            </div>
+
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+
+              <StatCard
+                label="Agents"
+                value={
+                  agents?.length ??
+                  0
+                }
+                icon={
+                  Bot
+                }
+                href="/agents"
+              />
+
+
+              <StatCard
+                label="Integrations"
+                value={
+                  integrations
+                    ?.length ??
+                  0
+                }
+                icon={
+                  Cable
+                }
+                href="/integrations"
+              />
+
+
+              <StatCard
+                label="Tools"
+                value={
+                  tools?.length ??
+                  0
+                }
+                icon={
+                  Wrench
+                }
+                href="/tools"
+              />
+
+
+              <StatCard
+                label="LLM Profiles"
+                value={
+                  llmProfiles
+                    ?.length ??
+                  0
+                }
+                icon={
+                  Settings
+                }
+                href="/settings"
+              />
+
+            </div>
+
+          </section>
 
 
           <div className="grid gap-6 xl:grid-cols-2">
@@ -577,7 +776,8 @@ export default function DashboardPage() {
               </div>
 
 
-              {recentUsers.length === 0 ? (
+              {recentUsers.length ===
+              0 ? (
                 <div className="p-6 text-sm text-slate-500">
                   No users yet.
                 </div>
@@ -710,6 +910,7 @@ export default function DashboardPage() {
                             }
                           </p>
 
+
                           {knowledgeBase.description && (
                             <p className="mt-1 truncate text-xs text-slate-500">
                               {
@@ -733,6 +934,7 @@ export default function DashboardPage() {
             </section>
 
           </div>
+
         </>
       )}
 
@@ -799,7 +1001,7 @@ function StatCard({
   return (
     <Link
       href={href}
-      className="rounded-xl border bg-white p-5 shadow-sm transition hover:shadow-md"
+      className="rounded-xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
     >
       {content}
     </Link>

@@ -155,7 +155,8 @@ const sectionLabels = {
   main: "",
   knowledge: "Knowledge",
   studio: "Agent Studio",
-  administration: "Administration",
+  administration:
+    "Administration",
 } as const;
 
 
@@ -191,12 +192,22 @@ export default function Sidebar() {
     );
 
 
+  const showTenant =
+    (
+      user.role === "ADMIN"
+      || user.role === "USER"
+    )
+    && Boolean(
+      user.tenant_name,
+    );
+
+
   function isActive(
     href: string,
   ) {
     return (
-      pathname === href ||
-      pathname.startsWith(
+      pathname === href
+      || pathname.startsWith(
         `${href}/`,
       )
     );
@@ -206,20 +217,39 @@ export default function Sidebar() {
   return (
     <aside className="flex w-64 flex-col border-r bg-white">
 
-      <div className="border-b px-4 py-4">
+      <div className="border-b px-4 py-3">
 
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
           Signed in as
         </p>
+
 
         <p className="mt-1 truncate text-sm font-semibold text-slate-800">
           {user.first_name}{" "}
           {user.last_name}
         </p>
 
-        <p className="mt-1 text-xs text-slate-500">
-          {user.role}
-        </p>
+
+        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs">
+
+          <span className="font-semibold text-slate-600">
+            {user.role}
+          </span>
+
+
+          {showTenant && (
+            <>
+              <span className="text-slate-300">
+                ·
+              </span>
+
+              <span className="min-w-0 truncate font-medium text-slate-500">
+                {user.tenant_name}
+              </span>
+            </>
+          )}
+
+        </div>
 
       </div>
 

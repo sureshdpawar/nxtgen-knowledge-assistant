@@ -23,7 +23,12 @@ export interface AuthUser {
     | string
     | null;
 
+  tenant_name:
+    | string
+    | null;
+
   first_name: string;
+
   last_name: string;
 
   email: string;
@@ -33,5 +38,6 @@ export interface AuthUser {
   is_active: boolean;
 
   created_at: string;
+
   updated_at: string;
 }
