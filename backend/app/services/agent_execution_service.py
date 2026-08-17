@@ -55,7 +55,6 @@ logger = logging.getLogger(
 class AgentExecutionService:
 
     def __init__(self):
-
         self.agent_repository = (
             AgentRepository()
         )
@@ -101,7 +100,10 @@ class AgentExecutionService:
                     ),
                 )
 
-            if not configuration.is_active:
+            if (
+                not
+                configuration.is_active
+            ):
                 raise HTTPException(
                     status_code=
                         status.HTTP_400_BAD_REQUEST,
@@ -276,23 +278,64 @@ class AgentExecutionService:
             )
         )
 
+        #
+        # Resolve knowledge bases assigned
+        # to this agent.
+        #
         knowledge_base_ids = [
             link.knowledge_base_id
             for link
             in agent.knowledge_base_links
         ]
 
+        #
+        # Resolve dynamic tools assigned
+        # to this agent.
+        #
+        tool_ids = [
+            link.tool_id
+            for link
+            in agent.tool_links
+        ]
+
+        #
+        # Build the final LangChain tool
+        # collection.
+        #
+        # This currently supports:
+        #
+        # - native search_knowledge
+        # - configured REST tools
+        #
+        # MCP tools will plug into this
+        # same registry later.
+        #
         tools = (
-            self.tool_registry.get_tools(
+            self.tool_registry
+            .get_tools(
                 db=db,
+                tenant_id=
+                    agent.tenant_id,
                 knowledge_base_ids=
                     knowledge_base_ids,
+                tool_ids=
+                    tool_ids,
             )
         )
 
         clean_query = (
             query.strip()
         )
+
+        if not clean_query:
+            raise HTTPException(
+                status_code=
+                    status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Agent query cannot "
+                    "be empty."
+                ),
+            )
 
         run = AgentRun(
             tenant_id=
@@ -325,7 +368,9 @@ class AgentExecutionService:
             run,
         )
 
-        run_id = run.id
+        run_id = (
+            run.id
+        )
 
         started_at = (
             time.perf_counter()
@@ -338,12 +383,20 @@ class AgentExecutionService:
             "tenant=%s "
             "user=%s "
             "model=%s "
-            "tools=%s",
+            "knowledge_bases=%s "
+            "assigned_tools=%s "
+            "runtime_tools=%s",
             run_id,
             agent.id,
             agent.tenant_id,
             current_user.id,
             configuration.model_name,
+            len(
+                knowledge_base_ids
+            ),
+            len(
+                tool_ids
+            ),
             [
                 tool.name
                 for tool in tools
@@ -419,7 +472,9 @@ class AgentExecutionService:
             )
 
             run.answer = (
-                result["answer"]
+                result[
+                    "answer"
+                ]
             )
 
             run.status = (
@@ -514,7 +569,9 @@ class AgentExecutionService:
                 )
 
                 failed_run.error_message = (
-                    str(exc)[
+                    str(
+                        exc
+                    )[
                         :2000
                     ]
                 )
@@ -534,7 +591,9 @@ class AgentExecutionService:
                 "error_type=%s",
                 run_id,
                 agent.id,
-                type(exc).__name__,
+                type(
+                    exc
+                ).__name__,
             )
 
             raise
