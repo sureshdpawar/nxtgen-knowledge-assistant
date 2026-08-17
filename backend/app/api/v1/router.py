@@ -13,6 +13,8 @@ from app.api.v1.routers import conversation
 from app.api.v1.routers import dashboard
 from app.api.v1.routers import agent
 from app.api.v1.routers import (agent_runs,)
+from app.api.v1.routers import integration
+from app.api.v1.routers import tool_definition
 
 api_router = APIRouter()
 
@@ -29,3 +31,5 @@ api_router.include_router(conversation.router,)
 api_router.include_router(dashboard.router,)
 api_router.include_router(agent.router,)
 api_router.include_router(agent_runs.router,)
+api_router.include_router(integration.router,)
+api_router.include_router(tool_definition.router,)

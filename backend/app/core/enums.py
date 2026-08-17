@@ -92,3 +92,24 @@ class AgentRunStepType(str, Enum):
 class AgentRunStepStatus(str, Enum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"    
+    
+class IntegrationType(str, Enum):
+    REST = "REST"
+    MCP = "MCP"
+
+
+class IntegrationAuthType(str, Enum):
+    NONE = "NONE"
+    BEARER = "BEARER"
+    API_KEY = "API_KEY"
+
+
+class ToolType(str, Enum):
+    NATIVE = "NATIVE"
+    REST = "REST"
+    MCP = "MCP"
+
+
+class ToolRiskLevel(str, Enum):
+    READ = "READ"
+    WRITE = "WRITE"

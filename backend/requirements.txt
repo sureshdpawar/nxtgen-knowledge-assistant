@@ -111,3 +111,4 @@ langgraph>=1.0,<2.0
 
 # Model Context Protocol
 mcp>=1.0,<2.0
+langchain-mcp-adapters

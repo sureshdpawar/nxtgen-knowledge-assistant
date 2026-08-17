@@ -28,6 +28,9 @@ if TYPE_CHECKING:
     from app.models.agent_knowledge_base import (
         AgentKnowledgeBase,
     )
+    from app.models.agent_tool import (
+        AgentTool,
+    )
     from app.models.tenant_llm_configuration import (
         TenantLLMConfiguration,
     )
@@ -133,6 +136,19 @@ class Agent(
         ),
     )
 
+    tool_links: Mapped[
+        list[
+            "AgentTool"
+        ]
+    ] = relationship(
+        "AgentTool",
+        back_populates="agent",
+        cascade=(
+            "all, "
+            "delete-orphan"
+        ),
+    )
+
     @property
     def knowledge_base_ids(
         self,
@@ -141,4 +157,14 @@ class Agent(
             link.knowledge_base_id
             for link
             in self.knowledge_base_links
+        ]
+
+    @property
+    def tool_ids(
+        self,
+    ) -> list[UUID]:
+        return [
+            link.tool_id
+            for link
+            in self.tool_links
         ]

@@ -13,6 +13,9 @@ from app.models.agent import Agent
 from app.models.agent_knowledge_base import (AgentKnowledgeBase,)
 from app.models.agent_run import (AgentRun,)
 from app.models.agent_run_step import (AgentRunStep,)
+from app.models.integration import (Integration,)
+from app.models.tool_definition import (ToolDefinition,)
+from app.models.agent_tool import (AgentTool,)
 
 
 __all__ = [
@@ -31,6 +34,9 @@ __all__ = [
     "AgentKnowledgeBase",
     "AgentRun",
     "AgentRunStep",
+    "Integration",
+    "ToolDefinition",
+    "AgentTool",
 ]
 # Future imports
 # from app.models.user import User

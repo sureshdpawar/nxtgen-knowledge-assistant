@@ -7,17 +7,21 @@ from pydantic import (
     Field,
 )
 
-from app.core.enums import AgentStatus
+from app.core.enums import (
+    AgentStatus,
+)
 
 
-class AgentCreate(BaseModel):
+class AgentCreate(
+    BaseModel,
+):
     name: str
 
-    description: str | None = None
+    description:str | None = None
 
     system_prompt: str
 
-    llm_configuration_id:UUID | None = None
+    llm_configuration_id: UUID | None = None
 
     max_iterations: int = Field(
         default=6,
@@ -34,31 +38,33 @@ class AgentCreate(BaseModel):
     )
 
 
-class AgentUpdate(BaseModel):
-    name: str | None = None
+class AgentUpdate(
+    BaseModel,
+):
+    name:str | None = None
 
-    description: str | None = None
+    description:str | None = None
 
-    system_prompt: str | None = None
+    system_prompt:str | None = None
+
+    llm_configuration_id:UUID | None = None
+
+    max_iterations:int | None = Field(
+            default=None,
+            ge=1,
+            le=20,
+        )
+
+    status:AgentStatus | None = None
 
     knowledge_base_ids: list[UUID] = Field(
         default_factory=list,
-   )
-
-    max_iterations: int | None = Field(
-        default=None,
-        ge=1,
-        le=20,
-    )
-
-    status: AgentStatus | None = None
-
-    knowledge_base_ids: list[UUID] = Field(
-        default_factory=list,
     )
 
 
-class AgentResponse(BaseModel):
+class AgentResponse(
+    BaseModel,
+):
     model_config = ConfigDict(
         from_attributes=True,
     )
@@ -71,17 +77,21 @@ class AgentResponse(BaseModel):
 
     name: str
 
-    description: str | None
+    description:str | None
 
     system_prompt: str
 
-    llm_configuration_id: UUID | None
+    llm_configuration_id:UUID | None
 
     max_iterations: int
 
     status: AgentStatus
 
     knowledge_base_ids: list[UUID] = Field(
+        default_factory=list,
+    )
+
+    tool_ids: list[UUID] = Field(
         default_factory=list,
     )
 
