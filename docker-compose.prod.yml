@@ -67,7 +67,7 @@ services:
       - storage_data:/app/storage
 
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
 
     networks:
       - nxtgen-network
@@ -102,7 +102,7 @@ services:
       - storage_data:/app/storage
 
     ports:
-      - "${MCP_PORT:-9000}:9000"
+      - "127.0.0.1:${MCP_PORT:-9000}:9000"
 
     networks:
       - nxtgen-network
@@ -130,7 +130,7 @@ services:
       ]
 
     ports:
-      - "${MOCK_REST_PORT:-9100}:9100"
+      - "127.0.0.1:${MOCK_REST_PORT:-9100}:9100"
 
     networks:
       - nxtgen-network
@@ -155,7 +155,7 @@ services:
       - backend
 
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
 
     networks:
       - nxtgen-network
