@@ -8,9 +8,9 @@ Create Date: 2026-08-11 10:40:39.934096
 
 from typing import Sequence, Union
 
+import sqlalchemy as sa
 from alembic import op
 from pgvector.sqlalchemy import Vector
-import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
@@ -22,6 +22,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
+
+    # Enable PostgreSQL pgvector extension before creating
+    # any columns that use the VECTOR type.
+    op.execute(
+        "CREATE EXTENSION IF NOT EXISTS vector"
+    )
 
     op.create_table(
         "document_embedding",
@@ -62,11 +68,15 @@ def upgrade() -> None:
             ["chunk_id"],
             ["document_chunk.id"],
         ),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint(
+            "id",
+        ),
     )
 
     op.create_index(
-        op.f("ix_document_embedding_chunk_id"),
+        op.f(
+            "ix_document_embedding_chunk_id"
+        ),
         "document_embedding",
         ["chunk_id"],
         unique=True,
@@ -77,8 +87,12 @@ def downgrade() -> None:
     """Downgrade schema."""
 
     op.drop_index(
-        op.f("ix_document_embedding_chunk_id"),
+        op.f(
+            "ix_document_embedding_chunk_id"
+        ),
         table_name="document_embedding",
     )
 
-    op.drop_table("document_embedding")
+    op.drop_table(
+        "document_embedding"
+    )
