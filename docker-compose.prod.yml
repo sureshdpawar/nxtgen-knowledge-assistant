@@ -4,86 +4,78 @@ services:
     image: pgvector/pgvector:pg17
     container_name: nxtgen-postgres
     restart: unless-stopped
-
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
-        ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 12
       start_period: 10s
-
     networks:
       - nxtgen-network
-
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-
     container_name: nxtgen-backend
     restart: unless-stopped
-
     env_file:
       - .env.prod
-
     environment:
       ENVIRONMENT: ${ENVIRONMENT}
       DATABASE_URL: ${DATABASE_URL}
-
       LLM_API: ${LLM_API}
       LLM_API_KEY: ${LLM_API_KEY}
-
       SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: ${ALGORITHM}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
-
       CORS_ORIGINS: ${CORS_ORIGINS}
-
       STORAGE_PATH: ${STORAGE_PATH}
       DOCUMENT_STORAGE_PATH: ${DOCUMENT_STORAGE_PATH}
-
       CHUNK_SIZE: ${CHUNK_SIZE}
       CHUNK_OVERLAP: ${CHUNK_OVERLAP}
       TOP_K: ${TOP_K}
-
     depends_on:
       postgres:
         condition: service_healthy
-
     volumes:
       - storage_data:/app/storage
-
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
-
     networks:
       - nxtgen-network
 
+  backend-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nxtgen-backend-worker
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    command: ["python", "-m", "app.workers.ingestion_worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - storage_data:/app/storage
+    networks:
+      - nxtgen-network
 
   mcp:
     build:
       context: ./backend
       dockerfile: Dockerfile
-
     container_name: nxtgen-mcp
     restart: unless-stopped
-
     env_file:
       - .env.prod
-
     command:
       [
         "uvicorn",
@@ -93,32 +85,24 @@ services:
         "--port",
         "9000"
       ]
-
     depends_on:
       postgres:
         condition: service_healthy
-
     volumes:
       - storage_data:/app/storage
-
     ports:
       - "127.0.0.1:${MCP_PORT:-9000}:9000"
-
     networks:
       - nxtgen-network
-
 
   mock-rest:
     build:
       context: ./backend
       dockerfile: Dockerfile
-
     container_name: nxtgen-mock-rest
     restart: unless-stopped
-
     env_file:
       - .env.prod
-
     command:
       [
         "uvicorn",
@@ -128,50 +112,36 @@ services:
         "--port",
         "9100"
       ]
-
     ports:
       - "127.0.0.1:${MOCK_REST_PORT:-9100}:9100"
-
     networks:
       - nxtgen-network
-
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-
     container_name: nxtgen-frontend
     restart: unless-stopped
-
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-
     depends_on:
       - backend
-
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
-
     networks:
       - nxtgen-network
 
-
 volumes:
-
   postgres_data:
     name: nxtgen-postgres-data
-
   storage_data:
     name: nxtgen-storage-data
 
-
 networks:
-
   nxtgen-network:
     name: nxtgen-network
     driver: bridge
