@@ -85,6 +85,13 @@ class Settings(BaseSettings):
     # Search
     #
     TOP_K: int = 5
+    
+    #
+    # Website widget authentication
+    #
+    WEBSITE_WIDGET_TOKEN_SECRET: str = "hJBA8tg8T3Nq2JWJBWh2GEFhpw6Exu4hxXytWg77K11pq45D5MEbnjPMvZJEHTsf"
+
+    WEBSITE_WIDGET_TOKEN_TTL_MINUTES: int = 30
 
     model_config = SettingsConfigDict(
         env_file=".env",

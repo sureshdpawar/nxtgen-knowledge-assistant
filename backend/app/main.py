@@ -20,6 +20,9 @@ from app.middleware.logging import (
 from app.middleware.request_id import (
     RequestIDMiddleware,
 )
+from app.middleware.widget_cors import (
+    WidgetCORSMiddleware,
+)
 
 
 setup_logging()
@@ -29,26 +32,62 @@ validate_startup_configuration()
 
 
 app = FastAPI(
-    title="NXTGEN Knowledge Assistant API",
+    title=(
+        "NXTGEN Knowledge Assistant API"
+    ),
     version="1.0.0",
 )
 
 
+#
+# ---------------------------------------------------------
+# Internal application CORS
+# ---------------------------------------------------------
+#
+# This remains intentionally static.
+#
+# It controls browser access to the authenticated NXTGEN
+# application API, such as:
+#
+# /api/v1/*
+#
+# Customer Website widget domains should NOT be added here.
+#
 cors_origins = [
     origin.strip()
     for origin
-    in settings.CORS_ORIGINS.split(",")
+    in settings.CORS_ORIGINS.split(
+        ","
+    )
     if origin.strip()
 ]
 
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=
-        cors_origins,
+    allow_origins=(
+        cors_origins
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+
+#
+# ---------------------------------------------------------
+# Website Widget CORS
+# ---------------------------------------------------------
+#
+# Handles browser CORS mechanics only for:
+#
+# /public/v1/widget/*
+#
+# Actual origin authorization is performed against the
+# Website ChatChannel's allowed_origins configuration.
+#
+app.add_middleware(
+    WidgetCORSMiddleware
 )
 
 
@@ -56,7 +95,10 @@ app.add_middleware(
 def root():
     return {
         "message":
-            "NXTGEN Knowledge Assistant API",
+            (
+                "NXTGEN Knowledge "
+                "Assistant API"
+            ),
     }
 
 

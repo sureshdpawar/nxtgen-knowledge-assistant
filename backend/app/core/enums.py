@@ -129,3 +129,14 @@ class ToolType(str, Enum):
 class ToolRiskLevel(str, Enum):
     READ = "READ"
     WRITE = "WRITE"
+    
+class ChatChannelType(str, Enum):
+    PUBLIC_API = "PUBLIC_API"
+    WEBSITE = "WEBSITE"
+    SLACK = "SLACK"
+    TEAMS = "TEAMS"
+
+
+class ChatChannelStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"

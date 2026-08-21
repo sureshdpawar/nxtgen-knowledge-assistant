@@ -44,6 +44,12 @@ from app.models.tool_definition import (
     ToolDefinition,
 )
 from app.models.agent_tool import AgentTool
+from app.models.chat_channel import (
+    ChatChannel,
+)
+from app.models.chat_channel_api_key import (
+    ChatChannelApiKey,
+)
 
 
 __all__ = [
@@ -67,4 +73,6 @@ __all__ = [
     "Integration",
     "ToolDefinition",
     "AgentTool",
+    "ChatChannel",
+    "ChatChannelApiKey",
 ]
