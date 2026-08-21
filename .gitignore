@@ -68,3 +68,9 @@ storage/
 # ============================================================
 
 .DS_Store
+
+# Google / external service credentials
+backend/secrets/*
+!backend/secrets/.gitkeep
+
+*.service-account.json

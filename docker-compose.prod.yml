@@ -73,6 +73,59 @@ services:
       - nxtgen-network
 
 
+  backend-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    container_name: nxtgen-backend-worker
+    restart: unless-stopped
+
+    env_file:
+      - .env.prod
+
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT}
+      DATABASE_URL: ${DATABASE_URL}
+
+      LLM_API: ${LLM_API}
+      LLM_API_KEY: ${LLM_API_KEY}
+
+      SECRET_KEY: ${SECRET_KEY}
+      ALGORITHM: ${ALGORITHM}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+
+      CORS_ORIGINS: ${CORS_ORIGINS}
+
+      STORAGE_PATH: ${STORAGE_PATH}
+      DOCUMENT_STORAGE_PATH: ${DOCUMENT_STORAGE_PATH}
+
+      CHUNK_SIZE: ${CHUNK_SIZE}
+      CHUNK_OVERLAP: ${CHUNK_OVERLAP}
+      TOP_K: ${TOP_K}
+
+      INGESTION_WORKER_POLL_SECONDS: ${INGESTION_WORKER_POLL_SECONDS:-2}
+      INGESTION_JOB_STALE_AFTER_SECONDS: ${INGESTION_JOB_STALE_AFTER_SECONDS:-3600}
+      INGESTION_JOB_MAX_ATTEMPTS: ${INGESTION_JOB_MAX_ATTEMPTS:-3}
+
+    command:
+      [
+        "python",
+        "-m",
+        "app.workers.ingestion_worker"
+      ]
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    volumes:
+      - storage_data:/app/storage
+
+    networks:
+      - nxtgen-network
+
+
   mcp:
     build:
       context: ./backend

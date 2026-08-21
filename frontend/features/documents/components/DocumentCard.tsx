@@ -14,15 +14,19 @@ import type {
 type Props = {
   document: Document;
 
-  onProcess: (
+  onProcess?: (
     document: Document,
   ) => void;
 
-  onDelete: (
+  onDelete?: (
     document: Document,
   ) => void;
 
-  processing: boolean;
+  processing?: boolean;
+
+  showProcessAction?: boolean;
+
+  showDeleteAction?: boolean;
 };
 
 
@@ -30,14 +34,15 @@ export default function DocumentCard({
   document,
   onProcess,
   onDelete,
-  processing,
+  processing = false,
+  showProcessAction = true,
+  showDeleteAction = true,
 }: Props) {
   const sizeInMb = (
     document.file_size /
     1024 /
     1024
   ).toFixed(2);
-
 
   const isReady =
     document.status === "READY";
@@ -89,6 +94,17 @@ export default function DocumentCard({
   }
 
 
+  const showActions =
+    (
+      showProcessAction
+      && !!onProcess
+    )
+    || (
+      showDeleteAction
+      && !!onDelete
+    );
+
+
   return (
     <div className="rounded-xl border bg-white p-5 shadow-sm">
 
@@ -98,27 +114,31 @@ export default function DocumentCard({
           <FileText className="h-5 w-5 text-blue-600" />
         </div>
 
-
         <div className="min-w-0 flex-1">
 
           <h3 className="truncate font-semibold text-slate-900">
             {document.original_filename}
           </h3>
 
-
-          <p className="mt-1 break-all text-xs text-slate-400">
-            Document ID:{" "}
-            {document.id}
-          </p>
-
-
           <p className="mt-2 text-sm text-slate-500">
             {sizeInMb} MB
           </p>
 
-
           <div className="mt-3">
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
+            <span
+              className={
+                document.status
+                === "READY"
+                  ? "rounded-full bg-green-100 px-2 py-1 text-xs text-green-700"
+                  : document.status
+                    === "FAILED"
+                    ? "rounded-full bg-red-100 px-2 py-1 text-xs text-red-700"
+                    : document.status
+                      === "PROCESSING"
+                      ? "rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-700"
+                      : "rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600"
+              }
+            >
               {document.status}
             </span>
           </div>
@@ -128,39 +148,50 @@ export default function DocumentCard({
       </div>
 
 
-      <div className="mt-5 flex justify-end gap-2">
+      {showActions && (
+        <div className="mt-5 flex justify-end gap-2">
 
-        <button
-          type="button"
-          onClick={() =>
-            onProcess(document)
-          }
-          disabled={
-            isReady ||
-            isProcessing
-          }
-          className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <ProcessIcon />
+          {showProcessAction
+            && onProcess
+            && (
+              <button
+                type="button"
+                onClick={() =>
+                  onProcess(document)
+                }
+                disabled={
+                  isReady
+                  || isProcessing
+                }
+                className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ProcessIcon />
 
-          {getProcessLabel()}
-        </button>
+                {getProcessLabel()}
+              </button>
+            )}
 
+          {showDeleteAction
+            && onDelete
+            && (
+              <button
+                type="button"
+                onClick={() =>
+                  onDelete(document)
+                }
+                disabled={
+                  isProcessing
+                }
+                className="flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
 
-        <button
-          type="button"
-          onClick={() =>
-            onDelete(document)
-          }
-          disabled={isProcessing}
-          className="flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Trash2 className="h-4 w-4" />
+                Delete
+              </button>
+            )}
 
-          Delete
-        </button>
-
-      </div>
+        </div>
+      )}
 
     </div>
   );

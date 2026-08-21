@@ -65,6 +65,14 @@ class KnowledgeSourceStatus(str, Enum):
     ERROR = "ERROR"
 
 
+class KnowledgeSourceSyncStatus(str, Enum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    COMPLETED_WITH_ERRORS = "COMPLETED_WITH_ERRORS"
+    FAILED = "FAILED"
+
+
 class LLMProvider(Enum):
     OPENAI = "OPENAI"
     AZURE_OPENAI = "AZURE_OPENAI"

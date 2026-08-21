@@ -60,6 +60,21 @@ migration-current:
 
 
 # ============================================================
+# Background Worker
+# ============================================================
+
+.PHONY: worker-logs worker-shell
+
+
+worker-logs:
+	$(COMPOSE) logs -f backend-worker
+
+
+worker-shell:
+	$(COMPOSE) exec backend-worker bash
+
+
+# ============================================================
 # Database
 # ============================================================
 

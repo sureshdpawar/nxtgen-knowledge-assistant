@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     )
 
     #
+    # Google Drive
+    #
+    GOOGLE_SERVICE_ACCOUNT_FILE: str | None = (
+        None
+    )
+
+    #
     # Document processing
     #
     CHUNK_SIZE: int = 1000

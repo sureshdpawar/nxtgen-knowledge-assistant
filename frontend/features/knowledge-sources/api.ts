@@ -3,8 +3,10 @@ import api from "@/services/api";
 import type {
   CreateKnowledgeSourceRequest,
   KnowledgeSource,
+  KnowledgeSourceSync,
   UpdateKnowledgeSourceRequest,
 } from "./types";
+
 
 export async function getKnowledgeSources(
   knowledgeBaseId: string,
@@ -17,6 +19,7 @@ export async function getKnowledgeSources(
   return response.data;
 }
 
+
 export async function getKnowledgeSource(
   knowledgeSourceId: string,
 ) {
@@ -27,6 +30,7 @@ export async function getKnowledgeSource(
 
   return response.data;
 }
+
 
 export async function createKnowledgeSource(
   knowledgeBaseId: string,
@@ -41,6 +45,7 @@ export async function createKnowledgeSource(
   return response.data;
 }
 
+
 export async function updateKnowledgeSource(
   knowledgeSourceId: string,
   payload: UpdateKnowledgeSourceRequest,
@@ -54,10 +59,35 @@ export async function updateKnowledgeSource(
   return response.data;
 }
 
+
 export async function deleteKnowledgeSource(
   knowledgeSourceId: string,
 ) {
   await api.delete(
     `/knowledge-sources/${knowledgeSourceId}`,
   );
+}
+
+
+export async function syncKnowledgeSource(
+  knowledgeSourceId: string,
+) {
+  const response =
+    await api.post<KnowledgeSourceSync>(
+      `/knowledge-sources/${knowledgeSourceId}/sync`,
+    );
+
+  return response.data;
+}
+
+
+export async function getKnowledgeSourceSyncs(
+  knowledgeSourceId: string,
+) {
+  const response =
+    await api.get<KnowledgeSourceSync[]>(
+      `/knowledge-sources/${knowledgeSourceId}/syncs`,
+    );
+
+  return response.data;
 }

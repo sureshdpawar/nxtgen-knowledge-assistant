@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+
+import {
+  useParams,
+} from "next/navigation";
 
 import {
   ChevronRight,
-  FileText,
   MessageSquare,
 } from "lucide-react";
 
@@ -27,7 +29,9 @@ export default function KnowledgeBaseDetailPage() {
     data: knowledgeBase,
     isLoading,
     error,
-  } = useKnowledgeBase(id);
+  } = useKnowledgeBase(
+    id,
+  );
 
 
   if (isLoading) {
@@ -39,7 +43,10 @@ export default function KnowledgeBaseDetailPage() {
   }
 
 
-  if (error || !knowledgeBase) {
+  if (
+    error
+    || !knowledgeBase
+  ) {
     return (
       <p className="text-red-600">
         Failed to load knowledge base.
@@ -64,50 +71,57 @@ export default function KnowledgeBaseDetailPage() {
         <ChevronRight className="h-4 w-4" />
 
         <span className="font-medium text-slate-900">
-          Knowledge Sources
+          {knowledgeBase.name}
         </span>
 
       </nav>
 
 
       {/* Knowledge Base Header */}
-      <div>
+      <section className="rounded-2xl border bg-white p-6 shadow-sm">
 
-        <p className="text-sm font-medium text-slate-500">
-          Knowledge Base Details
-        </p>
+        <div className="flex flex-col gap-3">
 
-        <h1 className="mt-1 text-3xl font-bold text-slate-900">
-          {knowledgeBase.name}
-        </h1>
+          <div className="flex flex-wrap items-center gap-3">
 
-        <p className="mt-2 text-slate-500">
-          {knowledgeBase.description ||
-            "No description"}
-        </p>
+            <h1 className="text-3xl font-bold text-slate-900">
+              {knowledgeBase.name}
+            </h1>
 
-        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+              {knowledgeBase.visibility}
+            </span>
 
-          <span>
+            <span
+              className={
+                knowledgeBase.status
+                === "ACTIVE"
+                  ? "rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700"
+                  : "rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
+              }
+            >
+              {knowledgeBase.status}
+            </span>
+
+          </div>
+
+
+          <p className="text-sm text-slate-500">
+            {
+              knowledgeBase.description
+              || "No description"
+            }
+          </p>
+
+
+          <p className="text-xs text-slate-400">
             Knowledge Base ID:{" "}
             {knowledgeBase.id}
-          </span>
-
-          <span>•</span>
-
-          <span>
-            {knowledgeBase.visibility}
-          </span>
-
-          <span>•</span>
-
-          <span>
-            {knowledgeBase.status}
-          </span>
+          </p>
 
         </div>
 
-      </div>
+      </section>
 
 
       {/* Knowledge Sources */}
@@ -120,8 +134,8 @@ export default function KnowledgeBaseDetailPage() {
           </h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Sources connected to this
-            knowledge base.
+            Manage the sources that provide
+            knowledge to this knowledge base.
           </p>
 
         </div>
@@ -136,52 +150,41 @@ export default function KnowledgeBaseDetailPage() {
       </section>
 
 
-      {/* Documents + Chat */}
-      <section className="grid gap-6 lg:grid-cols-2">
+      {/* Chat */}
+      <section className="rounded-2xl border bg-white p-6 shadow-sm">
 
-        {/* Documents */}
-        <div className="rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-md">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-4">
 
-            <div className="rounded-lg bg-blue-100 p-3">
-              <FileText className="h-5 w-5 text-blue-600" />
-            </div>
-
-            <h2 className="text-lg font-semibold">
-              Documents
-            </h2>
-
-          </div>
-
-          <p className="mt-4 text-sm text-slate-500">
-            View and upload documents
-            through the knowledge sources
-            connected to this knowledge base.
-          </p>
-
-        </div>
-
-
-        {/* Chat */}
-        <div className="rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-md">
-
-          <div className="flex items-center gap-3">
-
-            <div className="rounded-lg bg-blue-100 p-3">
+            <div className="rounded-xl bg-blue-100 p-3">
               <MessageSquare className="h-5 w-5 text-blue-600" />
             </div>
 
-            <h2 className="text-lg font-semibold">
-              Chat
-            </h2>
+
+            <div>
+
+              <h2 className="text-lg font-semibold text-slate-900">
+                Ask this Knowledge Base
+              </h2>
+
+              <p className="mt-1 max-w-2xl text-sm text-slate-500">
+                Chat searches across all active
+                knowledge sources connected to
+                this knowledge base.
+              </p>
+
+            </div>
 
           </div>
 
-          <p className="mt-4 text-sm text-slate-500">
-            Ask questions against this
-            knowledge base.
-          </p>
+
+          <Link
+            href={`/chat?knowledge_base_id=${knowledgeBase.id}`}
+            className="inline-flex shrink-0 items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Open Chat
+          </Link>
 
         </div>
 
