@@ -27,17 +27,10 @@ job_status = sa.Enum(
 
 
 def upgrade() -> None:
-    job_status.create(op.get_bind(), checkfirst=True)
-
     op.create_table(
         "document_ingestion_job",
         sa.Column("document_id", sa.UUID(), nullable=False),
-        sa.Column(
-            "status",
-            job_status,
-            server_default="PENDING",
-            nullable=False,
-        ),
+        sa.Column("status", job_status, server_default="PENDING", nullable=False),
         sa.Column("attempt_count", sa.Integer(), server_default="0", nullable=False),
         sa.Column("max_attempts", sa.Integer(), server_default="3", nullable=False),
         sa.Column(
