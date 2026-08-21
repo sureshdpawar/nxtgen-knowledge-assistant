@@ -7,31 +7,19 @@ COMPOSE = docker compose --env-file .env.prod -f docker-compose.prod.yml
 
 .PHONY: up down build rebuild restart ps logs
 
-
 up:
 	$(COMPOSE) up -d
 
-
 down:
 	$(COMPOSE) down
-
-
 build:
 	$(COMPOSE) build
-
-
 rebuild:
 	$(COMPOSE) build --no-cache
-
-
 restart:
 	$(COMPOSE) restart
-
-
 ps:
 	$(COMPOSE) ps
-
-
 logs:
 	$(COMPOSE) logs -f
 
@@ -40,20 +28,19 @@ logs:
 # Backend
 # ============================================================
 
-.PHONY: backend-logs backend-shell migrate migration-current
-
+.PHONY: backend-logs backend-shell worker-logs migrate migration-current
 
 backend-logs:
 	$(COMPOSE) logs -f backend
 
-
 backend-shell:
 	$(COMPOSE) exec backend bash
 
+worker-logs:
+	$(COMPOSE) logs -f backend-worker
 
 migrate:
 	$(COMPOSE) exec backend alembic upgrade head
-
 
 migration-current:
 	$(COMPOSE) exec backend alembic current
@@ -65,18 +52,15 @@ migration-current:
 
 .PHONY: db-shell db-status db-extensions
 
-
 db-shell:
 	$(COMPOSE) exec postgres psql \
 		-U $(shell grep '^POSTGRES_USER=' .env.prod | cut -d '=' -f2) \
 		-d $(shell grep '^POSTGRES_DB=' .env.prod | cut -d '=' -f2)
 
-
 db-status:
 	$(COMPOSE) exec postgres pg_isready \
 		-U $(shell grep '^POSTGRES_USER=' .env.prod | cut -d '=' -f2) \
 		-d $(shell grep '^POSTGRES_DB=' .env.prod | cut -d '=' -f2)
-
 
 db-extensions:
 	$(COMPOSE) exec postgres psql \
@@ -90,8 +74,6 @@ db-extensions:
 # ============================================================
 
 .PHONY: mcp-logs
-
-
 mcp-logs:
 	$(COMPOSE) logs -f mcp
 
@@ -101,8 +83,6 @@ mcp-logs:
 # ============================================================
 
 .PHONY: rest-logs
-
-
 rest-logs:
 	$(COMPOSE) logs -f mock-rest
 
@@ -112,8 +92,6 @@ rest-logs:
 # ============================================================
 
 .PHONY: superadmin
-
-
 superadmin:
 	$(COMPOSE) exec backend python create_superadmin.py
 
@@ -123,8 +101,6 @@ superadmin:
 # ============================================================
 
 .PHONY: deploy
-
-
 deploy:
 	$(COMPOSE) build
 	$(COMPOSE) up -d
