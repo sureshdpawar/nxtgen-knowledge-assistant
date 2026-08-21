@@ -37,22 +37,67 @@ class GoogleDriveProvider(
         "auth/drive.readonly"
     )
 
+    #
+    # Google-native formats
+    #
     FOLDER_MIME_TYPE = (
-        "application/vnd.google-apps.folder"
+        "application/"
+        "vnd.google-apps.folder"
     )
 
     GOOGLE_DOC_MIME_TYPE = (
-        "application/vnd.google-apps.document"
+        "application/"
+        "vnd.google-apps.document"
     )
 
     GOOGLE_SHEET_MIME_TYPE = (
-        "application/vnd.google-apps.spreadsheet"
+        "application/"
+        "vnd.google-apps.spreadsheet"
     )
 
     GOOGLE_SLIDES_MIME_TYPE = (
-        "application/vnd.google-apps.presentation"
+        "application/"
+        "vnd.google-apps.presentation"
     )
 
+    #
+    # Microsoft Office
+    #
+    DOC_MIME_TYPE = (
+        "application/msword"
+    )
+
+    DOCX_MIME_TYPE = (
+        "application/"
+        "vnd.openxmlformats-officedocument."
+        "wordprocessingml.document"
+    )
+
+    PPT_MIME_TYPE = (
+        "application/"
+        "vnd.ms-powerpoint"
+    )
+
+    PPTX_MIME_TYPE = (
+        "application/"
+        "vnd.openxmlformats-officedocument."
+        "presentationml.presentation"
+    )
+
+    XLS_MIME_TYPE = (
+        "application/"
+        "vnd.ms-excel"
+    )
+
+    XLSX_MIME_TYPE = (
+        "application/"
+        "vnd.openxmlformats-officedocument."
+        "spreadsheetml.sheet"
+    )
+
+    #
+    # Other supported formats
+    #
     PDF_MIME_TYPE = (
         "application/pdf"
     )
@@ -163,10 +208,8 @@ class GoogleDriveProvider(
                 "is not configured."
             )
 
-        credential_path = (
-            Path(
-                credential_file
-            )
+        credential_path = Path(
+            credential_file
         )
 
         if not credential_path.is_absolute():
@@ -410,28 +453,93 @@ class GoogleDriveProvider(
             )
         )
 
+        #
+        # Google Docs
+        #
         if (
             mime_type
             == self.GOOGLE_DOC_MIME_TYPE
         ):
             content = (
-                self._export_google_doc(
+                self._export_file(
                     drive=drive,
                     file_id=file_id,
+                    mime_type=(
+                        self.DOCX_MIME_TYPE
+                    ),
                 )
             )
 
             filename = (
-                self._ensure_extension(
+                self._replace_or_add_extension(
                     name,
-                    ".txt",
+                    ".docx",
                 )
             )
 
             output_mime_type = (
-                "text/plain"
+                self.DOCX_MIME_TYPE
             )
 
+        #
+        # Google Slides
+        #
+        elif (
+            mime_type
+            == self.GOOGLE_SLIDES_MIME_TYPE
+        ):
+            content = (
+                self._export_file(
+                    drive=drive,
+                    file_id=file_id,
+                    mime_type=(
+                        self.PPTX_MIME_TYPE
+                    ),
+                )
+            )
+
+            filename = (
+                self._replace_or_add_extension(
+                    name,
+                    ".pptx",
+                )
+            )
+
+            output_mime_type = (
+                self.PPTX_MIME_TYPE
+            )
+
+        #
+        # Google Sheets
+        #
+        elif (
+            mime_type
+            == self.GOOGLE_SHEET_MIME_TYPE
+        ):
+            content = (
+                self._export_file(
+                    drive=drive,
+                    file_id=file_id,
+                    mime_type=(
+                        self.XLSX_MIME_TYPE
+                    ),
+                )
+            )
+
+            filename = (
+                self._replace_or_add_extension(
+                    name,
+                    ".xlsx",
+                )
+            )
+
+            output_mime_type = (
+                self.XLSX_MIME_TYPE
+            )
+
+        #
+        # PDF
+        #
         elif (
             mime_type
             == self.PDF_MIME_TYPE
@@ -444,16 +552,169 @@ class GoogleDriveProvider(
             )
 
             filename = (
-                self._ensure_extension(
+                self._replace_or_add_extension(
                     name,
                     ".pdf",
                 )
             )
 
             output_mime_type = (
-                "application/pdf"
+                self.PDF_MIME_TYPE
             )
 
+        #
+        # Word .doc
+        #
+        elif (
+            mime_type
+            == self.DOC_MIME_TYPE
+        ):
+            content = (
+                self._download_file(
+                    drive=drive,
+                    file_id=file_id,
+                )
+            )
+
+            filename = (
+                self._replace_or_add_extension(
+                    name,
+                    ".doc",
+                )
+            )
+
+            output_mime_type = (
+                self.DOC_MIME_TYPE
+            )
+
+        #
+        # Word .docx
+        #
+        elif (
+            mime_type
+            == self.DOCX_MIME_TYPE
+        ):
+            content = (
+                self._download_file(
+                    drive=drive,
+                    file_id=file_id,
+                )
+            )
+
+            filename = (
+                self._replace_or_add_extension(
+                    name,
+                    ".docx",
+                )
+            )
+
+            output_mime_type = (
+                self.DOCX_MIME_TYPE
+            )
+
+        #
+        # PowerPoint .ppt
+        #
+        elif (
+            mime_type
+            == self.PPT_MIME_TYPE
+        ):
+            content = (
+                self._download_file(
+                    drive=drive,
+                    file_id=file_id,
+                )
+            )
+
+            filename = (
+                self._replace_or_add_extension(
+                    name,
+                    ".ppt",
+                )
+            )
+
+            output_mime_type = (
+                self.PPT_MIME_TYPE
+            )
+
+        #
+        # PowerPoint .pptx
+        #
+        elif (
+            mime_type
+            == self.PPTX_MIME_TYPE
+        ):
+            content = (
+                self._download_file(
+                    drive=drive,
+                    file_id=file_id,
+                )
+            )
+
+            filename = (
+                self._replace_or_add_extension(
+                    name,
+                    ".pptx",
+                )
+            )
+
+            output_mime_type = (
+                self.PPTX_MIME_TYPE
+            )
+
+        #
+        # Excel .xls
+        #
+        elif (
+            mime_type
+            == self.XLS_MIME_TYPE
+        ):
+            content = (
+                self._download_file(
+                    drive=drive,
+                    file_id=file_id,
+                )
+            )
+
+            filename = (
+                self._replace_or_add_extension(
+                    name,
+                    ".xls",
+                )
+            )
+
+            output_mime_type = (
+                self.XLS_MIME_TYPE
+            )
+
+        #
+        # Excel .xlsx
+        #
+        elif (
+            mime_type
+            == self.XLSX_MIME_TYPE
+        ):
+            content = (
+                self._download_file(
+                    drive=drive,
+                    file_id=file_id,
+                )
+            )
+
+            filename = (
+                self._replace_or_add_extension(
+                    name,
+                    ".xlsx",
+                )
+            )
+
+            output_mime_type = (
+                self.XLSX_MIME_TYPE
+            )
+
+        #
+        # TXT / Markdown / CSV
+        #
         elif (
             mime_type
             in self.TEXT_MIME_TYPES
@@ -478,10 +739,9 @@ class GoogleDriveProvider(
 
         else:
             #
-            # MVP:
-            # Skip unsupported file types
-            # instead of failing the whole
-            # Google Drive sync.
+            # Unsupported Drive files are
+            # ignored without failing the
+            # entire source sync.
             #
             return None
 
@@ -511,6 +771,9 @@ class GoogleDriveProvider(
                 "google_drive_mime_type":
                     mime_type,
 
+                "processed_mime_type":
+                    output_mime_type,
+
                 "modified_time":
                     file_metadata.get(
                         "modifiedTime"
@@ -539,41 +802,37 @@ class GoogleDriveProvider(
             )
         )
 
-        buffer = (
-            io.BytesIO()
-        )
-
-        downloader = (
-            MediaIoBaseDownload(
-                buffer,
-                request,
-            )
-        )
-
-        done = False
-
-        while not done:
-            _, done = (
-                downloader.next_chunk()
-            )
-
         return (
-            buffer.getvalue()
+            self._download_request(
+                request
+            )
         )
 
-    def _export_google_doc(
+    def _export_file(
         self,
         drive,
         file_id: str,
+        mime_type: str,
     ) -> bytes:
 
         request = (
             drive.files()
             .export_media(
                 fileId=file_id,
-                mimeType="text/plain",
+                mimeType=mime_type,
             )
         )
+
+        return (
+            self._download_request(
+                request
+            )
+        )
+
+    def _download_request(
+        self,
+        request,
+    ) -> bytes:
 
         buffer = (
             io.BytesIO()
@@ -625,11 +884,6 @@ class GoogleDriveProvider(
                     match.group(1)
                 )
 
-        #
-        # Also allow a raw folder ID
-        # to be entered into the URL
-        # field.
-        #
         if (
             "/" not in folder_url
             and "?" not in folder_url
@@ -642,20 +896,28 @@ class GoogleDriveProvider(
             "provided URL."
         )
 
-    def _ensure_extension(
+    def _replace_or_add_extension(
         self,
         filename: str,
         extension: str,
     ) -> str:
 
-        if (
+        path = Path(
             filename
-            .lower()
-            .endswith(
-                extension.lower()
-            )
+        )
+
+        if (
+            path.suffix.lower()
+            == extension.lower()
         ):
             return filename
+
+        if path.suffix:
+            return str(
+                path.with_suffix(
+                    extension
+                )
+            )
 
         return (
             f"{filename}{extension}"
@@ -671,8 +933,10 @@ class GoogleDriveProvider(
             name.lower()
         )
 
-        if mime_type == "text/markdown":
-
+        if (
+            mime_type
+            == "text/markdown"
+        ):
             if lower_name.endswith(
                 ".md"
             ):
@@ -682,27 +946,17 @@ class GoogleDriveProvider(
                 f"{name}.md"
             )
 
-        #
-        # CSV is converted to .txt for
-        # ingestion because the existing
-        # text parser already handles it
-        # as textual knowledge.
-        #
-        if mime_type == "text/csv":
-
+        if (
+            mime_type
+            == "text/csv"
+        ):
             if lower_name.endswith(
                 ".csv"
             ):
-                stem = (
-                    name[:-4]
-                )
-
-                return (
-                    f"{stem}.txt"
-                )
+                return name
 
             return (
-                f"{name}.txt"
+                f"{name}.csv"
             )
 
         if lower_name.endswith(

@@ -1,7 +1,11 @@
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import UploadFile
+from fastapi import (
+    HTTPException,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -27,6 +31,23 @@ from app.utils.file_utils import checksum
 
 
 class DocumentIngestionService:
+
+    SUPPORTED_EXTENSIONS = {
+        ".pdf",
+
+        ".txt",
+        ".md",
+        ".csv",
+
+        ".doc",
+        ".docx",
+
+        ".ppt",
+        ".pptx",
+
+        ".xls",
+        ".xlsx",
+    }
 
     def __init__(self):
         self.document_repository = (
@@ -69,6 +90,43 @@ class DocumentIngestionService:
         ):
             raise KnowledgeSourceNotFoundError()
 
+        filename = (
+            file.filename
+            or ""
+        )
+
+        extension = (
+            Path(
+                filename
+            )
+            .suffix
+            .lower()
+        )
+
+        if (
+            extension
+            not in self.SUPPORTED_EXTENSIONS
+        ):
+            supported = (
+                ", ".join(
+                    sorted(
+                        self.SUPPORTED_EXTENSIONS
+                    )
+                )
+            )
+
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
+                detail=(
+                    "Unsupported document type "
+                    f"'{extension or 'unknown'}'. "
+                    "Supported types: "
+                    f"{supported}"
+                ),
+            )
+
         file_checksum = checksum(
             file
         )
@@ -81,11 +139,15 @@ class DocumentIngestionService:
                 current_user.id
             ),
             original_filename=(
-                file.filename
+                filename
             ),
             stored_filename="",
             mime_type=(
                 file.content_type
+                or (
+                    "application/"
+                    "octet-stream"
+                )
             ),
             file_size=0,
             checksum=(
@@ -100,14 +162,6 @@ class DocumentIngestionService:
         self.document_repository.create(
             db,
             document,
-        )
-
-        extension = (
-            Path(
-                file.filename
-            )
-            .suffix
-            .lower()
         )
 
         stored_filename = (

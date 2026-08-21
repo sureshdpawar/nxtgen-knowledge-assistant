@@ -52,18 +52,22 @@ export default function CreateKnowledgeSourceDialog({
   const [
     open,
     setOpen,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const {
     register,
     handleSubmit,
     reset,
     watch,
+
     formState: {
       errors,
       isSubmitting,
     },
+
   } = useForm<KnowledgeSourceForm>({
+
     resolver: zodResolver(
       knowledgeSourceSchema,
     ),
@@ -71,14 +75,23 @@ export default function CreateKnowledgeSourceDialog({
     defaultValues: {
       name: "",
       type: "UPLOAD",
+
       baseUrl: "",
       maxPages: 25,
       maxDepth: 2,
+
+      driveFolderUrl: "",
+      driveRecursive: true,
     },
+
   });
 
+
   const sourceType =
-    watch("type");
+    watch(
+      "type",
+    );
+
 
   async function submit(
     values:
@@ -88,11 +101,17 @@ export default function CreateKnowledgeSourceDialog({
       Record<string, unknown>
       = {};
 
+
+    /*
+     * Website
+     */
     if (
       values.type
       === "WEBSITE"
     ) {
+
       configuration = {
+
         base_url:
           values.baseUrl
             ?.trim(),
@@ -106,59 +125,137 @@ export default function CreateKnowledgeSourceDialog({
         include_patterns: [],
 
         exclude_patterns: [],
+
       };
     }
 
+
+    /*
+     * Google Drive
+     */
+    if (
+      values.type
+      === "GOOGLE_DRIVE"
+    ) {
+
+      configuration = {
+
+        folder_url:
+          values
+            .driveFolderUrl
+            ?.trim(),
+
+        recursive:
+          values
+            .driveRecursive,
+
+      };
+    }
+
+
     const payload:
       CreateKnowledgeSourceRequest = {
+
         name:
-          values.name.trim(),
+          values
+            .name
+            .trim(),
 
         type:
           values.type,
 
         configuration,
-      };
+
+    };
+
 
     await onCreate(
       payload,
     );
 
+
     reset({
+
       name: "",
       type: "UPLOAD",
+
       baseUrl: "",
       maxPages: 25,
       maxDepth: 2,
+
+      driveFolderUrl: "",
+      driveRecursive: true,
+
     });
 
-    setOpen(false);
+
+    setOpen(
+      false,
+    );
   }
+
+
+  function getNamePlaceholder() {
+
+    if (
+      sourceType
+      === "WEBSITE"
+    ) {
+      return (
+        "Example: Company Website"
+      );
+    }
+
+    if (
+      sourceType
+      === "GOOGLE_DRIVE"
+    ) {
+      return (
+        "Example: Finance Drive"
+      );
+    }
+
+    return (
+      "Example: Engineering Uploads"
+    );
+  }
+
 
   return (
     <>
+
       <button
         type="button"
         onClick={() =>
-          setOpen(true)
+          setOpen(
+            true,
+          )
         }
         className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
       >
         + Create Knowledge Source
       </button>
 
+
       <Dialog
-        open={open}
+        open={
+          open
+        }
         onOpenChange={
           setOpen
         }
       >
-        <DialogContent>
+
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+
           <DialogHeader>
+
             <DialogTitle>
               Create Knowledge Source
             </DialogTitle>
+
           </DialogHeader>
+
 
           <form
             onSubmit={
@@ -168,7 +265,10 @@ export default function CreateKnowledgeSourceDialog({
             }
             className="space-y-5"
           >
+
+            {/* Name */}
             <div>
+
               <Label
                 htmlFor="source-name"
               >
@@ -178,10 +278,7 @@ export default function CreateKnowledgeSourceDialog({
               <Input
                 id="source-name"
                 placeholder={
-                  sourceType
-                  === "WEBSITE"
-                    ? "Example: Company Website"
-                    : "Example: Engineering Uploads"
+                  getNamePlaceholder()
                 }
                 {...register(
                   "name",
@@ -191,14 +288,19 @@ export default function CreateKnowledgeSourceDialog({
               {errors.name && (
                 <p className="mt-1 text-sm text-red-500">
                   {
-                    errors.name
+                    errors
+                      .name
                       .message
                   }
                 </p>
               )}
+
             </div>
 
+
+            {/* Source type */}
             <div>
+
               <Label
                 htmlFor="source-type"
               >
@@ -212,6 +314,7 @@ export default function CreateKnowledgeSourceDialog({
                 )}
                 className="mt-2 flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500"
               >
+
                 <option
                   value="UPLOAD"
                 >
@@ -223,14 +326,26 @@ export default function CreateKnowledgeSourceDialog({
                 >
                   Website
                 </option>
+
+                <option
+                  value="GOOGLE_DRIVE"
+                >
+                  Google Drive
+                </option>
+
               </select>
+
             </div>
 
+
+            {/* Website */}
             {sourceType
               === "WEBSITE"
               && (
                 <>
+
                   <div>
+
                     <Label
                       htmlFor="source-base-url"
                     >
@@ -257,13 +372,17 @@ export default function CreateKnowledgeSourceDialog({
                       )}
 
                     <p className="mt-1 text-xs text-slate-500">
-                      The crawler will stay
-                      on the same hostname.
+                      The crawler stays on
+                      the same hostname.
                     </p>
+
                   </div>
 
+
                   <div className="grid grid-cols-2 gap-4">
+
                     <div>
+
                       <Label
                         htmlFor="source-max-pages"
                       >
@@ -273,8 +392,12 @@ export default function CreateKnowledgeSourceDialog({
                       <Input
                         id="source-max-pages"
                         type="number"
-                        min={1}
-                        max={200}
+                        min={
+                          1
+                        }
+                        max={
+                          200
+                        }
                         {...register(
                           "maxPages",
                           {
@@ -283,9 +406,12 @@ export default function CreateKnowledgeSourceDialog({
                           },
                         )}
                       />
+
                     </div>
 
+
                     <div>
+
                       <Label
                         htmlFor="source-max-depth"
                       >
@@ -295,8 +421,12 @@ export default function CreateKnowledgeSourceDialog({
                       <Input
                         id="source-max-depth"
                         type="number"
-                        min={0}
-                        max={10}
+                        min={
+                          0
+                        }
+                        max={
+                          10
+                        }
                         {...register(
                           "maxDepth",
                           {
@@ -305,23 +435,130 @@ export default function CreateKnowledgeSourceDialog({
                           },
                         )}
                       />
+
                     </div>
+
                   </div>
+
 
                   <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
                     Website sync is manual.
-                    Creating this source does
-                    not crawl the site yet.
-                    After creation, use
+                    After creating the source,
+                    use{" "}
                     <strong>
-                      {" "}Sync Now
+                      Sync Now
                     </strong>
                     .
                   </div>
+
                 </>
               )}
 
+
+            {/* Google Drive */}
+            {sourceType
+              === "GOOGLE_DRIVE"
+              && (
+                <>
+
+                  <div>
+
+                    <Label
+                      htmlFor="drive-folder-url"
+                    >
+                      Google Drive Folder
+                    </Label>
+
+                    <Input
+                      id="drive-folder-url"
+                      placeholder="https://drive.google.com/drive/folders/..."
+                      {...register(
+                        "driveFolderUrl",
+                      )}
+                    />
+
+                    {errors
+                      .driveFolderUrl
+                      && (
+                        <p className="mt-1 text-sm text-red-500">
+                          {
+                            errors
+                              .driveFolderUrl
+                              .message
+                          }
+                        </p>
+                      )}
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Paste the folder URL
+                      or raw Google Drive
+                      folder ID.
+                    </p>
+
+                  </div>
+
+
+                  <label className="flex items-start gap-3 rounded-lg border p-4">
+
+                    <input
+                      type="checkbox"
+                      {...register(
+                        "driveRecursive",
+                      )}
+                      className="mt-1 h-4 w-4"
+                    />
+
+                    <div>
+
+                      <p className="text-sm font-medium text-slate-900">
+                        Include subfolders
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        Discover supported
+                        documents recursively
+                        inside this Drive folder.
+                      </p>
+
+                    </div>
+
+                  </label>
+
+
+                  <div className="rounded-lg bg-blue-50 p-4">
+
+                    <p className="text-sm font-medium text-blue-900">
+                      Folder access
+                    </p>
+
+                    <p className="mt-2 text-xs leading-5 text-blue-800">
+                      Share this Google Drive
+                      folder with the NXTGEN
+                      service-account email
+                      using Viewer permission
+                      before running the first
+                      sync.
+                    </p>
+
+                  </div>
+
+
+                  <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+                    Creating the source does
+                    not download files.
+                    After creation, use{" "}
+                    <strong>
+                      Sync Now
+                    </strong>
+                    .
+                  </div>
+
+                </>
+              )}
+
+
             <DialogFooter>
+
               <button
                 type="submit"
                 disabled={
@@ -335,10 +572,15 @@ export default function CreateKnowledgeSourceDialog({
                     : "Create"
                 }
               </button>
+
             </DialogFooter>
+
           </form>
+
         </DialogContent>
+
       </Dialog>
+
     </>
   );
 }

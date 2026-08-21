@@ -16,7 +16,9 @@ from app.repositories.document_repository import (
 from app.services.document_ingestion_job_service import (
     DocumentIngestionJobService,
 )
-from app.sources.source_item import SourceItem
+from app.sources.source_item import (
+    SourceItem,
+)
 
 
 class SourceDocumentService:
@@ -182,7 +184,7 @@ class SourceDocumentService:
                 "contain content."
             )
 
-        full_path = (
+        old_full_path = (
             Path(
                 settings
                 .DOCUMENT_STORAGE_PATH
@@ -190,18 +192,78 @@ class SourceDocumentService:
             / document.storage_path
         )
 
-        full_path.parent.mkdir(
+        original_filename = (
+            self._get_original_filename(
+                item
+            )
+        )
+
+        new_extension = (
+            Path(
+                original_filename
+            )
+            .suffix
+            .lower()
+        )
+
+        if not new_extension:
+            new_extension = (
+                self._extension_for_mime_type(
+                    item.mime_type
+                )
+            )
+
+        new_stored_filename = (
+            f"{document.id}"
+            f"{new_extension}"
+        )
+
+        old_storage_key = (
+            Path(
+                document.storage_path
+            )
+        )
+
+        new_storage_key = (
+            old_storage_key.parent
+            / new_stored_filename
+        )
+
+        new_full_path = (
+            Path(
+                settings
+                .DOCUMENT_STORAGE_PATH
+            )
+            / new_storage_key
+        )
+
+        new_full_path.parent.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-        full_path.write_bytes(
+        new_full_path.write_bytes(
             item.content
         )
 
+        if (
+            old_full_path
+            != new_full_path
+            and old_full_path.exists()
+        ):
+            old_full_path.unlink()
+
         document.original_filename = (
-            self._get_original_filename(
-                item
+            original_filename
+        )
+
+        document.stored_filename = (
+            new_stored_filename
+        )
+
+        document.storage_path = (
+            str(
+                new_storage_key
             )
         )
 
@@ -210,7 +272,7 @@ class SourceDocumentService:
         )
 
         document.file_size = (
-            full_path
+            new_full_path
             .stat()
             .st_size
         )
@@ -218,6 +280,30 @@ class SourceDocumentService:
         document.checksum = (
             item.checksum
         )
+
+        document.status = (
+            DocumentStatus.PENDING
+        )
+
+        self.document_repository.update(
+            db,
+            document,
+        )
+
+        self.job_service.enqueue(
+            db=db,
+            document_id=(
+                document.id
+            ),
+        )
+
+        return document
+
+    def retry_document(
+        self,
+        db: Session,
+        document: Document,
+    ) -> Document:
 
         document.status = (
             DocumentStatus.PENDING
@@ -248,8 +334,14 @@ class SourceDocumentService:
         safe_title = (
             item.title
             .strip()
-            .replace("/", "-")
-            .replace("\\", "-")
+            .replace(
+                "/",
+                "-",
+            )
+            .replace(
+                "\\",
+                "-",
+            )
         )
 
         if not safe_title:
@@ -264,7 +356,8 @@ class SourceDocumentService:
         )
 
         return (
-            f"{safe_title}{extension}"
+            f"{safe_title}"
+            f"{extension}"
         )
 
     def _get_stored_filename(
@@ -295,7 +388,8 @@ class SourceDocumentService:
             )
 
         return (
-            f"{document.id}{extension}"
+            f"{document.id}"
+            f"{extension}"
         )
 
     def _extension_for_mime_type(
@@ -307,11 +401,23 @@ class SourceDocumentService:
             "application/pdf":
                 ".pdf",
 
+            "application/msword":
+                ".doc",
+
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
                 ".docx",
 
+            "application/vnd.ms-powerpoint":
+                ".ppt",
+
             "application/vnd.openxmlformats-officedocument.presentationml.presentation":
                 ".pptx",
+
+            "application/vnd.ms-excel":
+                ".xls",
+
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+                ".xlsx",
 
             "text/plain":
                 ".txt",
@@ -321,9 +427,14 @@ class SourceDocumentService:
 
             "text/markdown":
                 ".md",
+
+            "text/csv":
+                ".csv",
         }
 
-        return mapping.get(
-            mime_type,
-            ".bin",
+        return (
+            mapping.get(
+                mime_type,
+                ".bin",
+            )
         )
