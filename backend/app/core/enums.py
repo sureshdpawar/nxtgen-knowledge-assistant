@@ -20,16 +20,24 @@ class TenantPlan(str, Enum):
 
 
 class DocumentStatus(str, Enum):
-    UPLOADED = "UPLOADED"
+    PENDING = "PENDING"
     PROCESSING = "PROCESSING"
     READY = "READY"
+    FAILED = "FAILED"
+
+
+class DocumentIngestionJobStatus(str, Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
     FAILED = "FAILED"
 
 
 class ConversationStatus(str, Enum):
     ACTIVE = "ACTIVE"
     CLOSED = "CLOSED"
-    
+
+
 class KnowledgeBaseStatus(str, Enum):
     ACTIVE = "ACTIVE"
     ARCHIVED = "ARCHIVED"
@@ -38,7 +46,8 @@ class KnowledgeBaseStatus(str, Enum):
 class KnowledgeBaseVisibility(str, Enum):
     PRIVATE = "PRIVATE"
     SHARED = "SHARED"
-    
+
+
 class KnowledgeSourceType(str, Enum):
     UPLOAD = "UPLOAD"
     WEBSITE = "WEBSITE"
@@ -53,14 +62,9 @@ class KnowledgeSourceType(str, Enum):
 class KnowledgeSourceStatus(str, Enum):
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"
-    ERROR = "ERROR"    
-    
-class DocumentStatus(str, Enum):
-    PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
-    READY = "READY"
-    FAILED = "FAILED"
-    
+    ERROR = "ERROR"
+
+
 class LLMProvider(Enum):
     OPENAI = "OPENAI"
     AZURE_OPENAI = "AZURE_OPENAI"
@@ -68,16 +72,19 @@ class LLMProvider(Enum):
     GOOGLE = "GOOGLE"
     VLLM = "VLLM"
     OLLAMA = "OLLAMA"
-    
+
+
 class KnowledgeBaseAccessLevel(str, Enum):
     READ = "READ"
-    MANAGE = "MANAGE"    
-    
+    MANAGE = "MANAGE"
+
+
 class AgentStatus(str, Enum):
     DRAFT = "DRAFT"
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
-    
+
+
 class AgentRunStatus(str, Enum):
     RUNNING = "RUNNING"
     COMPLETED = "COMPLETED"
@@ -91,8 +98,9 @@ class AgentRunStepType(str, Enum):
 
 class AgentRunStepStatus(str, Enum):
     COMPLETED = "COMPLETED"
-    FAILED = "FAILED"    
-    
+    FAILED = "FAILED"
+
+
 class IntegrationType(str, Enum):
     REST = "REST"
     MCP = "MCP"

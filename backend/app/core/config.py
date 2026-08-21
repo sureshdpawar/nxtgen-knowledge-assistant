@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 200
 
     #
+    # Background ingestion
+    #
+    INGESTION_WORKER_POLL_SECONDS: float = 2.0
+
+    INGESTION_JOB_STALE_AFTER_SECONDS: int = 3600
+
+    INGESTION_JOB_MAX_ATTEMPTS: int = 3
+
+    #
     # Search
     #
     TOP_K: int = 5
