@@ -37,22 +37,39 @@ depends_on: Union[
 ] = None
 
 
+# ---------------------------------------------------------
+# PostgreSQL enum
+# ---------------------------------------------------------
+
 job_status = postgresql.ENUM(
     "PENDING",
     "PROCESSING",
     "COMPLETED",
     "FAILED",
-    name="documentingestionjobstatus",
+    name=(
+        "documentingestionjobstatus"
+    ),
     create_type=False,
 )
 
 
 def upgrade() -> None:
 
+    # -----------------------------------------------------
+    # Create enum explicitly.
+    #
+    # create_type=False prevents SQLAlchemy from attempting
+    # to create the enum again when the table is created.
+    # -----------------------------------------------------
+
     job_status.create(
         op.get_bind(),
         checkfirst=True,
     )
+
+    # -----------------------------------------------------
+    # Document ingestion job
+    # -----------------------------------------------------
 
     op.create_table(
         "document_ingestion_job",
@@ -65,22 +82,37 @@ def upgrade() -> None:
 
         sa.Column(
             "status",
-            job_status,
-            server_default="PENDING",
+            postgresql.ENUM(
+                "PENDING",
+                "PROCESSING",
+                "COMPLETED",
+                "FAILED",
+                name=(
+                    "documentingestionjobstatus"
+                ),
+                create_type=False,
+            ),
+            server_default=(
+                "PENDING"
+            ),
             nullable=False,
         ),
 
         sa.Column(
             "attempt_count",
             sa.Integer(),
-            server_default="0",
+            server_default=(
+                "0"
+            ),
             nullable=False,
         ),
 
         sa.Column(
             "max_attempts",
             sa.Integer(),
-            server_default="3",
+            server_default=(
+                "3"
+            ),
             nullable=False,
         ),
 
@@ -90,7 +122,9 @@ def upgrade() -> None:
                 timezone=True
             ),
             server_default=(
-                sa.text("now()")
+                sa.text(
+                    "now()"
+                )
             ),
             nullable=False,
         ),
@@ -150,7 +184,9 @@ def upgrade() -> None:
                 timezone=True
             ),
             server_default=(
-                sa.text("now()")
+                sa.text(
+                    "now()"
+                )
             ),
             nullable=False,
         ),
@@ -161,15 +197,23 @@ def upgrade() -> None:
                 timezone=True
             ),
             server_default=(
-                sa.text("now()")
+                sa.text(
+                    "now()"
+                )
             ),
             nullable=False,
         ),
 
         sa.ForeignKeyConstraint(
-            ["document_id"],
-            ["document.id"],
-            ondelete="CASCADE",
+            [
+                "document_id"
+            ],
+            [
+                "document.id"
+            ],
+            ondelete=(
+                "CASCADE"
+            ),
         ),
 
         sa.PrimaryKeyConstraint(
@@ -177,26 +221,58 @@ def upgrade() -> None:
         ),
     )
 
+    # -----------------------------------------------------
+    # Indexes
+    # -----------------------------------------------------
+
     op.create_index(
-        "ix_document_ingestion_job_document_id",
+        (
+            "ix_document_ingestion_job_"
+            "document_id"
+        ),
         "document_ingestion_job",
-        ["document_id"],
+        [
+            "document_id"
+        ],
     )
 
     op.create_index(
-        "ix_document_ingestion_job_status",
+        (
+            "ix_document_ingestion_job_"
+            "status"
+        ),
         "document_ingestion_job",
-        ["status"],
+        [
+            "status"
+        ],
     )
 
     op.create_index(
-        "ix_document_ingestion_job_available_at",
+        (
+            "ix_document_ingestion_job_"
+            "available_at"
+        ),
         "document_ingestion_job",
-        ["available_at"],
+        [
+            "available_at"
+        ],
     )
 
+    # -----------------------------------------------------
+    # Worker queue index
+    #
+    # Optimizes:
+    #
+    # WHERE status = 'PENDING'
+    # AND available_at <= now()
+    # ORDER BY available_at, created_at
+    # -----------------------------------------------------
+
     op.create_index(
-        "ix_document_ingestion_job_queue",
+        (
+            "ix_document_ingestion_job_"
+            "queue"
+        ),
         "document_ingestion_job",
         [
             "status",
@@ -205,58 +281,99 @@ def upgrade() -> None:
         ],
     )
 
+    # -----------------------------------------------------
+    # Only one active ingestion job per document.
+    #
+    # Completed/failed jobs remain as history while another
+    # job may subsequently be queued for the same document.
+    # -----------------------------------------------------
+
     op.create_index(
-        "uq_document_ingestion_job_active_document",
+        (
+            "uq_document_ingestion_job_"
+            "active_document"
+        ),
         "document_ingestion_job",
-        ["document_id"],
+        [
+            "document_id"
+        ],
         unique=True,
-        postgresql_where=sa.text(
-            "status IN "
-            "('PENDING', 'PROCESSING')"
+        postgresql_where=(
+            sa.text(
+                "status IN "
+                "('PENDING', 'PROCESSING')"
+            )
         ),
     )
 
 
 def downgrade() -> None:
 
+    # -----------------------------------------------------
+    # Indexes
+    # -----------------------------------------------------
+
     op.drop_index(
-        "uq_document_ingestion_job_active_document",
+        (
+            "uq_document_ingestion_job_"
+            "active_document"
+        ),
         table_name=(
             "document_ingestion_job"
         ),
     )
 
     op.drop_index(
-        "ix_document_ingestion_job_queue",
+        (
+            "ix_document_ingestion_job_"
+            "queue"
+        ),
         table_name=(
             "document_ingestion_job"
         ),
     )
 
     op.drop_index(
-        "ix_document_ingestion_job_available_at",
+        (
+            "ix_document_ingestion_job_"
+            "available_at"
+        ),
         table_name=(
             "document_ingestion_job"
         ),
     )
 
     op.drop_index(
-        "ix_document_ingestion_job_status",
+        (
+            "ix_document_ingestion_job_"
+            "status"
+        ),
         table_name=(
             "document_ingestion_job"
         ),
     )
 
     op.drop_index(
-        "ix_document_ingestion_job_document_id",
+        (
+            "ix_document_ingestion_job_"
+            "document_id"
+        ),
         table_name=(
             "document_ingestion_job"
         ),
     )
+
+    # -----------------------------------------------------
+    # Table
+    # -----------------------------------------------------
 
     op.drop_table(
         "document_ingestion_job"
     )
+
+    # -----------------------------------------------------
+    # PostgreSQL enum
+    # -----------------------------------------------------
 
     job_status.drop(
         op.get_bind(),

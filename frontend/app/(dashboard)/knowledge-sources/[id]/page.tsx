@@ -124,6 +124,7 @@ export default function KnowledgeSourceDetailPage() {
   async function handleSync() {
     if (
       !isExternalSource
+      || !knowledgeSource
     ) {
       return;
     }
