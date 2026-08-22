@@ -4,6 +4,7 @@ import {
   Braces,
   Copy,
   Globe2,
+  Hash,
 } from "lucide-react";
 
 import {
@@ -24,6 +25,7 @@ import ChannelConversationsDialog from "./ChannelConversationsDialog";
 import ChannelMetricsPanel from "./ChannelMetricsPanel";
 import CreateChatChannelDialog from "./CreateChatChannelDialog";
 import ManagePublicApiChannelDialog from "./ManagePublicApiChannelDialog";
+import ManageSlackChannelDialog from "./ManageSlackChannelDialog";
 import ManageWebsiteChannelDialog from "./ManageWebsiteChannelDialog";
 
 
@@ -204,9 +206,10 @@ export default function ChatChannelList({
             </p>
 
             <p className="mt-1 text-sm text-slate-500">
-              Create a Website chatbot
-              or Public API channel for
-              this knowledge base.
+              Create a Website chatbot,
+              Public API, or Slack
+              channel for this knowledge
+              base.
             </p>
 
           </div>
@@ -232,10 +235,31 @@ export default function ChatChannelList({
                   channel.type
                   === "PUBLIC_API";
 
+                const isSlack =
+                  channel.type
+                  === "SLACK";
+
                 const Icon =
                   isWebsite
                     ? Globe2
-                    : Braces;
+                    : (
+                      isSlack
+                        ? Hash
+                        : Braces
+                    );
+
+                const channelLabel =
+                  isWebsite
+                    ? "WEBSITE"
+                    : (
+                      isPublicApi
+                        ? "PUBLIC API"
+                        : (
+                          isSlack
+                            ? "SLACK"
+                            : channel.type
+                        )
+                    );
 
                 return (
                   <div
@@ -269,13 +293,7 @@ export default function ChatChannelList({
 
                             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
                               {
-                                isWebsite
-                                  ? "WEBSITE"
-                                  : (
-                                    isPublicApi
-                                      ? "PUBLIC API"
-                                      : channel.type
-                                  )
+                                channelLabel
                               }
                             </span>
 
@@ -436,8 +454,123 @@ export default function ChatChannelList({
                     )}
 
 
+                    {isSlack && (
+                      <div className="mt-4 border-t pt-4">
+
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                          Slack
+                        </p>
+
+
+                        <p className="mt-2 text-sm text-slate-500">
+                          Connect this knowledge
+                          base to a Slack
+                          workspace so users can
+                          ask questions directly
+                          from Slack.
+                        </p>
+
+
+                        {channel.configuration
+                          .respond_to_mentions
+                          !== undefined
+                          && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+
+                              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                                {
+                                  channel
+                                    .configuration
+                                    .respond_to_mentions
+                                    ? "Mentions enabled"
+                                    : "Mentions disabled"
+                                }
+                              </span>
+
+
+                              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                                {
+                                  channel
+                                    .configuration
+                                    .respond_to_direct_messages
+                                    ? "DMs enabled"
+                                    : "DMs disabled"
+                                }
+                              </span>
+
+                            </div>
+                          )}
+
+
+                        {(
+                          channel
+                            .configuration
+                            .allowed_slack_channel_ids
+                          || []
+                        ).length
+                          > 0
+                          && (
+                            <div className="mt-4">
+
+                              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                                Allowed Slack channels
+                              </p>
+
+
+                              <div className="mt-2 flex flex-wrap gap-2">
+
+                                {(
+                                  channel
+                                    .configuration
+                                    .allowed_slack_channel_ids
+                                  || []
+                                ).map(
+                                  (
+                                    slackChannelId,
+                                  ) => (
+                                    <span
+                                      key={
+                                        slackChannelId
+                                      }
+                                      className="rounded-md bg-slate-100 px-2 py-1 font-mono text-xs text-slate-600"
+                                    >
+                                      {
+                                        slackChannelId
+                                      }
+                                    </span>
+                                  ),
+                                )}
+
+                              </div>
+
+                            </div>
+                          )}
+
+
+                        <div className="mt-5 flex flex-wrap gap-2">
+
+                          <ManageSlackChannelDialog
+                            channel={
+                              channel
+                            }
+                          />
+
+
+                          <ChannelConversationsDialog
+                            channel={
+                              channel
+                            }
+                          />
+
+                        </div>
+
+                      </div>
+                    )}
+
+
                     {!isWebsite
                       && !isPublicApi
+                      && !isSlack
                       && (
                         <div className="mt-4 border-t pt-4">
 

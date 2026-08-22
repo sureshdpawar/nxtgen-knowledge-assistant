@@ -5,21 +5,25 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  connectChatChannelSlack,
   createChatChannel,
   createChatChannelApiKey,
   deleteChannelConversation,
   deleteChatChannel,
+  disconnectChatChannelSlack,
   getChannelConversation,
   getChannelConversations,
   getChatChannel,
   getChatChannelApiKeys,
   getChatChannelMetrics,
+  getChatChannelSlackConfiguration,
   getChatChannels,
   revokeChatChannelApiKey,
   updateChatChannel,
 } from "./api";
 
 import type {
+  ConnectChatChannelSlackRequest,
   CreateChatChannelRequest,
   UpdateChatChannelRequest,
 } from "./types";
@@ -187,6 +191,14 @@ export function useDeleteChatChannel(
         .removeQueries({
           queryKey: [
             "channel-conversations",
+            channelId,
+          ],
+        });
+
+      queryClient
+        .removeQueries({
+          queryKey: [
+            "chat-channel-slack",
             channelId,
           ],
         });
@@ -402,5 +414,99 @@ export function useChatChannelMetrics(
 
     refetchInterval:
       30000,
+  });
+}
+
+
+export function useChatChannelSlackConfiguration(
+  channelId: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: [
+      "chat-channel-slack",
+      channelId,
+    ],
+
+    queryFn: () =>
+      getChatChannelSlackConfiguration(
+        channelId,
+      ),
+
+    enabled:
+      !!channelId
+      && enabled,
+
+    retry: false,
+  });
+}
+
+
+export function useConnectChatChannelSlack(
+  channelId: string,
+) {
+  const queryClient =
+    useQueryClient();
+
+  return useMutation({
+    mutationFn: (
+      payload:
+        ConnectChatChannelSlackRequest,
+    ) =>
+      connectChatChannelSlack(
+        channelId,
+        payload,
+      ),
+
+    onSuccess() {
+      queryClient
+        .invalidateQueries({
+          queryKey: [
+            "chat-channel-slack",
+            channelId,
+          ],
+        });
+
+      queryClient
+        .invalidateQueries({
+          queryKey: [
+            "chat-channel",
+            channelId,
+          ],
+        });
+    },
+  });
+}
+
+
+export function useDisconnectChatChannelSlack(
+  channelId: string,
+) {
+  const queryClient =
+    useQueryClient();
+
+  return useMutation({
+    mutationFn: () =>
+      disconnectChatChannelSlack(
+        channelId,
+      ),
+
+    onSuccess() {
+      queryClient
+        .removeQueries({
+          queryKey: [
+            "chat-channel-slack",
+            channelId,
+          ],
+        });
+
+      queryClient
+        .invalidateQueries({
+          queryKey: [
+            "chat-channel",
+            channelId,
+          ],
+        });
+    },
   });
 }

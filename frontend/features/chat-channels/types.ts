@@ -21,6 +21,12 @@ export type ChatChannelConfiguration = {
 
   show_sources?: boolean;
 
+  respond_to_mentions?: boolean;
+
+  respond_to_direct_messages?: boolean;
+
+  allowed_slack_channel_ids?: string[];
+
   [key: string]: unknown;
 };
 
@@ -168,4 +174,46 @@ export type ChatChannelMetrics = {
   active_api_key_count: number;
 
   revoked_api_key_count: number;
+};
+
+
+export type ChatChannelSlackConfiguration = {
+  slack_team_id: string;
+
+  slack_team_name:
+    string | null;
+
+  bot_user_id:
+    string | null;
+
+  configured: boolean;
+
+  respond_to_mentions: boolean;
+
+  respond_to_direct_messages: boolean;
+
+  allowed_slack_channel_ids:
+    string[];
+};
+
+
+export type ConnectChatChannelSlackRequest = {
+  slack_team_id: string;
+
+  slack_team_name?:
+    string | null;
+
+  bot_user_id?:
+    string | null;
+
+  bot_token: string;
+
+  signing_secret: string;
+
+  respond_to_mentions: boolean;
+
+  respond_to_direct_messages: boolean;
+
+  allowed_slack_channel_ids:
+    string[];
 };

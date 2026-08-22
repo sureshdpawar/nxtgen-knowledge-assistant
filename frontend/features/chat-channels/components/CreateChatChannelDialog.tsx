@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import {
+  useState,
+} from "react";
 
 import {
   Dialog,
@@ -10,8 +12,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  Input,
+} from "@/components/ui/input";
+
+import {
+  Label,
+} from "@/components/ui/label";
 
 import type {
   CreateChatChannelRequest,
@@ -20,14 +27,16 @@ import type {
 
 type SupportedChannelType =
   | "WEBSITE"
-  | "PUBLIC_API";
+  | "PUBLIC_API"
+  | "SLACK";
 
 
 type Props = {
   knowledgeBaseId: string;
 
   onCreate: (
-    payload: CreateChatChannelRequest,
+    payload:
+      CreateChatChannelRequest,
   ) => Promise<void>;
 };
 
@@ -36,21 +45,35 @@ export default function CreateChatChannelDialog({
   knowledgeBaseId,
   onCreate,
 }: Props) {
-  const [open, setOpen] =
-    useState(false);
+  const [
+    open,
+    setOpen,
+  ] = useState(
+    false,
+  );
 
-  const [name, setName] =
-    useState("");
+  const [
+    name,
+    setName,
+  ] = useState(
+    "",
+  );
 
-  const [type, setType] =
-    useState<SupportedChannelType>(
-      "WEBSITE",
-    );
+  const [
+    type,
+    setType,
+  ] = useState<
+    SupportedChannelType
+  >(
+    "WEBSITE",
+  );
 
-  const [origins, setOrigins] =
-    useState(
-      "http://localhost:3000",
-    );
+  const [
+    origins,
+    setOrigins,
+  ] = useState(
+    "http://localhost:3000",
+  );
 
   const [
     widgetTitle,
@@ -76,23 +99,45 @@ export default function CreateChatChannelDialog({
   const [
     showSources,
     setShowSources,
-  ] = useState(true);
+  ] = useState(
+    true,
+  );
+
+  const [
+    slackRespondToMentions,
+    setSlackRespondToMentions,
+  ] = useState(
+    true,
+  );
+
+  const [
+    slackRespondToDirectMessages,
+    setSlackRespondToDirectMessages,
+  ] = useState(
+    false,
+  );
 
   const [
     submitting,
     setSubmitting,
-  ] = useState(false);
+  ] = useState(
+    false,
+  );
 
   const [
     error,
     setError,
-  ] = useState<string | null>(
+  ] = useState<
+    string | null
+  >(
     null,
   );
 
 
   function resetForm() {
-    setName("");
+    setName(
+      "",
+    );
 
     setType(
       "WEBSITE",
@@ -118,6 +163,14 @@ export default function CreateChatChannelDialog({
       true,
     );
 
+    setSlackRespondToMentions(
+      true,
+    );
+
+    setSlackRespondToDirectMessages(
+      false,
+    );
+
     setError(
       null,
     );
@@ -136,9 +189,14 @@ export default function CreateChatChannelDialog({
     if (
       value === "WEBSITE"
       || value === "PUBLIC_API"
+      || value === "SLACK"
     ) {
       setType(
         value,
+      );
+
+      setError(
+        null,
       );
     }
   }
@@ -163,20 +221,26 @@ export default function CreateChatChannelDialog({
       return;
     }
 
+
     let configuration:
       Record<
         string,
         unknown
       > = {};
 
+
     if (
       type === "WEBSITE"
     ) {
       const allowedOrigins =
         origins
-          .split("\n")
+          .split(
+            "\n",
+          )
           .map(
-            (value) =>
+            (
+              value,
+            ) =>
               value.trim(),
           )
           .filter(
@@ -184,7 +248,8 @@ export default function CreateChatChannelDialog({
           );
 
       if (
-        allowedOrigins.length === 0
+        allowedOrigins.length
+        === 0
       ) {
         setError(
           "At least one allowed origin is required.",
@@ -213,6 +278,30 @@ export default function CreateChatChannelDialog({
       };
     }
 
+
+    if (
+      type === "PUBLIC_API"
+    ) {
+      configuration = {};
+    }
+
+
+    if (
+      type === "SLACK"
+    ) {
+      configuration = {
+        respond_to_mentions:
+          slackRespondToMentions,
+
+        respond_to_direct_messages:
+          slackRespondToDirectMessages,
+
+        allowed_slack_channel_ids:
+          [],
+      };
+    }
+
+
     setSubmitting(
       true,
     );
@@ -220,6 +309,7 @@ export default function CreateChatChannelDialog({
     setError(
       null,
     );
+
 
     try {
       await onCreate({
@@ -239,6 +329,7 @@ export default function CreateChatChannelDialog({
       setOpen(
         false,
       );
+
     } catch (
       submitError
     ) {
@@ -249,9 +340,28 @@ export default function CreateChatChannelDialog({
       setError(
         "Unable to create channel.",
       );
+
     } finally {
       setSubmitting(
         false,
+      );
+    }
+  }
+
+
+  function handleOpenChange(
+    nextOpen: boolean,
+  ) {
+    setOpen(
+      nextOpen,
+    );
+
+    if (
+      !nextOpen
+      && !submitting
+    ) {
+      setError(
+        null,
       );
     }
   }
@@ -277,15 +387,17 @@ export default function CreateChatChannelDialog({
           open
         }
         onOpenChange={
-          setOpen
+          handleOpenChange
         }
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
 
           <DialogHeader>
+
             <DialogTitle>
               Create Channel
             </DialogTitle>
+
           </DialogHeader>
 
 
@@ -297,33 +409,42 @@ export default function CreateChatChannelDialog({
           >
 
             <div className="space-y-2">
+
               <Label
                 htmlFor="channel-name"
               >
                 Name
               </Label>
 
+
               <Input
                 id="channel-name"
                 value={
                   name
                 }
-                onChange={(event) =>
+                onChange={(
+                  event,
+                ) =>
                   setName(
-                    event.currentTarget.value,
+                    event
+                      .currentTarget
+                      .value,
                   )
                 }
                 placeholder="Example: Company Website Assistant"
               />
+
             </div>
 
 
             <div className="space-y-2">
+
               <Label
                 htmlFor="channel-type"
               >
                 Channel Type
               </Label>
+
 
               <select
                 id="channel-type"
@@ -335,6 +456,7 @@ export default function CreateChatChannelDialog({
                 }
                 className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500"
               >
+
                 <option value="WEBSITE">
                   Website Chatbot
                 </option>
@@ -342,33 +464,47 @@ export default function CreateChatChannelDialog({
                 <option value="PUBLIC_API">
                   Public API
                 </option>
+
+                <option value="SLACK">
+                  Slack
+                </option>
+
               </select>
 
+
               <p className="text-xs text-slate-500">
-                Slack and Microsoft Teams
-                will be enabled in a later
-                integration step.
+                Choose where users will
+                interact with this
+                knowledge base.
               </p>
+
             </div>
 
 
             {type === "WEBSITE" && (
               <>
+
                 <div className="space-y-2">
+
                   <Label
                     htmlFor="allowed-origins"
                   >
                     Allowed Websites
                   </Label>
 
+
                   <textarea
                     id="allowed-origins"
                     value={
                       origins
                     }
-                    onChange={(event) =>
+                    onChange={(
+                      event,
+                    ) =>
                       setOrigins(
-                        event.currentTarget.value,
+                        event
+                          .currentTarget
+                          .value,
                       )
                     }
                     rows={
@@ -380,95 +516,125 @@ export default function CreateChatChannelDialog({
                     }
                   />
 
+
                   <p className="text-xs text-slate-500">
                     One origin per line.
                     Include the scheme,
                     such as https://.
                   </p>
+
                 </div>
 
 
                 <div className="space-y-2">
+
                   <Label
                     htmlFor="widget-title"
                   >
                     Widget Title
                   </Label>
 
+
                   <Input
                     id="widget-title"
                     value={
                       widgetTitle
                     }
-                    onChange={(event) =>
+                    onChange={(
+                      event,
+                    ) =>
                       setWidgetTitle(
-                        event.currentTarget.value,
+                        event
+                          .currentTarget
+                          .value,
                       )
                     }
                     placeholder="NXTGEN Assistant"
                   />
+
                 </div>
 
 
                 <div className="space-y-2">
+
                   <Label
                     htmlFor="welcome-message"
                   >
                     Welcome Message
                   </Label>
 
+
                   <Input
                     id="welcome-message"
                     value={
                       welcomeMessage
                     }
-                    onChange={(event) =>
+                    onChange={(
+                      event,
+                    ) =>
                       setWelcomeMessage(
-                        event.currentTarget.value,
+                        event
+                          .currentTarget
+                          .value,
                       )
                     }
                     placeholder="Hi! How can I help?"
                   />
+
                 </div>
 
 
                 <div className="space-y-2">
+
                   <Label
                     htmlFor="placeholder"
                   >
                     Input Placeholder
                   </Label>
 
+
                   <Input
                     id="placeholder"
                     value={
                       placeholder
                     }
-                    onChange={(event) =>
+                    onChange={(
+                      event,
+                    ) =>
                       setPlaceholder(
-                        event.currentTarget.value,
+                        event
+                          .currentTarget
+                          .value,
                       )
                     }
                     placeholder="Ask me anything..."
                   />
+
                 </div>
 
 
                 <label className="flex items-start gap-3 rounded-lg border p-4">
+
                   <input
                     type="checkbox"
                     checked={
                       showSources
                     }
-                    onChange={(event) =>
+                    onChange={(
+                      event,
+                    ) =>
                       setShowSources(
-                        event.currentTarget.checked,
+                        event
+                          .currentTarget
+                          .checked,
                       )
                     }
                     className="mt-1 h-4 w-4"
                   />
 
+
                   <div>
+
                     <p className="text-sm font-medium text-slate-900">
                       Show sources
                     </p>
@@ -477,11 +643,14 @@ export default function CreateChatChannelDialog({
                       Display source documents
                       below chatbot answers.
                     </p>
+
                   </div>
+
                 </label>
 
 
                 <div className="rounded-lg bg-slate-50 p-4">
+
                   <p className="text-sm font-medium text-slate-900">
                     Website security
                   </p>
@@ -493,13 +662,16 @@ export default function CreateChatChannelDialog({
                     receive short-lived signed
                     session tokens.
                   </p>
+
                 </div>
+
               </>
             )}
 
 
             {type === "PUBLIC_API" && (
               <div className="rounded-lg bg-blue-50 p-4">
+
                 <p className="text-sm font-medium text-blue-900">
                   Server-to-server API
                 </p>
@@ -507,8 +679,124 @@ export default function CreateChatChannelDialog({
                 <p className="mt-1 text-xs leading-5 text-blue-800">
                   After creating the channel,
                   you can generate and revoke
-                  secret API keys.
+                  secret API keys from the
+                  channel management screen.
                 </p>
+
+              </div>
+            )}
+
+
+            {type === "SLACK" && (
+              <div className="space-y-4">
+
+                <div className="rounded-lg bg-violet-50 p-4">
+
+                  <p className="text-sm font-medium text-violet-900">
+                    Slack workspace
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-violet-800">
+                    Create the Slack channel
+                    first. Then use
+                    Manage Slack to connect
+                    the workspace, bot token,
+                    signing secret, and
+                    allowed Slack channels.
+                  </p>
+
+                </div>
+
+
+                <label className="flex items-start gap-3 rounded-lg border p-4">
+
+                  <input
+                    type="checkbox"
+                    checked={
+                      slackRespondToMentions
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setSlackRespondToMentions(
+                        event
+                          .currentTarget
+                          .checked,
+                      )
+                    }
+                    className="mt-1 h-4 w-4"
+                  />
+
+
+                  <div>
+
+                    <p className="text-sm font-medium text-slate-900">
+                      Respond to mentions
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Respond when a Slack
+                      user mentions the
+                      NXTGEN bot in a channel.
+                    </p>
+
+                  </div>
+
+                </label>
+
+
+                <label className="flex items-start gap-3 rounded-lg border p-4">
+
+                  <input
+                    type="checkbox"
+                    checked={
+                      slackRespondToDirectMessages
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setSlackRespondToDirectMessages(
+                        event
+                          .currentTarget
+                          .checked,
+                      )
+                    }
+                    className="mt-1 h-4 w-4"
+                  />
+
+
+                  <div>
+
+                    <p className="text-sm font-medium text-slate-900">
+                      Respond to direct messages
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Allow users to ask
+                      questions directly to
+                      the NXTGEN Slack bot.
+                    </p>
+
+                  </div>
+
+                </label>
+
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+
+                  <p className="text-sm font-medium text-slate-900">
+                    Next step after creation
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                    Open the new Slack channel
+                    card and select
+                    Manage Slack to complete
+                    the workspace connection.
+                  </p>
+
+                </div>
+
               </div>
             )}
 
@@ -523,6 +811,7 @@ export default function CreateChatChannelDialog({
 
 
             <DialogFooter>
+
               <button
                 type="button"
                 onClick={() =>
@@ -538,6 +827,7 @@ export default function CreateChatChannelDialog({
                 Cancel
               </button>
 
+
               <button
                 type="submit"
                 disabled={
@@ -551,6 +841,7 @@ export default function CreateChatChannelDialog({
                     : "Create Channel"
                 }
               </button>
+
             </DialogFooter>
 
           </form>

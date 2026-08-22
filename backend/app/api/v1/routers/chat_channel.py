@@ -30,6 +30,10 @@ from app.schemas.chat_channel import (
 from app.schemas.chat_channel_metrics import (
     ChatChannelMetricsResponse,
 )
+from app.schemas.chat_channel_slack import (
+    ChatChannelSlackConnectRequest,
+    ChatChannelSlackResponse,
+)
 from app.schemas.conversation import (
     ChannelConversationListResponse,
     ChannelConversationResponse,
@@ -39,6 +43,9 @@ from app.services.chat_channel_metrics_service import (
 )
 from app.services.chat_channel_service import (
     ChatChannelService,
+)
+from app.services.chat_channel_slack_service import (
+    ChatChannelSlackService,
 )
 from app.services.conversation_service import (
     ConversationService,
@@ -63,6 +70,10 @@ conversation_service = (
 
 metrics_service = (
     ChatChannelMetricsService()
+)
+
+slack_service = (
+    ChatChannelSlackService()
 )
 
 
@@ -157,6 +168,151 @@ def list_channels(
             ),
         )
     )
+
+
+# ---------------------------------------------------------
+# Slack configuration
+# ---------------------------------------------------------
+
+
+@router.get(
+    "/{channel_id}/slack",
+    response_model=(
+        ChatChannelSlackResponse
+    ),
+)
+def get_slack_configuration(
+    channel_id: UUID,
+
+    db: Session = Depends(
+        get_db
+    ),
+
+    current_user: User = Depends(
+        get_current_active_user
+    ),
+):
+    try:
+        return (
+            slack_service
+            .get_configuration(
+                db=db,
+                current_user=(
+                    current_user
+                ),
+                channel_id=(
+                    channel_id
+                ),
+            )
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(
+                exc
+            ),
+        ) from exc
+
+
+@router.put(
+    "/{channel_id}/slack",
+    response_model=(
+        ChatChannelSlackResponse
+    ),
+)
+def connect_slack_configuration(
+    channel_id: UUID,
+
+    payload:
+        ChatChannelSlackConnectRequest,
+
+    db: Session = Depends(
+        get_db
+    ),
+
+    current_user: User = Depends(
+        get_current_active_user
+    ),
+):
+    try:
+        return (
+            slack_service
+            .connect(
+                db=db,
+                current_user=(
+                    current_user
+                ),
+                channel_id=(
+                    channel_id
+                ),
+                payload=(
+                    payload
+                ),
+            )
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+            ),
+            detail=str(
+                exc
+            ),
+        ) from exc
+
+
+@router.delete(
+    "/{channel_id}/slack",
+    status_code=(
+        status.HTTP_204_NO_CONTENT
+    ),
+)
+def disconnect_slack_configuration(
+    channel_id: UUID,
+
+    db: Session = Depends(
+        get_db
+    ),
+
+    current_user: User = Depends(
+        get_current_active_user
+    ),
+):
+    try:
+        slack_service.disconnect(
+            db=db,
+            current_user=(
+                current_user
+            ),
+            channel_id=(
+                channel_id
+            ),
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(
+                exc
+            ),
+        ) from exc
+
+    return Response(
+        status_code=(
+            status.HTTP_204_NO_CONTENT
+        )
+    )
+
+
+# ---------------------------------------------------------
+# Channel metrics
+# ---------------------------------------------------------
 
 
 @router.get(

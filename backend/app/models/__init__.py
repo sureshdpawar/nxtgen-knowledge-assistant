@@ -50,6 +50,9 @@ from app.models.chat_channel import (
 from app.models.chat_channel_api_key import (
     ChatChannelApiKey,
 )
+from app.models.chat_channel_slack_credential import (
+    ChatChannelSlackCredential,
+)
 
 
 __all__ = [
@@ -75,4 +78,5 @@ __all__ = [
     "AgentTool",
     "ChatChannel",
     "ChatChannelApiKey",
+    "ChatChannelSlackCredential",
 ]

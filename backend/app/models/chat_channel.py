@@ -27,6 +27,9 @@ if TYPE_CHECKING:
     from app.models.chat_channel_api_key import (
         ChatChannelApiKey,
     )
+    from app.models.chat_channel_slack_credential import (
+        ChatChannelSlackCredential,
+    )
     from app.models.conversation import (
         Conversation,
     )
@@ -75,7 +78,9 @@ class ChatChannel(
     ] = mapped_column(
         Enum(ChatChannelStatus),
         default=ChatChannelStatus.ACTIVE,
-        server_default=ChatChannelStatus.ACTIVE.value,
+        server_default=(
+            ChatChannelStatus.ACTIVE.value
+        ),
         nullable=False,
         index=True,
     )
@@ -104,6 +109,15 @@ class ChatChannel(
         "ChatChannelApiKey",
         back_populates="channel",
         cascade="all, delete-orphan",
+    )
+
+    slack_credential: Mapped[
+        "ChatChannelSlackCredential | None"
+    ] = relationship(
+        "ChatChannelSlackCredential",
+        back_populates="channel",
+        cascade="all, delete-orphan",
+        uselist=False,
     )
 
     conversations: Mapped[

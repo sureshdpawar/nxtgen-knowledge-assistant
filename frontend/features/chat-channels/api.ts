@@ -6,6 +6,8 @@ import type {
   ChatChannel,
   ChatChannelApiKey,
   ChatChannelMetrics,
+  ChatChannelSlackConfiguration,
+  ConnectChatChannelSlackRequest,
   CreateChatChannelRequest,
   CreatedChatChannelApiKey,
   UpdateChatChannelRequest,
@@ -179,4 +181,44 @@ export async function getChatChannelMetrics(
     );
 
   return response.data;
+}
+
+
+export async function getChatChannelSlackConfiguration(
+  channelId: string,
+) {
+  const response =
+    await api.get<
+      ChatChannelSlackConfiguration
+    >(
+      `/channels/${channelId}/slack`,
+    );
+
+  return response.data;
+}
+
+
+export async function connectChatChannelSlack(
+  channelId: string,
+  payload:
+    ConnectChatChannelSlackRequest,
+) {
+  const response =
+    await api.put<
+      ChatChannelSlackConfiguration
+    >(
+      `/channels/${channelId}/slack`,
+      payload,
+    );
+
+  return response.data;
+}
+
+
+export async function disconnectChatChannelSlack(
+  channelId: string,
+) {
+  await api.delete(
+    `/channels/${channelId}/slack`,
+  );
 }
