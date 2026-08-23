@@ -201,13 +201,25 @@ export default function ManageWebsiteChannelDialog({
       const frontendBase =
         window.location.origin;
 
-      const apiBase =
+      const configuredApiBase =
         process.env
           .NEXT_PUBLIC_API_URL
         || "http://localhost:8000";
 
+      const apiBase =
+        configuredApiBase
+          .replace(
+            /\/api\/v1\/?$/,
+            "",
+          )
+          .replace(
+            /\/$/,
+            "",
+          );
+
       return [
         "<script",
+        "  defer",
         `  src="${frontendBase}/nxtgen-widget.js"`,
         `  data-channel-id="${channel.id}"`,
         `  data-api-base="${apiBase}"`,
