@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy import (
     Enum,
     ForeignKey,
+    Integer,
     String,
     Text,
 )
@@ -12,6 +13,7 @@ from sqlalchemy.orm import (
     relationship,
 )
 
+from app.core.config import settings
 from app.core.enums import (
     KnowledgeBaseStatus,
     KnowledgeBaseVisibility,
@@ -64,6 +66,28 @@ class KnowledgeBase(
         nullable=True,
     )
 
+    
+    chunk_size: Mapped[
+        int | None
+    ] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    chunk_overlap: Mapped[
+        int | None
+    ] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    top_k: Mapped[
+        int | None
+    ] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
     status: Mapped[
         KnowledgeBaseStatus
     ] = mapped_column(
@@ -89,6 +113,39 @@ class KnowledgeBase(
             KnowledgeBaseVisibility.PRIVATE.value,
         nullable=False,
     )
+
+    @property
+    def effective_chunk_size(
+        self,
+    ) -> int:
+        return (
+            self.chunk_size
+            if self.chunk_size
+            is not None
+            else settings.CHUNK_SIZE
+        )
+
+    @property
+    def effective_chunk_overlap(
+        self,
+    ) -> int:
+        return (
+            self.chunk_overlap
+            if self.chunk_overlap
+            is not None
+            else settings.CHUNK_OVERLAP
+        )
+
+    @property
+    def effective_top_k(
+        self,
+    ) -> int:
+        return (
+            self.top_k
+            if self.top_k
+            is not None
+            else settings.TOP_K
+        )
 
     tenant: Mapped["Tenant"] = relationship(
         "Tenant",

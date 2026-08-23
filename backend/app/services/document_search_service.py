@@ -5,7 +5,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.exceptions.knowledge_base import (
+    KnowledgeBaseNotFoundError,
+)
+from app.models.knowledge_base import (
+    KnowledgeBase,
+)
 from app.repositories.document_embedding_repository import (
     DocumentEmbeddingRepository,
 )
@@ -40,6 +45,38 @@ class DocumentSearchService:
             time.perf_counter()
         )
 
+        #
+        # Resolve the Knowledge Base so
+        # retrieval can use its optional
+        # KB-level top_k override.
+        #
+        knowledge_base = (
+            db.get(
+                KnowledgeBase,
+                knowledge_base_id,
+            )
+        )
+
+        if knowledge_base is None:
+            raise (
+                KnowledgeBaseNotFoundError()
+            )
+
+        #
+        # effective_top_k resolves:
+        #
+        # KB top_k
+        #     if configured
+        #
+        # otherwise
+        #
+        # settings.TOP_K
+        #
+        top_k = (
+            knowledge_base
+            .effective_top_k
+        )
+
         embedding_started_at = (
             time.perf_counter()
         )
@@ -69,7 +106,8 @@ class DocumentSearchService:
                     knowledge_base_id,
                 query_embedding=
                     query_embedding,
-                top_k=settings.TOP_K,
+                top_k=
+                    top_k,
             )
         )
 
@@ -99,7 +137,7 @@ class DocumentSearchService:
             "total_ms=%.2f",
             knowledge_base_id,
             len(results),
-            settings.TOP_K,
+            top_k,
             embedding_elapsed_ms,
             repository_elapsed_ms,
             total_elapsed_ms,
@@ -112,8 +150,10 @@ class DocumentSearchService:
             logger.warning(
                 "Slow KB search "
                 "kb=%s "
+                "top_k=%s "
                 "total_ms=%.2f",
                 knowledge_base_id,
+                top_k,
                 total_elapsed_ms,
             )
 

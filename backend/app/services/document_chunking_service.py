@@ -1,15 +1,10 @@
-from app.core.config import settings
-
-
 class DocumentChunkingService:
-
-    def __init__(self):
-        self.chunk_size = settings.CHUNK_SIZE
-        self.chunk_overlap = settings.CHUNK_OVERLAP
 
     def chunk(
         self,
         pages: list[dict],
+        chunk_size: int,
+        chunk_overlap: int,
     ) -> list[dict]:
 
         chunks = []
@@ -23,15 +18,25 @@ class DocumentChunkingService:
 
             while start < len(text):
 
-                end = start + self.chunk_size
+                end = (
+                    start
+                    + chunk_size
+                )
 
                 chunks.append(
                     {
-                        "text": text[start:end],
-                        "page": page_number,
+                        "text":
+                            text[
+                                start:end
+                            ],
+                        "page":
+                            page_number,
                     }
                 )
 
-                start = end - self.chunk_overlap
+                start = (
+                    end
+                    - chunk_overlap
+                )
 
         return chunks
