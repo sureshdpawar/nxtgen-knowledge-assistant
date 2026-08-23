@@ -35,6 +35,9 @@ from app.services.document_chunking_service import (
 from app.services.embedding_service import (
     EmbeddingService,
 )
+from app.services.office_format_normalizer import (
+    OfficeFormatNormalizer,
+)
 
 
 logger = logging.getLogger(
@@ -63,6 +66,10 @@ class DocumentProcessingService:
 
         self.embedding_service = (
             EmbeddingService()
+        )
+
+        self.office_format_normalizer = (
+            OfficeFormatNormalizer()
         )
 
     def _sanitize_text(
@@ -156,15 +163,37 @@ class DocumentProcessingService:
                 time.perf_counter()
             )
 
+            processing_path = (
+                self.office_format_normalizer
+                .normalize(
+                    full_path
+                )
+            )
+
+            if (
+                processing_path
+                != full_path
+            ):
+                logger.info(
+                    "Legacy Office document "
+                    "normalized "
+                    "document=%s "
+                    "source=%s "
+                    "normalized=%s",
+                    document.id,
+                    full_path.name,
+                    processing_path.name,
+                )
+
             parser = (
                 ParserFactory.get_parser(
-                    full_path,
+                    processing_path,
                 )
             )
 
             parsed_document = (
                 parser.extract(
-                    full_path,
+                    processing_path,
                 )
             )
 

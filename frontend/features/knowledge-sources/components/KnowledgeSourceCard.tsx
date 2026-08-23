@@ -5,12 +5,14 @@ import Link from "next/link";
 import {
   Database,
   Pencil,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 
 import type {
   KnowledgeSource,
 } from "../types";
+
 
 type Props = {
   knowledgeSource:
@@ -25,13 +27,29 @@ type Props = {
     knowledgeSource:
       KnowledgeSource,
   ) => void;
+
+  onSync: (
+    knowledgeSource:
+      KnowledgeSource,
+  ) => Promise<void>;
+
+  isSyncing?: boolean;
 };
+
 
 export default function KnowledgeSourceCard({
   knowledgeSource,
   onEdit,
   onDelete,
+  onSync,
+  isSyncing = false,
 }: Props) {
+  const canSync =
+    knowledgeSource.type
+    === "WEBSITE"
+    || knowledgeSource.type
+    === "GOOGLE_DRIVE";
+
   return (
     <div className="rounded-xl border bg-white p-5 shadow-sm transition hover:shadow-md">
 
@@ -57,11 +75,36 @@ export default function KnowledgeSourceCard({
                 {knowledgeSource.type}
               </span>
 
-              <span className="rounded-full bg-green-100 px-2 py-1 text-green-700">
+              <span
+                className={
+                  knowledgeSource.status
+                  === "ACTIVE"
+                    ? "rounded-full bg-green-100 px-2 py-1 text-green-700"
+                    : knowledgeSource.status
+                    === "ERROR"
+                      ? "rounded-full bg-red-100 px-2 py-1 text-red-700"
+                      : "rounded-full bg-amber-100 px-2 py-1 text-amber-700"
+                }
+              >
                 {knowledgeSource.status}
               </span>
 
             </div>
+
+            {knowledgeSource.type
+              === "WEBSITE"
+              && (
+                <p className="mt-3 truncate text-xs text-slate-500">
+                  {
+                    String(
+                      knowledgeSource
+                        .configuration
+                        .base_url
+                      ?? "",
+                    )
+                  }
+                </p>
+              )}
 
             <p className="mt-3 text-xs text-slate-400">
               Created{" "}
@@ -70,12 +113,50 @@ export default function KnowledgeSourceCard({
               ).toLocaleDateString()}
             </p>
 
+            <p className="mt-1 text-xs text-slate-400">
+              Last sync:{" "}
+              {
+                knowledgeSource.last_sync_at
+                  ? new Date(
+                      knowledgeSource.last_sync_at,
+                    ).toLocaleString()
+                  : "Never"
+              }
+            </p>
+
           </div>
 
         </div>
       </Link>
 
-      <div className="mt-5 flex justify-end gap-2">
+      <div className="mt-5 flex flex-wrap justify-end gap-2">
+
+        {canSync && (
+          <button
+            type="button"
+            disabled={isSyncing}
+            onClick={() =>
+              onSync(
+                knowledgeSource,
+              )
+            }
+            className="flex items-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw
+              className={
+                isSyncing
+                  ? "h-4 w-4 animate-spin"
+                  : "h-4 w-4"
+              }
+            />
+
+            {
+              isSyncing
+                ? "Syncing..."
+                : "Sync Now"
+            }
+          </button>
+        )}
 
         <button
           type="button"

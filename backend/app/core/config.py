@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     )
 
     #
+    # Google Drive
+    #
+    GOOGLE_SERVICE_ACCOUNT_FILE: str | None = (
+        None
+    )
+
+    #
     # Document processing
     #
     CHUNK_SIZE: int = 1000
@@ -66,9 +73,25 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 200
 
     #
+    # Background ingestion
+    #
+    INGESTION_WORKER_POLL_SECONDS: float = 2.0
+
+    INGESTION_JOB_STALE_AFTER_SECONDS: int = 3600
+
+    INGESTION_JOB_MAX_ATTEMPTS: int = 3
+
+    #
     # Search
     #
     TOP_K: int = 5
+    
+    #
+    # Website widget authentication
+    #
+    WEBSITE_WIDGET_TOKEN_SECRET: str = "hJBA8tg8T3Nq2JWJBWh2GEFhpw6Exu4hxXytWg77K11pq45D5MEbnjPMvZJEHTsf"
+
+    WEBSITE_WIDGET_TOKEN_TTL_MINUTES: int = 30
 
     model_config = SettingsConfigDict(
         env_file=".env",

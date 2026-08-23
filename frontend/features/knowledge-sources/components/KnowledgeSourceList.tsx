@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import {
+  useState,
+} from "react";
 
 import {
   useCreateKnowledgeSource,
   useDeleteKnowledgeSource,
   useKnowledgeSources,
+  useSyncKnowledgeSource,
   useUpdateKnowledgeSource,
 } from "../hooks";
 
@@ -20,9 +23,11 @@ import DeleteKnowledgeSourceDialog from "./DeleteKnowledgeSourceDialog";
 import EditKnowledgeSourceDialog from "./EditKnowledgeSourceDialog";
 import KnowledgeSourceCard from "./KnowledgeSourceCard";
 
+
 type Props = {
   knowledgeBaseId: string;
 };
+
 
 export default function KnowledgeSourceList({
   knowledgeBaseId,
@@ -51,6 +56,11 @@ export default function KnowledgeSourceList({
       knowledgeBaseId,
     );
 
+  const syncMutation =
+    useSyncKnowledgeSource(
+      knowledgeBaseId,
+    );
+
   const [
     selectedKnowledgeSource,
     setSelectedKnowledgeSource,
@@ -71,6 +81,31 @@ export default function KnowledgeSourceList({
   ] =
     useState(false);
 
+  const [
+    syncingSourceId,
+    setSyncingSourceId,
+  ] =
+    useState<
+      string | null
+    >(null);
+
+  const [
+    syncMessage,
+    setSyncMessage,
+  ] =
+    useState<
+      string | null
+    >(null);
+
+  const [
+    syncError,
+    setSyncError,
+  ] =
+    useState<
+      string | null
+    >(null);
+
+
   async function handleCreate(
     payload:
       CreateKnowledgeSourceRequest,
@@ -79,6 +114,7 @@ export default function KnowledgeSourceList({
       payload,
     );
   }
+
 
   function openEdit(
     knowledgeSource:
@@ -91,6 +127,7 @@ export default function KnowledgeSourceList({
     setEditOpen(true);
   }
 
+
   async function handleUpdate(
     id: string,
     payload:
@@ -101,6 +138,7 @@ export default function KnowledgeSourceList({
       data: payload,
     });
   }
+
 
   function openDelete(
     knowledgeSource:
@@ -113,6 +151,7 @@ export default function KnowledgeSourceList({
     setDeleteOpen(true);
   }
 
+
   async function handleDelete(
     id: string,
   ) {
@@ -120,6 +159,51 @@ export default function KnowledgeSourceList({
       id,
     );
   }
+
+
+  async function handleSync(
+    knowledgeSource:
+      KnowledgeSource,
+  ) {
+    setSyncingSourceId(
+      knowledgeSource.id,
+    );
+
+    setSyncMessage(null);
+    setSyncError(null);
+
+    try {
+      const result =
+        await syncMutation.mutateAsync(
+          knowledgeSource.id,
+        );
+
+      setSyncMessage(
+        [
+          `${knowledgeSource.name}:`,
+          `${result.items_discovered} discovered,`,
+          `${result.items_new} new,`,
+          `${result.items_changed} changed,`,
+          `${result.items_unchanged} unchanged,`,
+          `${result.items_failed} failed.`,
+        ].join(" "),
+      );
+    } catch (error) {
+      console.error(
+        "Knowledge source sync failed",
+        error,
+      );
+
+      setSyncError(
+        `Failed to sync ${knowledgeSource.name}.`,
+      );
+    } finally {
+      setSyncingSourceId(
+        null,
+      );
+    }
+  }
+
 
   if (isLoading) {
     return (
@@ -129,6 +213,7 @@ export default function KnowledgeSourceList({
     );
   }
 
+
   if (error) {
     return (
       <p className="text-sm text-red-600">
@@ -137,14 +222,29 @@ export default function KnowledgeSourceList({
     );
   }
 
+
   return (
     <div className="space-y-4">
 
       <div className="flex items-center justify-end">
         <CreateKnowledgeSourceDialog
-          onCreate={handleCreate}
+          onCreate={
+            handleCreate
+          }
         />
       </div>
+
+      {syncMessage && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          {syncMessage}
+        </div>
+      )}
+
+      {syncError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {syncError}
+        </div>
+      )}
 
       {!data ||
       data.length === 0 ? (
@@ -174,8 +274,19 @@ export default function KnowledgeSourceList({
                 knowledgeSource={
                   knowledgeSource
                 }
-                onEdit={openEdit}
-                onDelete={openDelete}
+                onEdit={
+                  openEdit
+                }
+                onDelete={
+                  openDelete
+                }
+                onSync={
+                  handleSync
+                }
+                isSyncing={
+                  syncingSourceId
+                  === knowledgeSource.id
+                }
               />
             ),
           )}
@@ -187,7 +298,9 @@ export default function KnowledgeSourceList({
         knowledgeSource={
           selectedKnowledgeSource
         }
-        open={editOpen}
+        open={
+          editOpen
+        }
         onOpenChange={
           setEditOpen
         }
@@ -200,7 +313,9 @@ export default function KnowledgeSourceList({
         knowledgeSource={
           selectedKnowledgeSource
         }
-        open={deleteOpen}
+        open={
+          deleteOpen
+        }
         onOpenChange={
           setDeleteOpen
         }

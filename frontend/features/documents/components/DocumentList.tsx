@@ -22,11 +22,29 @@ import UploadDocumentDialog from "./UploadDocumentDialog";
 
 type Props = {
   knowledgeSourceId: string;
+
+  allowUpload?: boolean;
+
+  allowManualProcess?: boolean;
+
+  allowDelete?: boolean;
+
+  emptyTitle?: string;
+
+  emptyDescription?: string;
 };
 
 
 export default function DocumentList({
   knowledgeSourceId,
+  allowUpload = true,
+  allowManualProcess = true,
+  allowDelete = true,
+  emptyTitle = "No documents",
+  emptyDescription = (
+    "Upload a document to "
+    + "this knowledge source."
+  ),
 }: Props) {
   const {
     data,
@@ -37,24 +55,20 @@ export default function DocumentList({
       knowledgeSourceId,
     );
 
-
   const uploadMutation =
     useUploadDocument(
       knowledgeSourceId,
     );
-
 
   const processMutation =
     useProcessDocument(
       knowledgeSourceId,
     );
 
-
   const deleteMutation =
     useDeleteDocument(
       knowledgeSourceId,
     );
-
 
   const [
     selectedDocument,
@@ -63,7 +77,6 @@ export default function DocumentList({
     useState<Document | null>(
       null,
     );
-
 
   const [
     deleteOpen,
@@ -83,6 +96,10 @@ export default function DocumentList({
   async function handleProcess(
     document: Document,
   ) {
+    if (!allowManualProcess) {
+      return;
+    }
+
     await processMutation
       .mutateAsync(
         document.id,
@@ -93,6 +110,10 @@ export default function DocumentList({
   function openDelete(
     document: Document,
   ) {
+    if (!allowDelete) {
+      return;
+    }
+
     setSelectedDocument(
       document,
     );
@@ -132,28 +153,29 @@ export default function DocumentList({
   return (
     <div className="space-y-4">
 
-      <div className="flex items-center justify-end">
+      {allowUpload && (
+        <div className="flex items-center justify-end">
 
-        <UploadDocumentDialog
-          onUpload={
-            handleUpload
-          }
-        />
+          <UploadDocumentDialog
+            onUpload={
+              handleUpload
+            }
+          />
 
-      </div>
+        </div>
+      )}
 
 
       {!data ||
       data.length === 0 ? (
         <div className="rounded-xl border border-dashed bg-white p-8 text-center">
 
-          <h3 className="font-semibold">
-            No documents
+          <h3 className="font-semibold text-slate-900">
+            {emptyTitle}
           </h3>
 
           <p className="mt-2 text-sm text-slate-500">
-            Upload a document to
-            this knowledge source.
+            {emptyDescription}
           </p>
 
         </div>
@@ -161,7 +183,9 @@ export default function DocumentList({
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
 
           {data.map(
-            (document) => (
+            (
+              document,
+            ) => (
               <DocumentCard
                 key={
                   document.id
@@ -170,17 +194,28 @@ export default function DocumentList({
                   document
                 }
                 onProcess={
-                  handleProcess
+                  allowManualProcess
+                    ? handleProcess
+                    : undefined
                 }
                 onDelete={
-                  openDelete
+                  allowDelete
+                    ? openDelete
+                    : undefined
                 }
                 processing={
-                  processMutation
-                    .isPending &&
-                  processMutation
-                    .variables ===
-                    document.id
+                  allowManualProcess
+                  && processMutation
+                    .isPending
+                  && processMutation
+                    .variables
+                    === document.id
+                }
+                showProcessAction={
+                  allowManualProcess
+                }
+                showDeleteAction={
+                  allowDelete
                 }
               />
             ),
@@ -190,24 +225,26 @@ export default function DocumentList({
       )}
 
 
-      <DeleteDocumentDialog
-        document={
-          selectedDocument
-        }
-        open={
-          deleteOpen
-        }
-        onOpenChange={
-          setDeleteOpen
-        }
-        onDelete={
-          handleDelete
-        }
-        deleting={
-          deleteMutation
-            .isPending
-        }
-      />
+      {allowDelete && (
+        <DeleteDocumentDialog
+          document={
+            selectedDocument
+          }
+          open={
+            deleteOpen
+          }
+          onOpenChange={
+            setDeleteOpen
+          }
+          onDelete={
+            handleDelete
+          }
+          deleting={
+            deleteMutation
+              .isPending
+          }
+        />
+      )}
 
     </div>
   );

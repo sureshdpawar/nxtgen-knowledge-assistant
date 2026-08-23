@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import {
+  useEffect,
+} from "react";
+
+import {
+  useForm,
+} from "react-hook-form";
 
 import type {
   KnowledgeSource,
+  KnowledgeSourceStatus,
   UpdateKnowledgeSourceRequest,
 } from "../types";
 
@@ -16,8 +22,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  Input,
+} from "@/components/ui/input";
+
+import {
+  Label,
+} from "@/components/ui/label";
 
 
 type Props = {
@@ -39,7 +50,9 @@ type Props = {
 
 type EditKnowledgeSourceForm = {
   name: string;
-  status: "ACTIVE";
+
+  status:
+    KnowledgeSourceStatus;
 };
 
 
@@ -111,13 +124,17 @@ export default function EditKnowledgeSourceDialog({
       payload,
     );
 
-    onOpenChange(false);
+    onOpenChange(
+      false,
+    );
   }
 
 
   return (
     <Dialog
-      open={open}
+      open={
+        open
+      }
       onOpenChange={
         onOpenChange
       }
@@ -130,6 +147,7 @@ export default function EditKnowledgeSourceDialog({
           </DialogTitle>
         </DialogHeader>
 
+
         <form
           onSubmit={
             handleSubmit(
@@ -139,6 +157,7 @@ export default function EditKnowledgeSourceDialog({
           className="space-y-5"
         >
 
+          {/* Name */}
           <div>
             <Label
               htmlFor="edit-source-name"
@@ -153,8 +172,10 @@ export default function EditKnowledgeSourceDialog({
                 {
                   required:
                     "Name is required",
+
                   minLength: {
                     value: 2,
+
                     message:
                       "Minimum 2 characters",
                   },
@@ -173,6 +194,7 @@ export default function EditKnowledgeSourceDialog({
           </div>
 
 
+          {/* Source Type */}
           <div>
             <Label>
               Source Type
@@ -189,13 +211,18 @@ export default function EditKnowledgeSourceDialog({
           </div>
 
 
+          {/* Status */}
           <div>
             <Label>
               Status
             </Label>
 
             <Input
-              value="ACTIVE"
+              value={
+                knowledgeSource
+                  ?.status
+                ?? "ACTIVE"
+              }
               disabled
             />
 
@@ -209,6 +236,7 @@ export default function EditKnowledgeSourceDialog({
 
 
           <DialogFooter>
+
             <button
               type="submit"
               disabled={
@@ -216,10 +244,13 @@ export default function EditKnowledgeSourceDialog({
               }
               className="rounded-lg bg-blue-600 px-5 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSubmitting
-                ? "Saving..."
-                : "Save Changes"}
+              {
+                isSubmitting
+                  ? "Saving..."
+                  : "Save Changes"
+              }
             </button>
+
           </DialogFooter>
 
         </form>

@@ -19,3 +19,8 @@ uploads
 backups
 
 *.log
+
+backend/secrets/*
+!backend/secrets/.gitkeep
+
+*.service-account.json
