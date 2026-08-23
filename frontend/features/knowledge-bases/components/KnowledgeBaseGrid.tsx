@@ -84,6 +84,15 @@ export default function KnowledgeBaseGrid() {
 
         visibility:
           values.visibility,
+
+        chunk_size:
+          values.chunk_size,
+
+        chunk_overlap:
+          values.chunk_overlap,
+
+        top_k:
+          values.top_k,
       };
 
     await createMutation
@@ -123,12 +132,22 @@ export default function KnowledgeBaseGrid() {
 
         visibility:
           values.visibility,
+
+        chunk_size:
+          values.chunk_size,
+
+        chunk_overlap:
+          values.chunk_overlap,
+
+        top_k:
+          values.top_k,
       };
 
     await updateMutation
       .mutateAsync({
         id,
-        data: payload,
+        data:
+          payload,
       });
   }
 
@@ -149,7 +168,9 @@ export default function KnowledgeBaseGrid() {
     id: string,
   ) {
     await deleteMutation
-      .mutateAsync(id);
+      .mutateAsync(
+        id,
+      );
   }
 
 
@@ -179,6 +200,7 @@ export default function KnowledgeBaseGrid() {
       <div className="flex items-center justify-between">
 
         <div>
+
           <h1 className="text-3xl font-bold">
             Knowledge Bases
           </h1>
@@ -187,7 +209,9 @@ export default function KnowledgeBaseGrid() {
             Manage your knowledge
             repositories.
           </p>
+
         </div>
+
 
         <CreateKnowledgeBaseDialog
           onCreate={
@@ -198,48 +222,59 @@ export default function KnowledgeBaseGrid() {
       </div>
 
 
-      {!data ||
-      data.length === 0 ? (
+      {
+        !data ||
+        data.length === 0
+        ? (
 
-        <div className="rounded-xl border border-dashed bg-white p-12 text-center">
+          <div className="rounded-xl border border-dashed bg-white p-12 text-center">
 
-          <h2 className="text-lg font-semibold">
-            No knowledge bases
-            yet
-          </h2>
+            <h2 className="text-lg font-semibold">
+              No knowledge bases
+              yet
+            </h2>
 
-          <p className="mt-2 text-sm text-slate-500">
-            Create your first
-            knowledge base.
-          </p>
+            <p className="mt-2 text-sm text-slate-500">
+              Create your first
+              knowledge base.
+            </p>
 
-        </div>
+          </div>
 
-      ) : (
+        )
+        : (
 
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
 
-          {data.map(
-            (knowledgeBase) => (
-              <KnowledgeBaseCard
-                key={
-                  knowledgeBase.id
-                }
-                knowledgeBase={
-                  knowledgeBase
-                }
-                onEdit={
-                  openEdit
-                }
-                onDelete={
-                  openDelete
-                }
-              />
-            ),
-          )}
+            {
+              data.map(
+                (
+                  knowledgeBase,
+                ) => (
 
-        </div>
-      )}
+                  <KnowledgeBaseCard
+                    key={
+                      knowledgeBase.id
+                    }
+                    knowledgeBase={
+                      knowledgeBase
+                    }
+                    onEdit={
+                      openEdit
+                    }
+                    onDelete={
+                      openDelete
+                    }
+                  />
+
+                ),
+              )
+            }
+
+          </div>
+
+        )
+      }
 
 
       <EditKnowledgeBaseDialog
