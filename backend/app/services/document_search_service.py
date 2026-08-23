@@ -40,16 +40,12 @@ class DocumentSearchService:
         db: Session,
         knowledge_base_id: UUID,
         query: str,
+        top_k_override: int | None = None,
     ):
         started_at = (
             time.perf_counter()
         )
 
-        #
-        # Resolve the Knowledge Base so
-        # retrieval can use its optional
-        # KB-level top_k override.
-        #
         knowledge_base = (
             db.get(
                 KnowledgeBase,
@@ -62,19 +58,20 @@ class DocumentSearchService:
                 KnowledgeBaseNotFoundError()
             )
 
-        #
-        # effective_top_k resolves:
-        #
-        # KB top_k
-        #     if configured
-        #
-        # otherwise
-        #
-        # settings.TOP_K
-        #
+        if (
+            top_k_override is not None
+            and top_k_override < 1
+        ):
+            raise ValueError(
+                "top_k_override must be at least 1"
+            )
+
+        # Normal production calls inherit the KB/platform setting.
+        # Evaluation can explicitly request a K without mutating the KB.
         top_k = (
-            knowledge_base
-            .effective_top_k
+            top_k_override
+            if top_k_override is not None
+            else knowledge_base.effective_top_k
         )
 
         embedding_started_at = (
