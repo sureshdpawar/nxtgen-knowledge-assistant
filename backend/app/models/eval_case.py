@@ -1,0 +1,61 @@
+from uuid import UUID
+
+from sqlalchemy import Boolean, ForeignKey, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+from app.db.mixins import TimestampMixin, UUIDMixin
+
+
+class EvalCase(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "eval_case"
+
+    dataset_id: Mapped[UUID] = mapped_column(
+        ForeignKey("eval_dataset.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    question: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    expected_document_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("document.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    expected_chunk_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("document_chunk.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    expected_text: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    expected_answer: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    answerable: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+    )
+
+    dataset: Mapped["EvalDataset"] = relationship(
+        "EvalDataset",
+        back_populates="cases",
+    )
+
+    results: Mapped[list["EvalResult"]] = relationship(
+        "EvalResult",
+        back_populates="eval_case",
+        cascade="all, delete-orphan",
+    )
