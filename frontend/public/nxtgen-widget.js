@@ -580,10 +580,18 @@
           "event:"
         )
       ) {
+        let value =
+          line.slice(6);
+
+        if (
+          value.startsWith(" ")
+        ) {
+          value =
+            value.slice(1);
+        }
+
         eventType =
-          line
-          .slice(6)
-          .trim();
+          value.trim();
 
         continue;
       }
@@ -593,8 +601,29 @@
           "data:"
         )
       ) {
+        let value =
+          line.slice(5);
+
+        /*
+         * SSE permits one optional
+         * separator space after ":".
+         *
+         * Remove exactly that one
+         * protocol space.
+         *
+         * Do NOT use trim() here.
+         * Additional leading spaces may
+         * belong to the actual LLM token.
+         */
+        if (
+          value.startsWith(" ")
+        ) {
+          value =
+            value.slice(1);
+        }
+
         dataLines.push(
-          line.slice(5)
+          value
         );
       }
     }
@@ -607,7 +636,6 @@
         ),
     };
   }
-
   async function sendMessage() {
     const text =
       inputElement
