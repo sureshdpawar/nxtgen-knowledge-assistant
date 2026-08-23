@@ -13,7 +13,7 @@ import type {
 export async function getTenants() {
   const response =
     await api.get<Tenant[]>(
-      "/tenants/",
+      "/tenants",
     );
 
   return response.data;

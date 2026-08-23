@@ -45,7 +45,7 @@ user_service = UserService()
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[
         TenantResponse
     ],
@@ -109,7 +109,7 @@ def list_tenant_admins(
 
 
 @router.post(
-    "/",
+    "",
     response_model=
         TenantResponse,
     status_code=
