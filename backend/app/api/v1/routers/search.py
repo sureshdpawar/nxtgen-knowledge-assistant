@@ -8,6 +8,9 @@ from app.api.deps import get_db
 from app.api.dependencies.rate_limit import (
     enforce_search_rate_limit,
 )
+from app.core.enums import (
+    KnowledgeBaseAccessLevel,
+)
 from app.models.user import User
 from app.schemas.search import (
     SearchRequest,
@@ -16,6 +19,9 @@ from app.schemas.search import (
 )
 from app.services.document_search_service import (
     DocumentSearchService,
+)
+from app.services.knowledge_base_access_service import (
+    KnowledgeBaseAccessService,
 )
 
 
@@ -27,6 +33,10 @@ router = APIRouter(
 
 service = (
     DocumentSearchService()
+)
+
+access_service = (
+    KnowledgeBaseAccessService()
 )
 
 
@@ -45,6 +55,42 @@ def search(
         enforce_search_rate_limit,
     ),
 ):
+    """
+    Search a Knowledge Base.
+
+    Requires READ access.
+
+    Security boundary:
+
+        authenticated user
+              ↓
+        requested KB
+              ↓
+        tenant validation
+              ↓
+        KB assignment
+              ↓
+        READ / MANAGE
+              ↓
+        semantic search
+
+    The search service itself remains
+    provider/retrieval focused.
+
+    Authorization is enforced before any
+    embedding request or vector search is
+    performed.
+    """
+
+    access_service.require_access(
+        db=db,
+        current_user=current_user,
+        knowledge_base_id=
+            payload.knowledge_base_id,
+        required_level=
+            KnowledgeBaseAccessLevel.READ,
+    )
+
     rows = (
         service.search(
             db=db,
