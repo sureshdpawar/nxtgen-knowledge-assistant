@@ -270,7 +270,41 @@ class KnowledgeBaseAccessService:
         db: Session,
         current_user: User,
         knowledge_base_id: UUID,
+        required_level:
+            KnowledgeBaseAccessLevel =
+            KnowledgeBaseAccessLevel.READ,
     ) -> bool:
+        """
+        Determine whether the authenticated user
+        has the requested level of access to a
+        Knowledge Base.
+
+        Rules:
+
+        ADMIN
+        -----
+        ADMIN users implicitly have MANAGE access
+        to all Knowledge Bases within their own
+        tenant.
+
+        USER
+        ----
+        USER access comes from the explicit
+        UserKnowledgeBaseAccess assignment.
+
+        READ assignment:
+            - satisfies READ
+            - does NOT satisfy MANAGE
+
+        MANAGE assignment:
+            - satisfies READ
+            - satisfies MANAGE
+
+        SUPERADMIN
+        ----------
+        SUPERADMIN does not implicitly participate
+        in tenant Knowledge Base access.
+        """
 
         knowledge_base = db.get(
             KnowledgeBase,
@@ -280,6 +314,12 @@ class KnowledgeBaseAccessService:
         if knowledge_base is None:
             return False
 
+        #
+        # ADMIN:
+        #
+        # Full KB management rights inside
+        # the user's own tenant only.
+        #
         if (
             current_user.role
             == UserRole.ADMIN
@@ -289,6 +329,12 @@ class KnowledgeBaseAccessService:
                 == current_user.tenant_id
             )
 
+        #
+        # USER:
+        #
+        # Must belong to the same tenant and
+        # have an explicit KB assignment.
+        #
         if (
             current_user.role
             == UserRole.USER
@@ -308,10 +354,24 @@ class KnowledgeBaseAccessService:
                 )
             )
 
+            if assignment is None:
+                return False
+
             return (
-                assignment is not None
+                self._access_level_satisfies(
+                    actual_level=
+                        assignment.access_level,
+                    required_level=
+                        required_level,
+                )
             )
 
+        #
+        # SUPERADMIN:
+        #
+        # Platform administration should not
+        # automatically expose tenant KB data.
+        #
         if (
             current_user.role
             == UserRole.SUPERADMIN
@@ -325,20 +385,116 @@ class KnowledgeBaseAccessService:
         db: Session,
         current_user: User,
         knowledge_base_id: UUID,
+        required_level:
+            KnowledgeBaseAccessLevel =
+            KnowledgeBaseAccessLevel.READ,
     ) -> None:
+        """
+        Raise when the user does not have the
+        required Knowledge Base access level.
+
+        Default remains READ so existing callers
+        continue to work without modification.
+        """
 
         if not self.has_access(
             db=db,
             current_user=current_user,
             knowledge_base_id=
                 knowledge_base_id,
+            required_level=
+                required_level,
         ):
             raise (
                 KnowledgeBaseAccessDeniedError(
-                    "You do not have access "
-                    "to this knowledge base."
+                    "You do not have "
+                    f"{required_level.value} "
+                    "access to this "
+                    "knowledge base."
                 )
             )
+
+    def require_read_access(
+        self,
+        db: Session,
+        current_user: User,
+        knowledge_base_id: UUID,
+    ) -> None:
+        """
+        Convenience helper for read-only
+        operations.
+        """
+
+        self.require_access(
+            db=db,
+            current_user=current_user,
+            knowledge_base_id=
+                knowledge_base_id,
+            required_level=
+                KnowledgeBaseAccessLevel.READ,
+        )
+
+    def require_manage_access(
+        self,
+        db: Session,
+        current_user: User,
+        knowledge_base_id: UUID,
+    ) -> None:
+        """
+        Convenience helper for operations that
+        modify Knowledge Base content or
+        configuration.
+        """
+
+        self.require_access(
+            db=db,
+            current_user=current_user,
+            knowledge_base_id=
+                knowledge_base_id,
+            required_level=
+                KnowledgeBaseAccessLevel.MANAGE,
+        )
+
+    def _access_level_satisfies(
+        self,
+        actual_level:
+            KnowledgeBaseAccessLevel,
+        required_level:
+            KnowledgeBaseAccessLevel,
+    ) -> bool:
+        """
+        Access hierarchy:
+
+            MANAGE >= READ
+            READ   >= READ
+
+        There are currently only two access
+        levels, so keeping the hierarchy explicit
+        is safer than relying on enum ordering.
+        """
+
+        if (
+            required_level
+            == KnowledgeBaseAccessLevel.READ
+        ):
+            return (
+                actual_level
+                in {
+                    KnowledgeBaseAccessLevel.READ,
+                    KnowledgeBaseAccessLevel.MANAGE,
+                }
+            )
+
+        if (
+            required_level
+            == KnowledgeBaseAccessLevel.MANAGE
+        ):
+            return (
+                actual_level
+                == KnowledgeBaseAccessLevel.MANAGE
+            )
+
+        return False
 
     def _require_admin(
         self,

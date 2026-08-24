@@ -13,6 +13,9 @@ from app.api.deps import get_db
 from app.api.dependencies.rate_limit import (
     enforce_chat_rate_limit,
 )
+from app.core.enums import (
+    KnowledgeBaseAccessLevel,
+)
 from app.exceptions.usage import (
     UsageQuotaExceededError,
 )
@@ -24,6 +27,9 @@ from app.schemas.chat import (
 from app.services.chat_service import (
     ChatService,
 )
+from app.services.knowledge_base_access_service import (
+    KnowledgeBaseAccessService,
+)
 
 
 router = APIRouter(
@@ -32,7 +38,40 @@ router = APIRouter(
 )
 
 
-service = ChatService()
+service = (
+    ChatService()
+)
+
+access_service = (
+    KnowledgeBaseAccessService()
+)
+
+
+def _require_chat_access(
+    *,
+    db: Session,
+    current_user: User,
+    knowledge_base_id,
+) -> None:
+    """
+    Require READ access before a user may
+    chat against a Knowledge Base.
+
+    MANAGE access also satisfies READ.
+
+    Keeping this check in one helper ensures
+    normal and streaming chat use exactly
+    the same authorization policy.
+    """
+
+    access_service.require_access(
+        db=db,
+        current_user=current_user,
+        knowledge_base_id=
+            knowledge_base_id,
+        required_level=
+            KnowledgeBaseAccessLevel.READ,
+    )
 
 
 @router.post(
@@ -49,6 +88,25 @@ def chat(
         enforce_chat_rate_limit,
     ),
 ):
+    """
+    Non-streaming Knowledge Base chat.
+
+    Authorization is performed before:
+
+    - conversation creation
+    - retrieval
+    - prompt construction
+    - quota reservation
+    - LLM invocation
+    """
+
+    _require_chat_access(
+        db=db,
+        current_user=current_user,
+        knowledge_base_id=
+            payload.knowledge_base_id,
+    )
+
     try:
         result = (
             service.chat(
@@ -106,6 +164,24 @@ def chat_stream(
         enforce_chat_rate_limit,
     ),
 ):
+    """
+    Streaming Knowledge Base chat.
+
+    Uses the exact same READ authorization
+    policy as non-streaming chat.
+
+    Authorization happens before creating
+    the generator so unauthorized requests
+    never begin retrieval or LLM execution.
+    """
+
+    _require_chat_access(
+        db=db,
+        current_user=current_user,
+        knowledge_base_id=
+            payload.knowledge_base_id,
+    )
+
     generator = (
         service.chat_stream(
             db=db,
