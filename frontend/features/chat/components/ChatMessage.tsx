@@ -1,6 +1,5 @@
 import {
   Bot,
-  User,
 } from "lucide-react";
 
 import type {
@@ -20,67 +19,55 @@ export default function ChatMessage({
   message,
 }: Props) {
   const isUser =
-    message.role === "user";
+    message.role
+    === "user";
+
+
+  if (isUser) {
+    return (
+      <div className="flex justify-end">
+
+        <div className="max-w-[80%] rounded-2xl rounded-br-md bg-slate-200 px-4 py-3 text-sm leading-6 text-slate-900 sm:max-w-2xl">
+
+          <div className="whitespace-pre-wrap">
+            {message.content}
+          </div>
+
+        </div>
+
+      </div>
+    );
+  }
 
 
   return (
-    <div
-      className={
-        isUser
-          ? "flex justify-end"
-          : "flex justify-start"
-      }
-    >
+    <div className="flex items-start gap-4">
 
-      <div
-        className={
-          isUser
-            ? "max-w-3xl rounded-2xl bg-blue-600 px-5 py-4 text-white"
-            : "w-full max-w-4xl rounded-2xl border bg-white px-5 py-4 shadow-sm"
-        }
-      >
+      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600">
 
-        <div className="flex items-start gap-3">
+        <Bot className="h-4 w-4 text-white" />
 
-          {!isUser && (
-            <div className="rounded-full bg-blue-100 p-2">
-              <Bot className="h-4 w-4 text-blue-600" />
-            </div>
-          )}
+      </div>
 
 
-          <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1">
 
-            <div
-              className={
-                isUser
-                  ? "whitespace-pre-wrap text-sm leading-6"
-                  : "whitespace-pre-wrap text-sm leading-7 text-slate-800"
-              }
-            >
-              {message.content}
-            </div>
-
-
-            {!isUser &&
-              message.sources &&
-              message.sources.length >
-                0 && (
-                <ChatSources
-                  sources={
-                    message.sources
-                  }
-                />
-              )}
-
-          </div>
-
-
-          {isUser && (
-            <User className="mt-0.5 h-4 w-4 shrink-0" />
-          )}
-
+        <div className="whitespace-pre-wrap text-sm leading-7 text-slate-800">
+          {message.content}
         </div>
+
+
+        {message.sources
+          && message.sources.length
+          > 0
+          && (
+            <ChatSources
+              sources={
+                message.sources
+              }
+            />
+          )
+        }
 
       </div>
 

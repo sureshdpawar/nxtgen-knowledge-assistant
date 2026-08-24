@@ -7,7 +7,7 @@ import {
 } from "react";
 
 import {
-  Send,
+  ArrowUp,
 } from "lucide-react";
 
 
@@ -28,7 +28,9 @@ export default function ChatComposer({
     message,
     setMessage,
   ] =
-    useState("");
+    useState(
+      "",
+    );
 
 
   async function submit(
@@ -40,13 +42,15 @@ export default function ChatComposer({
       message.trim();
 
     if (
-      !value ||
-      disabled
+      !value
+      || disabled
     ) {
       return;
     }
 
-    setMessage("");
+    setMessage(
+      "",
+    );
 
     await onSend(
       value,
@@ -61,9 +65,9 @@ export default function ChatComposer({
       >,
   ) {
     if (
-      event.key ===
-        "Enter" &&
-      !event.shiftKey
+      event.key
+      === "Enter"
+      && !event.shiftKey
     ) {
       event.preventDefault();
 
@@ -73,49 +77,74 @@ export default function ChatComposer({
 
 
   return (
-    <form
-      onSubmit={submit}
-      className="border-t bg-white p-4"
-    >
+    <div className="shrink-0 border-t border-slate-200 bg-white">
 
-      <div className="flex items-end gap-3">
+      <form
+        onSubmit={
+          submit
+        }
+        className="mx-auto w-full max-w-4xl px-4 pb-4 pt-3 sm:px-6"
+      >
 
-        <textarea
-          value={message}
-          onChange={(event) =>
-            setMessage(
-              event.target.value,
-            )
-          }
-          onKeyDown={
-            handleKeyDown
-          }
-          rows={2}
-          placeholder="Ask a question..."
-          disabled={disabled}
-          className="max-h-40 min-h-12 flex-1 resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 disabled:bg-slate-50"
-        />
+        <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm transition focus-within:border-slate-300 focus-within:shadow-md">
+
+          <div className="flex items-end gap-2">
+
+            <textarea
+              value={
+                message
+              }
+              onChange={(
+                event,
+              ) =>
+                setMessage(
+                  event.target.value,
+                )
+              }
+              onKeyDown={
+                handleKeyDown
+              }
+              rows={
+                1
+              }
+              placeholder={
+                disabled
+                  ? "Select a knowledge base to start..."
+                  : "Ask anything about your knowledge base..."
+              }
+              disabled={
+                disabled
+              }
+              className="max-h-40 min-h-11 flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm leading-5 text-slate-800 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
+            />
 
 
-        <button
-          type="submit"
-          disabled={
-            disabled ||
-            !message.trim()
-          }
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Send className="h-5 w-5" />
-        </button>
+            <button
+              type="submit"
+              disabled={
+                disabled
+                || !message.trim()
+              }
+              aria-label="Send message"
+              className="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+            >
 
-      </div>
+              <ArrowUp className="h-4 w-4" />
+
+            </button>
+
+          </div>
+
+        </div>
 
 
-      <p className="mt-2 text-xs text-slate-400">
-        Enter to send •
-        Shift + Enter for a new line
-      </p>
+        <p className="mt-2 text-center text-[11px] text-slate-400">
+          Enter to send ·
+          Shift + Enter for a new line
+        </p>
 
-    </form>
+      </form>
+
+    </div>
   );
 }

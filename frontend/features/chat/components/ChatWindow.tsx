@@ -48,6 +48,7 @@ export default function ChatWindow() {
   const {
     data:
       knowledgeBases,
+
     isLoading:
       knowledgeBasesLoading,
   } =
@@ -57,6 +58,7 @@ export default function ChatWindow() {
   const {
     data:
       conversationResponse,
+
     isLoading:
       conversationsLoading,
   } =
@@ -67,7 +69,9 @@ export default function ChatWindow() {
     knowledgeBaseId,
     setKnowledgeBaseId,
   ] =
-    useState("");
+    useState(
+      "",
+    );
 
 
   const [
@@ -76,7 +80,9 @@ export default function ChatWindow() {
   ] =
     useState<
       string | null
-    >(null);
+    >(
+      null,
+    );
 
 
   const [
@@ -85,21 +91,27 @@ export default function ChatWindow() {
   ] =
     useState<
       ChatMessage[]
-    >([]);
+    >(
+      [],
+    );
 
 
   const [
     streaming,
     setStreaming,
   ] =
-    useState(false);
+    useState(
+      false,
+    );
 
 
   const [
     loadingConversation,
     setLoadingConversation,
   ] =
-    useState(false);
+    useState(
+      false,
+    );
 
 
   const [
@@ -108,16 +120,43 @@ export default function ChatWindow() {
   ] =
     useState<
       string | null
-    >(null);
+    >(
+      null,
+    );
 
 
   const messageCounter =
-    useRef(0);
+    useRef(
+      0,
+    );
+
+
+  const messagesContainerRef =
+    useRef<
+      HTMLDivElement | null
+    >(
+      null,
+    );
+
+
+  const messagesEndRef =
+    useRef<
+      HTMLDivElement | null
+    >(
+      null,
+    );
+
+
+  const autoScrollRef =
+    useRef(
+      true,
+    );
 
 
   const conversationList =
     conversationResponse
-      ?.conversations ?? [];
+      ?.conversations
+    ?? [];
 
 
   function nextMessageId() {
@@ -127,6 +166,55 @@ export default function ChatWindow() {
       `chat-${messageCounter.current}`
     );
   }
+
+
+  function scrollToBottom(
+    behavior:
+      ScrollBehavior = "smooth",
+  ) {
+    messagesEndRef.current
+      ?.scrollIntoView({
+        behavior,
+        block: "end",
+      });
+  }
+
+
+  function handleMessagesScroll() {
+    const container =
+      messagesContainerRef.current;
+
+    if (!container) {
+      return;
+    }
+
+    const distanceFromBottom =
+      container.scrollHeight
+      - container.scrollTop
+      - container.clientHeight;
+
+    autoScrollRef.current =
+      distanceFromBottom
+      < 120;
+  }
+
+
+  useEffect(() => {
+    if (
+      !autoScrollRef.current
+    ) {
+      return;
+    }
+
+    scrollToBottom(
+      streaming
+        ? "auto"
+        : "smooth",
+    );
+  }, [
+    messages,
+    streaming,
+  ]);
 
 
   function changeKnowledgeBase(
@@ -140,9 +228,16 @@ export default function ChatWindow() {
       null,
     );
 
-    setMessages([]);
+    setMessages(
+      [],
+    );
 
-    setError(null);
+    setError(
+      null,
+    );
+
+    autoScrollRef.current =
+      true;
   }
 
 
@@ -155,9 +250,16 @@ export default function ChatWindow() {
       "",
     );
 
-    setMessages([]);
+    setMessages(
+      [],
+    );
 
-    setError(null);
+    setError(
+      null,
+    );
+
+    autoScrollRef.current =
+      true;
   }
 
 
@@ -166,17 +268,22 @@ export default function ChatWindow() {
       string,
   ) {
     if (
-      streaming ||
-      loadingConversation
+      streaming
+      || loadingConversation
     ) {
       return;
     }
 
-    setError(null);
+    setError(
+      null,
+    );
 
     setLoadingConversation(
       true,
     );
+
+    autoScrollRef.current =
+      true;
 
     try {
       const conversation =
@@ -196,7 +303,9 @@ export default function ChatWindow() {
       const loadedMessages:
         ChatMessage[] =
         conversation.messages.map(
-          (message) => ({
+          (
+            message,
+          ) => ({
             id:
               message.id,
 
@@ -207,8 +316,8 @@ export default function ChatWindow() {
               message.content,
 
             sources:
-              message.role ===
-                "assistant"
+              message.role
+              === "assistant"
                 ? message.citations
                 : undefined,
           }),
@@ -240,13 +349,18 @@ export default function ChatWindow() {
     query: string,
   ) {
     if (
-      !knowledgeBaseId ||
-      streaming
+      !knowledgeBaseId
+      || streaming
     ) {
       return;
     }
 
-    setError(null);
+    setError(
+      null,
+    );
+
+    autoScrollRef.current =
+      true;
 
 
     const userMessage:
@@ -280,7 +394,9 @@ export default function ChatWindow() {
 
 
     setMessages(
-      (current) => [
+      (
+        current,
+      ) => [
         ...current,
         userMessage,
         assistantMessage,
@@ -288,7 +404,9 @@ export default function ChatWindow() {
     );
 
 
-    setStreaming(true);
+    setStreaming(
+      true,
+    );
 
 
     try {
@@ -304,7 +422,9 @@ export default function ChatWindow() {
         },
 
         {
-          onToken(token) {
+          onToken(
+            token,
+          ) {
             setMessages(
               (
                 current,
@@ -313,13 +433,14 @@ export default function ChatWindow() {
                   (
                     message,
                   ) =>
-                    message.id ===
-                    assistantId
+                    message.id
+                    === assistantId
                       ? {
                           ...message,
+
                           content:
-                            message.content +
-                            token,
+                            message.content
+                            + token,
                         }
                       : message,
                 ),
@@ -343,10 +464,11 @@ export default function ChatWindow() {
                   (
                     message,
                   ) =>
-                    message.id ===
-                    assistantId
+                    message.id
+                    === assistantId
                       ? {
                           ...message,
+
                           sources:
                             metadata.sources,
                         }
@@ -376,83 +498,97 @@ export default function ChatWindow() {
       );
 
       setMessages(
-        (current) =>
+        (
+          current,
+        ) =>
           current.filter(
-            (message) =>
-              message.id !==
-              assistantId,
+            (
+              message,
+            ) =>
+              message.id
+              !== assistantId,
           ),
       );
 
     } finally {
-      setStreaming(false);
+      setStreaming(
+        false,
+      );
     }
   }
 
 
   return (
-    <div className="grid min-h-[calc(100vh-9rem)] overflow-hidden rounded-xl border bg-white shadow-sm lg:grid-cols-[280px_1fr]">
+    <div className="grid h-full min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm grid-rows-[220px_minmax(0,1fr)] lg:grid-cols-[300px_minmax(0,1fr)] lg:grid-rows-1">
 
-      {/* Conversation History */}
-      <aside className="border-b bg-slate-50 lg:border-r lg:border-b-0">
+      {/* Conversations */}
+      <aside className="min-h-0 overflow-hidden border-b bg-slate-50 lg:border-b-0 lg:border-r">
 
-        {conversationsLoading ? (
-          <div className="p-4 text-sm text-slate-500">
-            Loading conversations...
-          </div>
-        ) : (
-          <ConversationList
-            conversations={
-              conversationList
-            }
-            selectedId={
-              conversationId
-            }
-            onSelect={
-              handleSelectConversation
-            }
-            onNewChat={
-              handleNewChat
-            }
-          />
-        )}
+        {conversationsLoading
+          ? (
+            <div className="p-4 text-sm text-slate-500">
+              Loading conversations...
+            </div>
+          )
+          : (
+            <ConversationList
+              conversations={
+                conversationList
+              }
+              selectedId={
+                conversationId
+              }
+              onSelect={
+                handleSelectConversation
+              }
+              onNewChat={
+                handleNewChat
+              }
+            />
+          )
+        }
 
       </aside>
 
 
-      {/* Chat Area */}
-      <div className="flex min-w-0 flex-col">
+      {/* Chat */}
+      <section className="flex min-h-0 min-w-0 flex-col bg-white">
 
-        {/* Header */}
-        <div className="border-b p-5">
+        {/* Compact chat header */}
+        <header className="shrink-0 border-b border-slate-200 bg-white px-5 py-4">
 
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
 
-            <div>
+            <div className="flex items-center gap-3">
 
-              <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50">
 
                 <MessageSquare className="h-5 w-5 text-blue-600" />
 
-                <h2 className="text-lg font-semibold">
-                  Knowledge Chat
-                </h2>
-
               </div>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Ask questions grounded
-                in your knowledge base.
-              </p>
+
+              <div>
+
+                <h1 className="font-semibold text-slate-900">
+                  Knowledge Chat
+                </h1>
+
+                <p className="text-xs text-slate-500">
+                  Answers grounded in
+                  your knowledge base
+                </p>
+
+              </div>
 
             </div>
 
 
-            <div className="w-full lg:w-72">
+            <div className="w-full xl:w-80">
 
               <label
                 htmlFor="chat-kb"
-                className="text-xs font-medium text-slate-600"
+                className="sr-only"
               >
                 Knowledge Base
               </label>
@@ -463,20 +599,21 @@ export default function ChatWindow() {
                 value={
                   knowledgeBaseId
                 }
-                onChange={(event) =>
+                onChange={(
+                  event,
+                ) =>
                   changeKnowledgeBase(
-                    event.target
-                      .value,
+                    event.target.value,
                   )
                 }
                 disabled={
-                  knowledgeBasesLoading ||
-                  streaming ||
-                  loadingConversation ||
-                  conversationId !==
-                    null
+                  knowledgeBasesLoading
+                  || streaming
+                  || loadingConversation
+                  || conversationId
+                    !== null
                 }
-                className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 disabled:bg-slate-50"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-500"
               >
 
                 <option value="">
@@ -484,24 +621,26 @@ export default function ChatWindow() {
                 </option>
 
 
-                {knowledgeBases?.map(
-                  (
-                    knowledgeBase,
-                  ) => (
-                    <option
-                      key={
-                        knowledgeBase.id
-                      }
-                      value={
-                        knowledgeBase.id
-                      }
-                    >
-                      {
-                        knowledgeBase.name
-                      }
-                    </option>
-                  ),
-                )}
+                {knowledgeBases
+                  ?.map(
+                    (
+                      knowledgeBase,
+                    ) => (
+                      <option
+                        key={
+                          knowledgeBase.id
+                        }
+                        value={
+                          knowledgeBase.id
+                        }
+                      >
+                        {
+                          knowledgeBase.name
+                        }
+                      </option>
+                    ),
+                  )
+                }
 
               </select>
 
@@ -509,72 +648,127 @@ export default function ChatWindow() {
 
           </div>
 
-        </div>
+        </header>
 
 
         {/* Messages */}
-        <div className="flex-1 space-y-5 overflow-y-auto bg-slate-50 p-6">
+        <div
+          ref={
+            messagesContainerRef
+          }
+          onScroll={
+            handleMessagesScroll
+          }
+          className="min-h-0 flex-1 overflow-y-auto bg-slate-50"
+        >
 
-          {loadingConversation && (
-            <p className="text-sm text-slate-500">
-              Loading conversation...
-            </p>
-          )}
+          <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col px-4 py-8 sm:px-6">
 
+            {loadingConversation && (
+              <div className="flex flex-1 items-center justify-center">
 
-          {!loadingConversation &&
-            messages.length ===
-              0 && (
-              <div className="flex h-full min-h-80 items-center justify-center">
-
-                <div className="max-w-md text-center">
-
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
-                    <MessageSquare className="h-6 w-6 text-blue-600" />
-                  </div>
-
-                  <h3 className="mt-4 font-semibold text-slate-900">
-                    Start a conversation
-                  </h3>
-
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Select a knowledge
-                    base and ask a question
-                    about its documents.
-                  </p>
-
-                </div>
+                <p className="text-sm text-slate-500">
+                  Loading conversation...
+                </p>
 
               </div>
             )}
 
 
-          {messages.map(
-            (message) => (
-              <ChatMessageComponent
-                key={
-                  message.id
-                }
-                message={
-                  message
-                }
-              />
-            ),
-          )}
+            {!loadingConversation
+              && messages.length
+              === 0
+              && (
+                <div className="flex flex-1 items-center justify-center">
+
+                  <div className="max-w-md text-center">
+
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50">
+
+                      <MessageSquare className="h-6 w-6 text-blue-600" />
+
+                    </div>
 
 
-          {streaming && (
-            <p className="text-xs text-slate-400">
-              Generating response...
-            </p>
-          )}
+                    <h2 className="mt-4 text-lg font-semibold text-slate-900">
+                      How can I help?
+                    </h2>
 
 
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              {error}
-            </div>
-          )}
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      Select a knowledge
+                      base and ask a
+                      question about its
+                      content.
+                    </p>
+
+                  </div>
+
+                </div>
+              )
+            }
+
+
+            {!loadingConversation
+              && messages.length
+              > 0
+              && (
+                <div className="space-y-7">
+
+                  {messages.map(
+                    (
+                      message,
+                    ) => (
+                      <ChatMessageComponent
+                        key={
+                          message.id
+                        }
+                        message={
+                          message
+                        }
+                      />
+                    ),
+                  )}
+
+
+                  {streaming && (
+                    <p className="pl-12 text-xs text-slate-400">
+                      Generating response...
+                    </p>
+                  )}
+
+
+                  {error && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                      {error}
+                    </div>
+                  )}
+
+                </div>
+              )
+            }
+
+
+            {!loadingConversation
+              && messages.length
+              === 0
+              && error
+              && (
+                <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                  {error}
+                </div>
+              )
+            }
+
+
+            <div
+              ref={
+                messagesEndRef
+              }
+              className="h-px"
+            />
+
+          </div>
 
         </div>
 
@@ -585,13 +779,13 @@ export default function ChatWindow() {
             handleSend
           }
           disabled={
-            !knowledgeBaseId ||
-            streaming ||
-            loadingConversation
+            !knowledgeBaseId
+            || streaming
+            || loadingConversation
           }
         />
 
-      </div>
+      </section>
 
     </div>
   );
