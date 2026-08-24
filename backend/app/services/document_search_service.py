@@ -40,6 +40,7 @@ class DocumentSearchService:
         db: Session,
         knowledge_base_id: UUID,
         query: str,
+        top_k_override: int | None = None,
     ):
         started_at = (
             time.perf_counter()
@@ -63,19 +64,40 @@ class DocumentSearchService:
             )
 
         #
-        # effective_top_k resolves:
+        # Resolve top_k.
         #
-        # KB top_k
-        #     if configured
+        # Normal application retrieval:
         #
-        # otherwise
+        #     KB top_k
+        #         if configured
         #
-        # settings.TOP_K
+        #     otherwise
+        #
+        #     settings.TOP_K
+        #
+        # Evaluation retrieval may provide
+        # top_k_override so different K
+        # values can be tested without
+        # modifying the Knowledge Base.
         #
         top_k = (
-            knowledge_base
+            top_k_override
+            if top_k_override
+            is not None
+            else knowledge_base
             .effective_top_k
         )
+
+        #
+        # Protect the repository from
+        # invalid explicit evaluation
+        # configuration.
+        #
+        if top_k < 1:
+            raise ValueError(
+                "top_k must be "
+                "greater than 0."
+            )
 
         embedding_started_at = (
             time.perf_counter()
@@ -132,12 +154,14 @@ class DocumentSearchService:
             "kb=%s "
             "results=%s "
             "top_k=%s "
+            "top_k_override=%s "
             "embedding_ms=%.2f "
             "repository_ms=%.2f "
             "total_ms=%.2f",
             knowledge_base_id,
             len(results),
             top_k,
+            top_k_override,
             embedding_elapsed_ms,
             repository_elapsed_ms,
             total_elapsed_ms,

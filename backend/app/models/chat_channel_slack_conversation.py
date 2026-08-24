@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     ForeignKey,
+    Index,
     String,
     UniqueConstraint,
 )
@@ -38,6 +39,9 @@ class ChatChannelSlackConversation(
 
     __table_args__ = (
         UniqueConstraint(
+            "conversation_id",
+        ),
+        UniqueConstraint(
             "channel_id",
             "slack_team_id",
             "slack_channel_id",
@@ -46,9 +50,16 @@ class ChatChannelSlackConversation(
                 "uq_slack_conversation_thread"
             ),
         ),
+        Index(
+            "ix_chat_channel_slack_conversation_conversation_id",
+            "conversation_id",
+            unique=True,
+        ),
     )
 
-    channel_id: Mapped[UUID] = mapped_column(
+    channel_id: Mapped[
+        UUID
+    ] = mapped_column(
         ForeignKey(
             "chat_channel.id",
             ondelete="CASCADE",
@@ -65,23 +76,27 @@ class ChatChannelSlackConversation(
             ondelete="CASCADE",
         ),
         nullable=False,
-        unique=True,
-        index=True,
     )
 
-    slack_team_id: Mapped[str] = mapped_column(
+    slack_team_id: Mapped[
+        str
+    ] = mapped_column(
         String(64),
         nullable=False,
         index=True,
     )
 
-    slack_channel_id: Mapped[str] = mapped_column(
+    slack_channel_id: Mapped[
+        str
+    ] = mapped_column(
         String(64),
         nullable=False,
         index=True,
     )
 
-    slack_thread_ts: Mapped[str] = mapped_column(
+    slack_thread_ts: Mapped[
+        str
+    ] = mapped_column(
         String(64),
         nullable=False,
         index=True,
