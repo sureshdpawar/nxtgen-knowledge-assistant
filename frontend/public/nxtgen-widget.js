@@ -19,11 +19,24 @@
     return;
   }
 
+  /*
+   * Storage is scoped by ChatChannel.
+   *
+   * sessionStorage gives us:
+   *
+   * - navigation in same tab -> retained
+   * - refresh -> retained
+   * - new tab -> new conversation
+   * - closing tab -> conversation removed
+   */
   const storagePrefix =
     `nxtgen-widget:${channelId}`;
 
   const sessionKey =
     `${storagePrefix}:session`;
+
+  const messagesKey =
+    `${storagePrefix}:messages`;
 
   let widgetConfig = null;
   let visitorToken = null;
@@ -73,33 +86,72 @@
       box-sizing: border-box;
     }
 
+    /*
+     * Launcher
+     */
+
     .nxtgen-launcher {
-      width: 56px;
-      height: 56px;
+      min-width: 108px;
+      height: 48px;
       border: none;
       border-radius: 999px;
-      background: #111827;
+      background: #475569;
       color: #ffffff;
       cursor: pointer;
-      font-size: 24px;
+      padding: 0 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
       box-shadow:
-        0 12px 30px
-        rgba(0, 0, 0, 0.22);
+        0 10px 28px
+        rgba(15, 23, 42, 0.18);
+      transition:
+        background 0.2s ease,
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
     }
+
+    .nxtgen-launcher:hover {
+      background: #334155;
+      transform: translateY(-1px);
+      box-shadow:
+        0 14px 32px
+        rgba(15, 23, 42, 0.22);
+    }
+
+    .nxtgen-launcher:active {
+      transform: translateY(0);
+    }
+
+    .nxtgen-launcher-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    /*
+     * Main panel
+     */
 
     .nxtgen-panel {
       position: absolute;
       right: 0;
-      bottom: 72px;
+      bottom: 62px;
       width: 380px;
       height: 560px;
       background: #ffffff;
-      border: 1px solid #e5e7eb;
+      border: 1px solid #e2e8f0;
       border-radius: 18px;
       overflow: hidden;
       box-shadow:
         0 20px 60px
-        rgba(0, 0, 0, 0.22);
+        rgba(15, 23, 42, 0.18);
       display: none;
       flex-direction: column;
     }
@@ -108,43 +160,100 @@
       display: flex;
     }
 
+    /*
+     * Header
+     */
+
     .nxtgen-header {
-      padding: 16px 18px;
-      background: #111827;
+      padding: 15px 18px;
+      background: #475569;
       color: #ffffff;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .nxtgen-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .nxtgen-header-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background:
+        rgba(255, 255, 255, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 15px;
+    }
+
+    .nxtgen-header-text {
+      min-width: 0;
     }
 
     .nxtgen-header-title {
       font-size: 15px;
       font-weight: 600;
+      line-height: 1.25;
       min-width: 0;
       overflow-wrap: anywhere;
       word-break: break-word;
     }
 
+    .nxtgen-header-status {
+      margin-top: 2px;
+      font-size: 11px;
+      color: #e2e8f0;
+    }
+
     .nxtgen-close {
+      width: 32px;
+      height: 32px;
       border: none;
+      border-radius: 8px;
       background: transparent;
       color: #ffffff;
       cursor: pointer;
-      font-size: 20px;
+      font-size: 21px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       flex-shrink: 0;
+      transition:
+        background 0.2s ease;
     }
+
+    .nxtgen-close:hover {
+      background:
+        rgba(255, 255, 255, 0.12);
+    }
+
+    /*
+     * Messages
+     */
 
     .nxtgen-messages {
       flex: 1;
       min-width: 0;
+      min-height: 0;
       overflow-y: auto;
       overflow-x: hidden;
-      padding: 16px;
-      background: #f9fafb;
+      padding: 18px 16px;
+      background: #f8fafc;
+      scroll-behavior: smooth;
     }
 
     .nxtgen-message {
-      max-width: 82%;
+      max-width: 84%;
       min-width: 0;
       padding: 10px 12px;
       margin-bottom: 12px;
@@ -152,23 +261,29 @@
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       word-break: break-word;
-      line-height: 1.45;
+      line-height: 1.5;
       font-size: 14px;
     }
 
     .nxtgen-message.user {
       margin-left: auto;
-      background: #111827;
+      background: #64748b;
       color: #ffffff;
       border-bottom-right-radius: 4px;
+      box-shadow:
+        0 2px 6px
+        rgba(15, 23, 42, 0.08);
     }
 
     .nxtgen-message.assistant {
       margin-right: auto;
       background: #ffffff;
-      color: #111827;
-      border: 1px solid #e5e7eb;
+      color: #0f172a;
+      border: 1px solid #e2e8f0;
       border-bottom-left-radius: 4px;
+      box-shadow:
+        0 1px 3px
+        rgba(15, 23, 42, 0.04);
     }
 
     .nxtgen-message.error {
@@ -176,7 +291,12 @@
       background: #fef2f2;
       color: #991b1b;
       border: 1px solid #fecaca;
+      border-bottom-left-radius: 4px;
     }
+
+    /*
+     * Sources
+     */
 
     .nxtgen-sources {
       width: 100%;
@@ -184,16 +304,16 @@
       min-width: 0;
       margin-top: 10px;
       padding-top: 10px;
-      border-top: 1px solid #e5e7eb;
+      border-top: 1px solid #e2e8f0;
       font-size: 12px;
       line-height: 1.4;
-      color: #6b7280;
+      color: #64748b;
       overflow: hidden;
     }
 
     .nxtgen-sources-title {
       font-weight: 600;
-      color: #4b5563;
+      color: #475569;
       margin-bottom: 4px;
     }
 
@@ -207,12 +327,25 @@
       white-space: normal;
     }
 
+    /*
+     * Composer
+     */
+
+    .nxtgen-composer {
+      flex-shrink: 0;
+      background: #ffffff;
+      border-top: 1px solid #e2e8f0;
+    }
+
     .nxtgen-input-row {
       display: flex;
       gap: 8px;
-      padding: 12px;
-      border-top: 1px solid #e5e7eb;
+      padding:
+        12px
+        12px
+        6px;
       background: #ffffff;
+      align-items: flex-end;
     }
 
     .nxtgen-input {
@@ -221,32 +354,86 @@
       resize: none;
       min-height: 42px;
       max-height: 100px;
-      border: 1px solid #d1d5db;
-      border-radius: 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
       padding: 10px 12px;
       font: inherit;
+      font-size: 14px;
+      line-height: 1.4;
+      color: #0f172a;
+      background: #ffffff;
       outline: none;
+      transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+    }
+
+    .nxtgen-input::placeholder {
+      color: #94a3b8;
     }
 
     .nxtgen-input:focus {
-      border-color: #111827;
+      border-color: #64748b;
+      box-shadow:
+        0 0 0 2px
+        rgba(100, 116, 139, 0.12);
+    }
+
+    .nxtgen-input:disabled {
+      background: #f8fafc;
+      cursor: not-allowed;
     }
 
     .nxtgen-send {
+      min-width: 64px;
+      height: 42px;
       border: none;
       border-radius: 10px;
-      background: #111827;
+      background: #475569;
       color: #ffffff;
-      padding: 0 16px;
+      padding: 0 14px;
       cursor: pointer;
       font-weight: 600;
+      font-size: 13px;
       flex-shrink: 0;
+      transition:
+        background 0.2s ease;
+    }
+
+    .nxtgen-send:hover:not(:disabled) {
+      background: #334155;
     }
 
     .nxtgen-send:disabled {
-      opacity: 0.5;
+      opacity: 0.45;
       cursor: default;
     }
+
+    /*
+     * Powered by
+     */
+
+    .nxtgen-powered-by {
+      padding:
+        3px
+        12px
+        10px;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      background: #ffffff;
+    }
+
+    .nxtgen-powered-by strong {
+      font-weight: 600;
+      color: #64748b;
+    }
+
+    /*
+     * Mobile
+     */
 
     @media (max-width: 480px) {
       #nxtgen-chat-widget {
@@ -254,12 +441,18 @@
         bottom: 12px;
       }
 
+      .nxtgen-launcher {
+        min-width: 100px;
+        height: 46px;
+        padding: 0 15px;
+      }
+
       .nxtgen-panel {
         position: fixed;
         left: 12px;
         right: 12px;
         top: 12px;
-        bottom: 80px;
+        bottom: 70px;
         width: auto;
         height: auto;
       }
@@ -272,9 +465,27 @@
 
   root.innerHTML = `
     <div class="nxtgen-panel">
+
       <div class="nxtgen-header">
-        <div class="nxtgen-header-title">
-          Assistant
+
+        <div class="nxtgen-header-left">
+
+          <div class="nxtgen-header-icon">
+            ✦
+          </div>
+
+          <div class="nxtgen-header-text">
+
+            <div class="nxtgen-header-title">
+              Assistant
+            </div>
+
+            <div class="nxtgen-header-status">
+              AI-powered assistant
+            </div>
+
+          </div>
+
         </div>
 
         <button
@@ -284,33 +495,56 @@
         >
           ×
         </button>
+
       </div>
 
       <div class="nxtgen-messages">
       </div>
 
-      <div class="nxtgen-input-row">
-        <textarea
-          class="nxtgen-input"
-          rows="1"
-          placeholder="Ask a question..."
-        ></textarea>
+      <div class="nxtgen-composer">
 
-        <button
-          type="button"
-          class="nxtgen-send"
-        >
-          Send
-        </button>
+        <div class="nxtgen-input-row">
+
+          <textarea
+            class="nxtgen-input"
+            rows="1"
+            placeholder="Ask a question..."
+          ></textarea>
+
+          <button
+            type="button"
+            class="nxtgen-send"
+          >
+            Send
+          </button>
+
+        </div>
+
+        <div class="nxtgen-powered-by">
+          Powered by
+          <strong>
+            NXTGEN Innovate Technologies
+          </strong>
+        </div>
+
       </div>
+
     </div>
 
     <button
       type="button"
       class="nxtgen-launcher"
-      aria-label="Open chat"
+      aria-label="Ask AI"
     >
-      ✦
+
+      <span class="nxtgen-launcher-icon">
+        ✦
+      </span>
+
+      <span>
+        Ask AI
+      </span>
+
     </button>
   `;
 
@@ -354,6 +588,46 @@
       messagesElement.scrollHeight;
   }
 
+  /*
+   * Persist rendered conversation for
+   * the current browser tab.
+   */
+  function persistMessages() {
+    try {
+      sessionStorage.setItem(
+        messagesKey,
+        messagesElement.innerHTML
+      );
+    } catch {
+      /*
+       * Chat should continue normally
+       * even if browser storage is blocked.
+       */
+    }
+  }
+
+  function restoreMessages() {
+    try {
+      const stored =
+        sessionStorage.getItem(
+          messagesKey
+        );
+
+      if (!stored) {
+        return false;
+      }
+
+      messagesElement.innerHTML =
+        stored;
+
+      scrollToBottom();
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function addMessage(
     role,
     text
@@ -373,6 +647,8 @@
       message
     );
 
+    persistMessages();
+
     scrollToBottom();
 
     return message;
@@ -389,6 +665,19 @@
       !sources.length
     ) {
       return;
+    }
+
+    /*
+     * Prevent duplicated source blocks
+     * if metadata is emitted more than once.
+     */
+    const existingSources =
+      messageElement.querySelector(
+        ".nxtgen-sources"
+      );
+
+    if (existingSources) {
+      existingSources.remove();
     }
 
     const wrapper =
@@ -462,6 +751,8 @@
       wrapper
     );
 
+    persistMessages();
+
     scrollToBottom();
   }
 
@@ -475,7 +766,8 @@
       await fetch(
         `${apiBase}/public/v1/widget/config/${channelId}`,
         {
-          method: "GET",
+          method:
+            "GET",
         }
       );
 
@@ -494,7 +786,15 @@
     inputElement.placeholder =
       widgetConfig.placeholder;
 
+    /*
+     * Restore an existing tab conversation
+     * before showing the welcome message.
+     */
+    const restored =
+      restoreMessages();
+
     if (
+      !restored &&
       widgetConfig.welcome_message
     ) {
       clearMessages();
@@ -526,7 +826,8 @@
       await fetch(
         `${apiBase}/public/v1/widget/session`,
         {
-          method: "POST",
+          method:
+            "POST",
 
           headers: {
             "Content-Type":
@@ -569,11 +870,14 @@
     let eventType =
       "message";
 
-    const dataLines = [];
+    const dataLines =
+      [];
 
     for (
       const line
-      of block.split("\n")
+      of block.split(
+        "\n"
+      )
     ) {
       if (
         line.startsWith(
@@ -581,13 +885,19 @@
         )
       ) {
         let value =
-          line.slice(6);
+          line.slice(
+            6
+          );
 
         if (
-          value.startsWith(" ")
+          value.startsWith(
+            " "
+          )
         ) {
           value =
-            value.slice(1);
+            value.slice(
+              1
+            );
         }
 
         eventType =
@@ -602,24 +912,27 @@
         )
       ) {
         let value =
-          line.slice(5);
+          line.slice(
+            5
+          );
 
         /*
-         * SSE permits one optional
-         * separator space after ":".
+         * SSE permits one optional protocol
+         * space after the colon.
          *
-         * Remove exactly that one
-         * protocol space.
-         *
-         * Do NOT use trim() here.
-         * Additional leading spaces may
-         * belong to the actual LLM token.
+         * Remove only that space because
+         * additional whitespace may belong
+         * to an LLM token.
          */
         if (
-          value.startsWith(" ")
+          value.startsWith(
+            " "
+          )
         ) {
           value =
-            value.slice(1);
+            value.slice(
+              1
+            );
         }
 
         dataLines.push(
@@ -630,17 +943,19 @@
 
     return {
       eventType,
+
       data:
         dataLines.join(
           "\n"
         ),
     };
   }
+
   async function sendMessage() {
     const text =
       inputElement
-      .value
-      .trim();
+        .value
+        .trim();
 
     if (
       !text ||
@@ -658,7 +973,8 @@
       }
     }
 
-    isSending = true;
+    isSending =
+      true;
 
     sendButton.disabled =
       true;
@@ -689,9 +1005,11 @@
           text,
       };
 
-      if (
-        sessionId
-      ) {
+      /*
+       * Continue the same backend
+       * conversation within this tab.
+       */
+      if (sessionId) {
         body.session_id =
           sessionId;
       }
@@ -704,7 +1022,7 @@
               "POST",
 
             headers: {
-              "Authorization":
+              Authorization:
                 `Bearer ${token}`,
 
               "Content-Type":
@@ -736,7 +1054,7 @@
 
       const reader =
         response.body
-        .getReader();
+          .getReader();
 
       const decoder =
         new TextDecoder();
@@ -754,9 +1072,13 @@
         const {
           value,
           done,
-        } = await reader.read();
+        } =
+          await reader.read();
 
         if (done) {
+          buffer +=
+            decoder.decode();
+
           break;
         }
 
@@ -764,7 +1086,8 @@
           decoder.decode(
             value,
             {
-              stream: true,
+              stream:
+                true,
             }
           );
 
@@ -780,8 +1103,7 @@
           !== -1
         ) {
           const block =
-            buffer
-            .slice(
+            buffer.slice(
               0,
               separatorIndex
             );
@@ -801,6 +1123,9 @@
               block
             );
 
+          /*
+           * LLM text token.
+           */
           if (
             event.eventType
             === "message"
@@ -812,11 +1137,17 @@
               .textContent =
                 answer;
 
+            persistMessages();
+
             scrollToBottom();
 
             continue;
           }
 
+          /*
+           * Conversation metadata and
+           * citations.
+           */
           if (
             event.eventType
             === "metadata"
@@ -845,12 +1176,20 @@
                 metadata.sources
               );
             } catch {
-              // Ignore malformed metadata.
+              /*
+               * Ignore malformed metadata.
+               * The answer can still render.
+               */
             }
 
             continue;
           }
 
+          /*
+           * Backend application errors can
+           * be delivered inside the SSE
+           * stream while HTTP remains 200.
+           */
           if (
             event.eventType
             === "error"
@@ -894,6 +1233,8 @@
         assistantMessage
           .textContent =
             "No response received.";
+
+        persistMessages();
       }
     } catch (error) {
       assistantMessage
@@ -904,9 +1245,9 @@
         .textContent =
           error instanceof Error
             ? error.message
-            : (
-              "Something went wrong."
-            );
+            : "Something went wrong.";
+
+      persistMessages();
     } finally {
       isSending =
         false;
@@ -924,15 +1265,11 @@
   }
 
   async function initialize() {
-    if (
-      widgetConfig
-    ) {
+    if (widgetConfig) {
       return true;
     }
 
-    if (
-      isInitializing
-    ) {
+    if (isInitializing) {
       return false;
     }
 
@@ -952,18 +1289,14 @@
   }
 
   async function ensureInitialized() {
-    if (
-      widgetConfig
-    ) {
+    if (widgetConfig) {
       return true;
     }
 
     const initialized =
       await initialize();
 
-    if (
-      initialized
-    ) {
+    if (initialized) {
       return true;
     }
 
@@ -991,18 +1324,16 @@
         isOpen
       );
 
-      if (
-        !isOpen
-      ) {
+      if (!isOpen) {
         return;
       }
 
       const ready =
         await ensureInitialized();
 
-      if (
-        ready
-      ) {
+      if (ready) {
+        scrollToBottom();
+
         inputElement.focus();
       }
     }
@@ -1030,8 +1361,8 @@
     function (event) {
       if (
         event.key
-        === "Enter"
-        && !event.shiftKey
+        === "Enter" &&
+        !event.shiftKey
       ) {
         event.preventDefault();
 
@@ -1043,11 +1374,8 @@
   /*
    * Silent warm-up.
    *
-   * If the API is unavailable while the
-   * frontend is starting, nothing is logged
-   * and nothing alarming is shown.
-   *
-   * Opening the widget retries initialization.
+   * If the API is temporarily unavailable,
+   * opening the widget will retry.
    */
   initialize().catch(
     function () {
