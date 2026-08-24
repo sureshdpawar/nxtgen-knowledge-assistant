@@ -61,9 +61,9 @@ class Settings(BaseSettings):
     #
     # Google Drive
     #
-    GOOGLE_SERVICE_ACCOUNT_FILE: str | None = (
-        None
-    )
+    GOOGLE_SERVICE_ACCOUNT_FILE: (
+        str | None
+    ) = None
 
     #
     # Document processing
@@ -75,23 +75,88 @@ class Settings(BaseSettings):
     #
     # Background ingestion
     #
-    INGESTION_WORKER_POLL_SECONDS: float = 2.0
+    INGESTION_WORKER_POLL_SECONDS: (
+        float
+    ) = 2.0
 
-    INGESTION_JOB_STALE_AFTER_SECONDS: int = 3600
+    INGESTION_JOB_STALE_AFTER_SECONDS: (
+        int
+    ) = 3600
 
-    INGESTION_JOB_MAX_ATTEMPTS: int = 3
+    INGESTION_JOB_MAX_ATTEMPTS: (
+        int
+    ) = 3
 
     #
     # Search
     #
     TOP_K: int = 5
-    
+
+    #
+    # Usage quota platform defaults
+    #
+    # These defaults protect a tenant even
+    # when no tenant-level UsageLimit row
+    # has been configured.
+    #
+    # They represent the platform's
+    # default/free entitlement.
+    #
+
+    DEFAULT_DAILY_MESSAGE_LIMIT: (
+        int
+    ) = 50
+
+    DEFAULT_DAILY_INPUT_TOKEN_LIMIT: (
+        int
+    ) = 50_000
+
+    DEFAULT_DAILY_OUTPUT_TOKEN_LIMIT: (
+        int
+    ) = 20_000
+
+    DEFAULT_DAILY_TOTAL_TOKEN_LIMIT: (
+        int
+    ) = 70_000
+
+    DEFAULT_MONTHLY_MESSAGE_LIMIT: (
+        int
+    ) = 1_000
+
+    DEFAULT_MONTHLY_INPUT_TOKEN_LIMIT: (
+        int
+    ) = 1_000_000
+
+    DEFAULT_MONTHLY_OUTPUT_TOKEN_LIMIT: (
+        int
+    ) = 400_000
+
+    DEFAULT_MONTHLY_TOTAL_TOKEN_LIMIT: (
+        int
+    ) = 1_400_000
+
+    DEFAULT_MAX_INPUT_TOKENS_PER_REQUEST: (
+        int
+    ) = 8_000
+
+    DEFAULT_MAX_OUTPUT_TOKENS_PER_REQUEST: (
+        int
+    ) = 2_048
+
+    DEFAULT_USAGE_TIMEZONE: str = (
+        "UTC"
+    )
+
     #
     # Website widget authentication
     #
-    WEBSITE_WIDGET_TOKEN_SECRET: str = "hJBA8tg8T3Nq2JWJBWh2GEFhpw6Exu4hxXytWg77K11pq45D5MEbnjPMvZJEHTsf"
+    WEBSITE_WIDGET_TOKEN_SECRET: str = (
+        "hJBA8tg8T3Nq2JWJBWh2GEFhpw6Exu4hxXytWg77K11pq45D5MEbnjPMvZJEHTsf"
+    )
 
-    WEBSITE_WIDGET_TOKEN_TTL_MINUTES: int = 30
+    WEBSITE_WIDGET_TOKEN_TTL_MINUTES: (
+        int
+    ) = 30
 
     model_config = SettingsConfigDict(
         env_file=".env",

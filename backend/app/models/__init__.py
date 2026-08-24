@@ -68,6 +68,12 @@ from app.models.eval_experiment import (
 from app.models.eval_result import (
     EvalResult,
 )
+from app.models.usage_limit import (
+    UsageLimit,
+)
+from app.models.llm_usage_event import (
+    LLMUsageEvent,
+)
 
 
 __all__ = [
@@ -99,4 +105,6 @@ __all__ = [
     "EvalCase",
     "EvalExperiment",
     "EvalResult",
+    "UsageLimit",
+    "LLMUsageEvent",
 ]

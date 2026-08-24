@@ -19,6 +19,7 @@ from app.api.v1.routers import (
     tenant_llm_configuration,
 )
 from app.api.v1.routers import tool_definition
+from app.api.v1.routers import usage_limit
 from app.api.v1.routers import user
 
 
@@ -95,4 +96,8 @@ api_router.include_router(
 
 api_router.include_router(
     eval.router,
+)
+
+api_router.include_router(
+    usage_limit.router,
 )

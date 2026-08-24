@@ -1,6 +1,8 @@
 from fastapi import (
     APIRouter,
     Depends,
+    HTTPException,
+    status,
 )
 from fastapi.responses import (
     StreamingResponse,
@@ -10,6 +12,9 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.api.dependencies.rate_limit import (
     enforce_chat_rate_limit,
+)
+from app.exceptions.usage import (
+    UsageQuotaExceededError,
 )
 from app.models.user import User
 from app.schemas.chat import (
@@ -36,8 +41,7 @@ service = ChatService()
         ChatResponse,
 )
 def chat(
-    payload:
-        ChatRequest,
+    payload: ChatRequest,
     db: Session = Depends(
         get_db,
     ),
@@ -45,31 +49,44 @@ def chat(
         enforce_chat_rate_limit,
     ),
 ):
-    result = (
-        service.chat(
-            db=db,
-            tenant_id=
-                current_user.tenant_id,
-            user_id=
-                current_user.id,
-            knowledge_base_id=
-                payload.knowledge_base_id,
-            conversation_id=
-                payload.conversation_id,
-            query=
-                payload.query,
+    try:
+        result = (
+            service.chat(
+                db=db,
+                tenant_id=
+                    current_user.tenant_id,
+                user_id=
+                    current_user.id,
+                knowledge_base_id=
+                    payload
+                    .knowledge_base_id,
+                conversation_id=
+                    payload
+                    .conversation_id,
+                query=
+                    payload.query,
+            )
         )
-    )
+
+    except UsageQuotaExceededError as exc:
+        raise HTTPException(
+            status_code=
+                status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=
+                exc.to_dict(),
+        ) from exc
 
     return ChatResponse(
         conversation_id=
             result[
                 "conversation_id"
             ],
+
         answer=
             result[
                 "answer"
             ],
+
         sources=
             result[
                 "sources"
@@ -81,8 +98,7 @@ def chat(
     "/stream",
 )
 def chat_stream(
-    payload:
-        ChatRequest,
+    payload: ChatRequest,
     db: Session = Depends(
         get_db,
     ),
@@ -98,9 +114,11 @@ def chat_stream(
             user_id=
                 current_user.id,
             knowledge_base_id=
-                payload.knowledge_base_id,
+                payload
+                .knowledge_base_id,
             conversation_id=
-                payload.conversation_id,
+                payload
+                .conversation_id,
             query=
                 payload.query,
         )

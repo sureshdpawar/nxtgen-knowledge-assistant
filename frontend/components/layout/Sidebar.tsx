@@ -9,10 +9,10 @@ import {
   BrainCircuit,
   Cable,
   Database,
+  Gauge,
   LayoutDashboard,
   MessageSquare,
   Search,
-  Settings,
   Users,
   Wrench,
 } from "lucide-react";
@@ -134,6 +134,16 @@ const menu: MenuItem[] = [
     label: "Users",
     href: "/users",
     icon: Users,
+    roles: [
+      "ADMIN",
+    ],
+    section: "administration",
+  },
+
+  {
+    label: "Usage & Limits",
+    href: "/usage",
+    icon: Gauge,
     roles: [
       "ADMIN",
     ],
