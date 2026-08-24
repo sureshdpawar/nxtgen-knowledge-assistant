@@ -18,6 +18,21 @@ export interface KnowledgeBase {
   description:
     string | null;
 
+  /*
+   * KB-level RAG overrides.
+   *
+   * null means:
+   * inherit the platform default.
+   */
+  chunk_size:
+    number | null;
+
+  chunk_overlap:
+    number | null;
+
+  top_k:
+    number | null;
+
   status: string;
 
   visibility:
@@ -36,6 +51,15 @@ export interface CreateKnowledgeBaseRequest {
 
   visibility:
     Visibility;
+
+  chunk_size?:
+    number | null;
+
+  chunk_overlap?:
+    number | null;
+
+  top_k?:
+    number | null;
 }
 
 
@@ -46,6 +70,15 @@ export interface UpdateKnowledgeBaseRequest {
 
   visibility:
     Visibility;
+
+  chunk_size?:
+    number | null;
+
+  chunk_overlap?:
+    number | null;
+
+  top_k?:
+    number | null;
 }
 
 

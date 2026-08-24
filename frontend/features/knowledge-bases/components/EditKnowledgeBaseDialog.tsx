@@ -15,10 +15,14 @@ import {
 
 import {
   knowledgeBaseSchema,
+  PLATFORM_DEFAULT_CHUNK_OVERLAP,
+  PLATFORM_DEFAULT_CHUNK_SIZE,
+  PLATFORM_DEFAULT_TOP_K,
 } from "../schemas";
 
 import type {
   KnowledgeBaseForm,
+  KnowledgeBaseFormInput,
 } from "../schemas";
 
 import type {
@@ -81,12 +85,17 @@ export default function EditKnowledgeBaseDialog({
     register,
     handleSubmit,
     reset,
+
     formState: {
       errors,
       isSubmitting,
     },
   } =
-    useForm<KnowledgeBaseForm>({
+    useForm<
+      KnowledgeBaseFormInput,
+      unknown,
+      KnowledgeBaseForm
+    >({
       resolver:
         zodResolver(
           knowledgeBaseSchema,
@@ -134,6 +143,15 @@ export default function EditKnowledgeBaseDialog({
 
       visibility:
         knowledgeBase.visibility,
+
+      chunk_size:
+        knowledgeBase.chunk_size,
+
+      chunk_overlap:
+        knowledgeBase.chunk_overlap,
+
+      top_k:
+        knowledgeBase.top_k,
     });
 
     setSelectedProfileId(
@@ -183,8 +201,10 @@ export default function EditKnowledgeBaseDialog({
       );
 
     } catch {
-      // Errors are displayed
-      // below.
+      //
+      // Errors are handled by
+      // the mutation / parent UI.
+      //
     }
   }
 
@@ -226,7 +246,7 @@ export default function EditKnowledgeBaseDialog({
       }
     >
 
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-2xl">
 
         <DialogHeader>
 
@@ -272,7 +292,8 @@ export default function EditKnowledgeBaseDialog({
             {errors.name && (
               <p className="mt-1 text-sm text-red-500">
                 {
-                  errors.name
+                  errors
+                    .name
                     .message
                 }
               </p>
@@ -306,6 +327,174 @@ export default function EditKnowledgeBaseDialog({
                 }
               </p>
             )}
+
+          </div>
+
+
+          <div className="border-t pt-5">
+
+            <h3 className="text-sm font-semibold text-slate-900">
+              RAG Configuration
+            </h3>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Leave a field blank to
+              inherit the platform
+              default.
+            </p>
+
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+
+              <div>
+
+                <Label
+                  htmlFor="edit-chunk-size"
+                >
+                  Chunk Size
+                </Label>
+
+                <Input
+                  id="edit-chunk-size"
+                  type="number"
+                  min={100}
+                  max={4000}
+                  placeholder={
+                    String(
+                      PLATFORM_DEFAULT_CHUNK_SIZE,
+                    )
+                  }
+                  {...register(
+                    "chunk_size",
+                  )}
+                />
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Platform default:{" "}
+                  {
+                    PLATFORM_DEFAULT_CHUNK_SIZE
+                  }
+                </p>
+
+                {errors.chunk_size && (
+                  <p className="mt-1 text-xs text-red-500">
+                    {
+                      errors
+                        .chunk_size
+                        .message
+                    }
+                  </p>
+                )}
+
+              </div>
+
+
+              <div>
+
+                <Label
+                  htmlFor="edit-chunk-overlap"
+                >
+                  Chunk Overlap
+                </Label>
+
+                <Input
+                  id="edit-chunk-overlap"
+                  type="number"
+                  min={0}
+                  max={1000}
+                  placeholder={
+                    String(
+                      PLATFORM_DEFAULT_CHUNK_OVERLAP,
+                    )
+                  }
+                  {...register(
+                    "chunk_overlap",
+                  )}
+                />
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Platform default:{" "}
+                  {
+                    PLATFORM_DEFAULT_CHUNK_OVERLAP
+                  }
+                </p>
+
+                {errors.chunk_overlap && (
+                  <p className="mt-1 text-xs text-red-500">
+                    {
+                      errors
+                        .chunk_overlap
+                        .message
+                    }
+                  </p>
+                )}
+
+              </div>
+
+
+              <div>
+
+                <Label
+                  htmlFor="edit-top-k"
+                >
+                  Top K
+                </Label>
+
+                <Input
+                  id="edit-top-k"
+                  type="number"
+                  min={1}
+                  max={20}
+                  placeholder={
+                    String(
+                      PLATFORM_DEFAULT_TOP_K,
+                    )
+                  }
+                  {...register(
+                    "top_k",
+                  )}
+                />
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Platform default:{" "}
+                  {
+                    PLATFORM_DEFAULT_TOP_K
+                  }
+                </p>
+
+                {errors.top_k && (
+                  <p className="mt-1 text-xs text-red-500">
+                    {
+                      errors
+                        .top_k
+                        .message
+                    }
+                  </p>
+                )}
+
+              </div>
+
+            </div>
+
+
+            <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
+
+              Changing Top K takes effect
+              immediately.
+
+              {" "}
+
+              Changing Chunk Size or
+              Chunk Overlap affects new
+              document processing.
+
+              {" "}
+
+              Existing documents must be
+              reprocessed for those
+              chunking changes to apply.
+
+            </div>
 
           </div>
 
@@ -371,15 +560,21 @@ export default function EditKnowledgeBaseDialog({
                       {
                         profile.name
                       }
+
                       {" • "}
+
                       {
-                        profile.model_name
+                        profile
+                          .model_name
                       }
+
                       {
-                        profile.is_default
+                        profile
+                          .is_default
                           ? " (Default)"
                           : ""
                       }
+
                     </option>
                   ),
                 )}
@@ -397,7 +592,8 @@ export default function EditKnowledgeBaseDialog({
 
                 <span className="font-semibold">
                   {
-                    defaultProfile.name
+                    defaultProfile
+                      .name
                   }
                 </span>
 

@@ -53,6 +53,27 @@ from app.models.chat_channel_api_key import (
 from app.models.chat_channel_slack_credential import (
     ChatChannelSlackCredential,
 )
+from app.models.chat_channel_slack_conversation import (
+    ChatChannelSlackConversation,
+)
+from app.models.eval_dataset import (
+    EvalDataset,
+)
+from app.models.eval_case import (
+    EvalCase,
+)
+from app.models.eval_experiment import (
+    EvalExperiment,
+)
+from app.models.eval_result import (
+    EvalResult,
+)
+from app.models.usage_limit import (
+    UsageLimit,
+)
+from app.models.llm_usage_event import (
+    LLMUsageEvent,
+)
 
 
 __all__ = [
@@ -79,4 +100,11 @@ __all__ = [
     "ChatChannel",
     "ChatChannelApiKey",
     "ChatChannelSlackCredential",
+    "ChatChannelSlackConversation",
+    "EvalDataset",
+    "EvalCase",
+    "EvalExperiment",
+    "EvalResult",
+    "UsageLimit",
+    "LLMUsageEvent",
 ]

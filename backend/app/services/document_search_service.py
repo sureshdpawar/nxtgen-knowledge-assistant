@@ -5,7 +5,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.exceptions.knowledge_base import (
+    KnowledgeBaseNotFoundError,
+)
+from app.models.knowledge_base import (
+    KnowledgeBase,
+)
 from app.repositories.document_embedding_repository import (
     DocumentEmbeddingRepository,
 )
@@ -35,10 +40,64 @@ class DocumentSearchService:
         db: Session,
         knowledge_base_id: UUID,
         query: str,
+        top_k_override: int | None = None,
     ):
         started_at = (
             time.perf_counter()
         )
+
+        #
+        # Resolve the Knowledge Base so
+        # retrieval can use its optional
+        # KB-level top_k override.
+        #
+        knowledge_base = (
+            db.get(
+                KnowledgeBase,
+                knowledge_base_id,
+            )
+        )
+
+        if knowledge_base is None:
+            raise (
+                KnowledgeBaseNotFoundError()
+            )
+
+        #
+        # Resolve top_k.
+        #
+        # Normal application retrieval:
+        #
+        #     KB top_k
+        #         if configured
+        #
+        #     otherwise
+        #
+        #     settings.TOP_K
+        #
+        # Evaluation retrieval may provide
+        # top_k_override so different K
+        # values can be tested without
+        # modifying the Knowledge Base.
+        #
+        top_k = (
+            top_k_override
+            if top_k_override
+            is not None
+            else knowledge_base
+            .effective_top_k
+        )
+
+        #
+        # Protect the repository from
+        # invalid explicit evaluation
+        # configuration.
+        #
+        if top_k < 1:
+            raise ValueError(
+                "top_k must be "
+                "greater than 0."
+            )
 
         embedding_started_at = (
             time.perf_counter()
@@ -69,7 +128,8 @@ class DocumentSearchService:
                     knowledge_base_id,
                 query_embedding=
                     query_embedding,
-                top_k=settings.TOP_K,
+                top_k=
+                    top_k,
             )
         )
 
@@ -94,12 +154,14 @@ class DocumentSearchService:
             "kb=%s "
             "results=%s "
             "top_k=%s "
+            "top_k_override=%s "
             "embedding_ms=%.2f "
             "repository_ms=%.2f "
             "total_ms=%.2f",
             knowledge_base_id,
             len(results),
-            settings.TOP_K,
+            top_k,
+            top_k_override,
             embedding_elapsed_ms,
             repository_elapsed_ms,
             total_elapsed_ms,
@@ -112,8 +174,10 @@ class DocumentSearchService:
             logger.warning(
                 "Slow KB search "
                 "kb=%s "
+                "top_k=%s "
                 "total_ms=%.2f",
                 knowledge_base_id,
+                top_k,
                 total_elapsed_ms,
             )
 

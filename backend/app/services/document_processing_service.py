@@ -136,6 +136,7 @@ class DocumentProcessingService:
             )
 
             db.commit()
+
             db.refresh(
                 document,
             )
@@ -144,6 +145,55 @@ class DocumentProcessingService:
                 "Document processing started "
                 "document=%s",
                 document.id,
+            )
+
+            #
+            # Resolve the Knowledge Base
+            # that owns this document.
+            #
+            # Document
+            #   -> KnowledgeSource
+            #   -> KnowledgeBase
+            #
+            knowledge_source = (
+                document.knowledge_source
+            )
+
+            knowledge_base = (
+                knowledge_source
+                .knowledge_base
+            )
+
+            #
+            # Resolve the effective
+            # KB-level RAG configuration.
+            #
+            # If the KB has an override,
+            # the property uses it.
+            #
+            # Otherwise the property falls
+            # back to the platform setting.
+            #
+            chunk_size = (
+                knowledge_base
+                .effective_chunk_size
+            )
+
+            chunk_overlap = (
+                knowledge_base
+                .effective_chunk_overlap
+            )
+
+            logger.info(
+                "Resolved KB chunking config "
+                "document=%s "
+                "kb=%s "
+                "chunk_size=%s "
+                "chunk_overlap=%s",
+                document.id,
+                knowledge_base.id,
+                chunk_size,
+                chunk_overlap,
             )
 
             full_path = (
@@ -223,8 +273,13 @@ class DocumentProcessingService:
             )
 
             raw_chunks = (
-                self.chunking_service.chunk(
-                    pages,
+                self.chunking_service
+                .chunk(
+                    pages=pages,
+                    chunk_size=
+                        chunk_size,
+                    chunk_overlap=
+                        chunk_overlap,
                 )
             )
 
@@ -264,6 +319,7 @@ class DocumentProcessingService:
                     clean_text,
                 ):
                     skipped_chunks += 1
+
                     continue
 
                 chunks.append(
@@ -315,6 +371,14 @@ class DocumentProcessingService:
                 * 1000
             )
 
+            #
+            # Reprocessing behavior:
+            #
+            # Remove the existing vector
+            # representations and chunks
+            # before writing the newly
+            # generated ones.
+            #
             self.embedding_repository.delete_by_document_id(
                 db=db,
                 document_id=document.id,
@@ -355,6 +419,18 @@ class DocumentProcessingService:
                                     "page",
                                     1,
                                 ),
+
+                            #
+                            # Record which
+                            # chunking config
+                            # produced this
+                            # chunk.
+                            #
+                            "chunk_size":
+                                chunk_size,
+
+                            "chunk_overlap":
+                                chunk_overlap,
                         },
                     )
                 )
@@ -386,6 +462,7 @@ class DocumentProcessingService:
             )
 
             db.commit()
+
             db.refresh(
                 document,
             )
@@ -401,6 +478,9 @@ class DocumentProcessingService:
             logger.info(
                 "Document processing completed "
                 "document=%s "
+                "kb=%s "
+                "chunk_size=%s "
+                "chunk_overlap=%s "
                 "raw_chunks=%s "
                 "chunks=%s "
                 "skipped=%s "
@@ -409,6 +489,9 @@ class DocumentProcessingService:
                 "embedding_ms=%.2f "
                 "total_ms=%.2f",
                 document.id,
+                knowledge_base.id,
+                chunk_size,
+                chunk_overlap,
                 len(raw_chunks),
                 len(chunks),
                 skipped_chunks,
@@ -421,6 +504,15 @@ class DocumentProcessingService:
             return {
                 "document_id":
                     document.id,
+
+                "knowledge_base_id":
+                    knowledge_base.id,
+
+                "chunk_size":
+                    chunk_size,
+
+                "chunk_overlap":
+                    chunk_overlap,
 
                 "chunks_created":
                     len(chunks),
