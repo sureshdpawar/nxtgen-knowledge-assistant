@@ -8,6 +8,7 @@ import {
   Building2,
   BrainCircuit,
   Cable,
+  ClipboardCheck,
   Database,
   Gauge,
   LayoutDashboard,
@@ -62,6 +63,16 @@ const menu: MenuItem[] = [
     label: "Knowledge Bases",
     href: "/knowledge-bases",
     icon: Database,
+    roles: [
+      "ADMIN",
+    ],
+    section: "knowledge",
+  },
+
+  {
+    label: "Evaluation",
+    href: "/evaluation",
+    icon: ClipboardCheck,
     roles: [
       "ADMIN",
     ],
@@ -127,7 +138,8 @@ const menu: MenuItem[] = [
     roles: [
       "SUPERADMIN",
     ],
-    section: "administration",
+    section:
+      "administration",
   },
 
   {
@@ -137,7 +149,8 @@ const menu: MenuItem[] = [
     roles: [
       "ADMIN",
     ],
-    section: "administration",
+    section:
+      "administration",
   },
 
   {
@@ -147,7 +160,8 @@ const menu: MenuItem[] = [
     roles: [
       "ADMIN",
     ],
-    section: "administration",
+    section:
+      "administration",
   },
 
   {
@@ -157,15 +171,18 @@ const menu: MenuItem[] = [
     roles: [
       "ADMIN",
     ],
-    section: "administration",
+    section:
+      "administration",
   },
 ];
 
 
 const sectionLabels = {
   main: "",
-  knowledge: "Knowledge",
-  studio: "Agent Studio",
+  knowledge:
+    "Knowledge",
+  studio:
+    "Agent Studio",
   administration:
     "Administration",
 } as const;
@@ -274,8 +291,8 @@ export default function Sidebar() {
               const items =
                 visibleMenu.filter(
                   (item) =>
-                    item.section ===
-                    section,
+                    item.section
+                    === section,
                 );
 
 
