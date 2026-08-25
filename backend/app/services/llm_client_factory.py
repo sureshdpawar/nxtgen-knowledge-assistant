@@ -59,6 +59,68 @@ class LLMClientFactory:
             "is not supported."
         )
 
+    def create_for_configuration(
+        self,
+        db: Session,
+        tenant_id: UUID,
+        configuration_id: UUID,
+    ) -> tuple[
+        OpenAI,
+        TenantLLMConfiguration,
+    ]:
+        """
+        Resolve one explicit tenant LLM profile.
+
+        Evaluation uses this so the evaluator
+        model can be different from the model
+        being evaluated.
+        """
+
+        configuration = (
+            self.repository
+            .get_by_id_and_tenant(
+                db=db,
+
+                tenant_id=
+                    tenant_id,
+
+                configuration_id=
+                    configuration_id,
+            )
+        )
+
+        if configuration is None:
+            raise ValueError(
+                "LLM configuration not found."
+            )
+
+        if not configuration.is_active:
+            raise ValueError(
+                "LLM configuration is inactive."
+            )
+
+        logger.info(
+            "Resolved explicit LLM profile "
+            "'%s' (%s), model '%s', "
+            "provider '%s' for tenant %s",
+            configuration.name,
+            configuration.id,
+            configuration.model_name,
+            configuration.provider.value,
+            tenant_id,
+        )
+
+        client = (
+            self._build_client(
+                configuration
+            )
+        )
+
+        return (
+            client,
+            configuration,
+        )
+
     def create_for_knowledge_base(
         self,
         db: Session,
@@ -98,8 +160,10 @@ class LLMClientFactory:
                 self.repository
                 .get_by_id_and_tenant(
                     db=db,
+
                     tenant_id=
                         tenant_id,
+
                     configuration_id=
                         knowledge_base
                         .llm_configuration_id,
@@ -135,6 +199,7 @@ class LLMClientFactory:
                 self.repository
                 .get_default_by_tenant_id(
                     db=db,
+
                     tenant_id=
                         tenant_id,
                 )
@@ -172,7 +237,7 @@ class LLMClientFactory:
 
         client = (
             self._build_client(
-                configuration,
+                configuration
             )
         )
 
@@ -181,7 +246,6 @@ class LLMClientFactory:
             configuration,
         )
 
-    # Temporary compatibility method.
     def create(
         self,
         db: Session,
@@ -190,12 +254,20 @@ class LLMClientFactory:
         OpenAI,
         TenantLLMConfiguration,
     ]:
+        """
+        Resolve tenant default profile.
+
+        Existing compatibility method and
+        also the default evaluator fallback.
+        """
 
         configuration = (
             self.repository
             .get_default_by_tenant_id(
                 db=db,
-                tenant_id=tenant_id,
+
+                tenant_id=
+                    tenant_id,
             )
         )
 
@@ -225,7 +297,7 @@ class LLMClientFactory:
 
         client = (
             self._build_client(
-                configuration,
+                configuration
             )
         )
 
