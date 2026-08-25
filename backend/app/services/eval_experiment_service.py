@@ -26,6 +26,11 @@ from app.repositories.eval_experiment_repository import (
 from app.repositories.eval_result_repository import (
     EvalResultRepository,
 )
+from app.services.evaluators import (
+    EvaluationInput,
+    EvaluationMetricResult,
+    EvaluatorRegistry,
+)
 from app.services.generation_eval_service import (
     GenerationEvalService,
 )
@@ -57,6 +62,10 @@ class EvalExperimentService:
             GenerationEvalService()
         )
 
+        self.evaluator_registry = (
+            EvaluatorRegistry()
+        )
+
     def _validate_dataset(
         self,
         db: Session,
@@ -64,6 +73,7 @@ class EvalExperimentService:
         knowledge_base_id: UUID,
     ) -> tuple[
         EvalDataset,
+        KnowledgeBase,
         list,
     ]:
         dataset = db.get(
@@ -99,6 +109,7 @@ class EvalExperimentService:
             self.case_repository
             .list_by_dataset_id(
                 db=db,
+
                 dataset_id=
                     dataset_id,
             )
@@ -112,6 +123,7 @@ class EvalExperimentService:
 
         return (
             dataset,
+            knowledge_base,
             cases,
         )
 
@@ -127,6 +139,7 @@ class EvalExperimentService:
             self.experiment_repository
             .get(
                 db=db,
+
                 entity_id=
                     experiment_id,
             )
@@ -148,6 +161,302 @@ class EvalExperimentService:
 
         db.commit()
 
+    def _metric_to_dict(
+        self,
+        result:
+            EvaluationMetricResult,
+    ) -> dict:
+        """
+        Normalize metric output for
+        EvalResult.metrics JSON.
+        """
+
+        return {
+            "score":
+                result.score,
+
+            "passed":
+                result.passed,
+
+            "threshold":
+                result.threshold,
+
+            "reason":
+                result.reason,
+
+            "evaluator_type":
+                result.evaluator_type,
+
+            "evaluator_engine":
+                result.evaluator_engine,
+
+            "metadata":
+                result.metadata,
+        }
+
+    def _aggregate_metric(
+        self,
+        results: list[
+            EvaluationMetricResult
+        ],
+    ) -> dict:
+        """
+        Aggregate one metric across a run.
+
+        Metrics returning score=None are
+        intentionally excluded.
+
+        Example:
+        correctness is excluded for
+        unanswerable cases.
+        """
+
+        scored = [
+            result
+            for result
+            in results
+            if result.score is not None
+        ]
+
+        scored_case_count = len(
+            scored
+        )
+
+        unscored_case_count = (
+            len(results)
+            - scored_case_count
+        )
+
+        if scored_case_count == 0:
+            return {
+                "scored_case_count":
+                    0,
+
+                "unscored_case_count":
+                    unscored_case_count,
+
+                "passed_count":
+                    0,
+
+                "failed_count":
+                    0,
+
+                "average_score":
+                    None,
+
+                "pass_rate":
+                    None,
+            }
+
+        passed_count = sum(
+            1
+            for result
+            in scored
+            if result.passed is True
+        )
+
+        failed_count = (
+            scored_case_count
+            - passed_count
+        )
+
+        average_score = (
+            sum(
+                float(
+                    result.score
+                    or 0.0
+                )
+                for result
+                in scored
+            )
+            / scored_case_count
+        )
+
+        pass_rate = (
+            passed_count
+            / scored_case_count
+        )
+
+        return {
+            "scored_case_count":
+                scored_case_count,
+
+            "unscored_case_count":
+                unscored_case_count,
+
+            "passed_count":
+                passed_count,
+
+            "failed_count":
+                failed_count,
+
+            "average_score":
+                round(
+                    average_score,
+                    4,
+                ),
+
+            "pass_rate":
+                round(
+                    pass_rate,
+                    4,
+                ),
+        }
+
+    def _accumulate_judge_usage(
+        self,
+        result:
+            EvaluationMetricResult,
+        totals: dict,
+    ) -> None:
+        """
+        Add LLM judge usage/latency to
+        run-level totals.
+
+        Skipped deterministic/None metrics
+        simply contribute nothing.
+        """
+
+        metadata = (
+            result.metadata
+            or {}
+        )
+
+        usage = (
+            metadata.get(
+                "usage"
+            )
+            or {}
+        )
+
+        totals[
+            "prompt_tokens"
+        ] += int(
+            usage.get(
+                "prompt_tokens",
+                0,
+            )
+            or 0
+        )
+
+        totals[
+            "completion_tokens"
+        ] += int(
+            usage.get(
+                "completion_tokens",
+                0,
+            )
+            or 0
+        )
+
+        totals[
+            "total_tokens"
+        ] += int(
+            usage.get(
+                "total_tokens",
+                0,
+            )
+            or 0
+        )
+
+        totals[
+            "latency_ms"
+        ] += float(
+            metadata.get(
+                "latency_ms",
+                0.0,
+            )
+            or 0.0
+        )
+
+        if usage:
+            totals[
+                "judge_calls"
+            ] += 1
+
+    def _determine_case_passed(
+        self,
+        retrieval_data: dict,
+        answerable: bool,
+        faithfulness_result:
+            EvaluationMetricResult,
+        relevancy_result:
+            EvaluationMetricResult,
+        correctness_result:
+            EvaluationMetricResult,
+        refusal_result:
+            EvaluationMetricResult,
+        run_judges: bool,
+    ) -> bool | None:
+        """
+        Determine overall case pass.
+
+        When judges are enabled:
+
+        Answerable cases require:
+        - retrieval hit if retrieval GT exists
+        - faithfulness
+        - answer relevancy
+        - correctness
+
+        Unanswerable cases require:
+        - retrieval hit if retrieval GT exists
+        - faithfulness
+        - answer relevancy
+        - refusal correctness
+
+        When judges are disabled:
+        - retrieval Hit@K is used when
+          retrieval ground truth exists
+        - otherwise overall pass is unknown
+        """
+
+        has_retrieval_ground_truth = (
+            retrieval_data.get(
+                "has_retrieval_ground_truth",
+                False,
+            )
+        )
+
+        if not run_judges:
+            if has_retrieval_ground_truth:
+                return (
+                    retrieval_data.get(
+                        "hit_at_k"
+                    )
+                    is True
+                )
+
+            return None
+
+        required_results = [
+            faithfulness_result.passed,
+            relevancy_result.passed,
+        ]
+
+        if answerable:
+            required_results.append(
+                correctness_result.passed
+            )
+
+        else:
+            required_results.append(
+                refusal_result.passed
+            )
+
+        if has_retrieval_ground_truth:
+            required_results.append(
+                retrieval_data.get(
+                    "hit_at_k"
+                )
+            )
+
+        return all(
+            result is True
+            for result
+            in required_results
+        )
+
     def run_retrieval_experiment(
         self,
         db: Session,
@@ -161,16 +470,18 @@ class EvalExperimentService:
                 "top_k must be greater than 0."
             )
 
-        dataset, cases = (
-            self._validate_dataset(
-                db=db,
+        (
+            dataset,
+            knowledge_base,
+            cases,
+        ) = self._validate_dataset(
+            db=db,
 
-                dataset_id=
-                    dataset_id,
+            dataset_id=
+                dataset_id,
 
-                knowledge_base_id=
-                    knowledge_base_id,
-            )
+            knowledge_base_id=
+                knowledge_base_id,
         )
 
         experiment = EvalExperiment(
@@ -178,7 +489,7 @@ class EvalExperimentService:
                 dataset.id,
 
             knowledge_base_id=
-                knowledge_base_id,
+                knowledge_base.id,
 
             name=
                 name,
@@ -211,6 +522,7 @@ class EvalExperimentService:
             self.experiment_repository
             .create(
                 db=db,
+
                 entity=
                     experiment,
             )
@@ -323,6 +635,7 @@ class EvalExperimentService:
 
                 self.result_repository.create(
                     db=db,
+
                     entity=
                         eval_result,
                 )
@@ -386,26 +699,33 @@ class EvalExperimentService:
         knowledge_base_id: UUID,
         name: str,
         top_k: int,
+        evaluator_llm_configuration_id:
+            UUID | None = None,
+        run_judges: bool = True,
     ) -> EvalExperiment:
         """
-        Execute a full RAG evaluation run.
+        Execute full Knowgentiq RAG evaluation.
 
-        Captures:
+        Captures deterministic retrieval metrics:
 
-        - retrieval output
-        - portable source identity
         - Hit@K
         - Reciprocal Rank
         - MRR
-        - actual generated answer
-        - expected answer
+
+        Captures LLM judge metrics:
+
+        - Faithfulness
+        - Answer relevancy
+        - Correctness
+        - Refusal correctness
+
+        Captures performance:
+
         - retrieval latency
         - generation latency
-        - total latency
-        - token usage
-        - LLM profile/model metadata
-
-        LLM-as-a-Judge metrics are added later.
+        - generation token usage
+        - judge latency
+        - judge token usage
         """
 
         if top_k < 1:
@@ -413,16 +733,18 @@ class EvalExperimentService:
                 "top_k must be greater than 0."
             )
 
-        dataset, cases = (
-            self._validate_dataset(
-                db=db,
+        (
+            dataset,
+            knowledge_base,
+            cases,
+        ) = self._validate_dataset(
+            db=db,
 
-                dataset_id=
-                    dataset_id,
+            dataset_id=
+                dataset_id,
 
-                knowledge_base_id=
-                    knowledge_base_id,
-            )
+            knowledge_base_id=
+                knowledge_base_id,
         )
 
         experiment = EvalExperiment(
@@ -463,6 +785,7 @@ class EvalExperimentService:
             self.experiment_repository
             .create(
                 db=db,
+
                 entity=
                     experiment,
             )
@@ -480,11 +803,33 @@ class EvalExperimentService:
 
         retrieval_results = []
 
-        total_prompt_tokens = 0
+        generation_metric_results = {
+            "faithfulness":
+                [],
 
-        total_completion_tokens = 0
+            "answer_relevancy":
+                [],
 
-        total_tokens = 0
+            "correctness":
+                [],
+
+            "refusal_correctness":
+                [],
+        }
+
+        generation_usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
+
+        judge_usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "latency_ms": 0.0,
+            "judge_calls": 0,
+        }
 
         total_retrieval_ms = 0.0
 
@@ -492,12 +837,22 @@ class EvalExperimentService:
 
         total_latency_ms = 0.0
 
-        llm_metadata = None
+        generator_llm_metadata = None
+
+        evaluator_metadata = None
+
+        completed_case_count = 0
+
+        passed_case_count = 0
+
+        failed_case_count = 0
+
+        unscored_case_count = 0
 
         try:
             for eval_case in cases:
                 #
-                # One complete RAG execution.
+                # 1. Execute full RAG pipeline.
                 #
                 generation_data = (
                     self.generation_eval_service
@@ -516,8 +871,8 @@ class EvalExperimentService:
                 )
 
                 #
-                # Score the exact retrieval
-                # that was used for generation.
+                # 2. Score exact retrieval used
+                # by the generator.
                 #
                 retrieval_data = (
                     self.retrieval_eval_service
@@ -571,55 +926,341 @@ class EvalExperimentService:
                     ]
                 )
 
-                llm_metadata = (
+                generator_llm_metadata = (
                     generation_data[
                         "llm"
                     ]
                 )
 
-                total_prompt_tokens += (
+                generation_usage[
+                    "prompt_tokens"
+                ] += int(
                     usage[
                         "prompt_tokens"
                     ]
                 )
 
-                total_completion_tokens += (
+                generation_usage[
+                    "completion_tokens"
+                ] += int(
                     usage[
                         "completion_tokens"
                     ]
                 )
 
-                total_tokens += (
+                generation_usage[
+                    "total_tokens"
+                ] += int(
                     usage[
                         "total_tokens"
                     ]
                 )
 
-                total_retrieval_ms += (
+                total_retrieval_ms += float(
                     latency[
                         "retrieval_ms"
                     ]
                 )
 
-                total_generation_ms += (
+                total_generation_ms += float(
                     latency[
                         "generation_ms"
                     ]
                 )
 
-                total_latency_ms += (
+                total_latency_ms += float(
                     latency[
                         "total_ms"
                     ]
                 )
 
                 #
-                # Per-case metric bundle.
+                # 3. Build common generation
+                # evaluation input.
+                #
+                evaluation_input = (
+                    EvaluationInput(
+                        question=
+                            eval_case.question,
+
+                        actual_answer=
+                            generation_data[
+                                "actual_answer"
+                            ],
+
+                        expected_answer=
+                            eval_case
+                            .expected_answer,
+
+                        retrieved_context=[
+                            item.get(
+                                "text",
+                                "",
+                            )
+                            for item
+                            in generation_data[
+                                "retrieval_context"
+                            ]
+                        ],
+
+                        expected_context=(
+                            [
+                                eval_case
+                                .expected_text
+                            ]
+                            if eval_case
+                            .expected_text
+                            else []
+                        ),
+
+                        metadata={
+                            #
+                            # Runtime-only judge
+                            # dependencies.
+                            #
+                            "db":
+                                db,
+
+                            "tenant_id":
+                                knowledge_base
+                                .tenant_id,
+
+                            "evaluator_llm_configuration_id":
+                                evaluator_llm_configuration_id,
+
+                            #
+                            # Golden metadata.
+                            #
+                            "answerable":
+                                eval_case
+                                .answerable,
+                        },
+                    )
+                )
+
+                #
+                # 4. Run generation-quality
+                # evaluators.
+                #
+                if run_judges:
+                    faithfulness_result = (
+                        self.evaluator_registry
+                        .get(
+                            "faithfulness"
+                        )
+                        .evaluate(
+                            evaluation_input
+                        )
+                    )
+
+                    relevancy_result = (
+                        self.evaluator_registry
+                        .get(
+                            "answer_relevancy"
+                        )
+                        .evaluate(
+                            evaluation_input
+                        )
+                    )
+
+                    correctness_result = (
+                        self.evaluator_registry
+                        .get(
+                            "correctness"
+                        )
+                        .evaluate(
+                            evaluation_input
+                        )
+                    )
+
+                    refusal_result = (
+                        self.evaluator_registry
+                        .get(
+                            "refusal_correctness"
+                        )
+                        .evaluate(
+                            evaluation_input
+                        )
+                    )
+
+                else:
+                    faithfulness_result = (
+                        EvaluationMetricResult(
+                            metric_name=
+                                "faithfulness",
+
+                            score=
+                                None,
+
+                            passed=
+                                None,
+
+                            reason=
+                                "LLM judge evaluation "
+                                "was disabled.",
+
+                            evaluator_type=
+                                "llm_judge",
+
+                            evaluator_engine=
+                                "knowgentiq",
+                        )
+                    )
+
+                    relevancy_result = (
+                        EvaluationMetricResult(
+                            metric_name=
+                                "answer_relevancy",
+
+                            score=
+                                None,
+
+                            passed=
+                                None,
+
+                            reason=
+                                "LLM judge evaluation "
+                                "was disabled.",
+
+                            evaluator_type=
+                                "llm_judge",
+
+                            evaluator_engine=
+                                "knowgentiq",
+                        )
+                    )
+
+                    correctness_result = (
+                        EvaluationMetricResult(
+                            metric_name=
+                                "correctness",
+
+                            score=
+                                None,
+
+                            passed=
+                                None,
+
+                            reason=
+                                "LLM judge evaluation "
+                                "was disabled.",
+
+                            evaluator_type=
+                                "llm_judge",
+
+                            evaluator_engine=
+                                "knowgentiq",
+                        )
+                    )
+
+                    refusal_result = (
+                        EvaluationMetricResult(
+                            metric_name=
+                                "refusal_correctness",
+
+                            score=
+                                None,
+
+                            passed=
+                                None,
+
+                            reason=
+                                "LLM judge evaluation "
+                                "was disabled.",
+
+                            evaluator_type=
+                                "llm_judge",
+
+                            evaluator_engine=
+                                "knowgentiq",
+                        )
+                    )
+
+                generation_metric_results[
+                    "faithfulness"
+                ].append(
+                    faithfulness_result
+                )
+
+                generation_metric_results[
+                    "answer_relevancy"
+                ].append(
+                    relevancy_result
+                )
+
+                generation_metric_results[
+                    "correctness"
+                ].append(
+                    correctness_result
+                )
+
+                generation_metric_results[
+                    "refusal_correctness"
+                ].append(
+                    refusal_result
+                )
+
+                #
+                # Capture evaluator profile from
+                # the first real judge result.
+                #
+                for metric_result in (
+                    faithfulness_result,
+                    relevancy_result,
+                    correctness_result,
+                    refusal_result,
+                ):
+                    metric_evaluator = (
+                        metric_result
+                        .metadata
+                        .get(
+                            "evaluator"
+                        )
+                        if metric_result.metadata
+                        else None
+                    )
+
+                    if (
+                        evaluator_metadata is None
+                        and metric_evaluator
+                    ):
+                        evaluator_metadata = (
+                            metric_evaluator
+                        )
+
+                    self._accumulate_judge_usage(
+                        metric_result,
+                        judge_usage,
+                    )
+
+                #
+                # 5. Build complete per-case
+                # metric bundle.
                 #
                 metrics = {
                     **retrieval_data[
                         "metrics"
                     ],
+
+                    "faithfulness":
+                        self._metric_to_dict(
+                            faithfulness_result
+                        ),
+
+                    "answer_relevancy":
+                        self._metric_to_dict(
+                            relevancy_result
+                        ),
+
+                    "correctness":
+                        self._metric_to_dict(
+                            correctness_result
+                        ),
+
+                    "refusal_correctness":
+                        self._metric_to_dict(
+                            refusal_result
+                        ),
 
                     "latency": {
                         "retrieval_ms":
@@ -674,18 +1315,49 @@ class EvalExperimentService:
                 }
 
                 #
-                # Until generation-quality
-                # judges are added, overall
-                # pass reflects retrieval
-                # when retrieval ground truth
-                # exists.
+                # 6. Determine overall case
+                # regression pass/fail.
                 #
                 case_passed = (
-                    retrieval_data[
-                        "hit_at_k"
-                    ]
+                    self._determine_case_passed(
+                        retrieval_data=
+                            retrieval_data,
+
+                        answerable=
+                            eval_case
+                            .answerable,
+
+                        faithfulness_result=
+                            faithfulness_result,
+
+                        relevancy_result=
+                            relevancy_result,
+
+                        correctness_result=
+                            correctness_result,
+
+                        refusal_result=
+                            refusal_result,
+
+                        run_judges=
+                            run_judges,
+                    )
                 )
 
+                if case_passed is True:
+                    passed_case_count += 1
+
+                elif case_passed is False:
+                    failed_case_count += 1
+
+                else:
+                    unscored_case_count += 1
+
+                completed_case_count += 1
+
+                #
+                # 7. Persist case result.
+                #
                 eval_result = EvalResult(
                     experiment_id=
                         experiment_id,
@@ -734,16 +1406,20 @@ class EvalExperimentService:
                         ],
 
                     correctness_score=
-                        None,
+                        correctness_result
+                        .score,
 
                     faithfulness_score=
-                        None,
+                        faithfulness_result
+                        .score,
 
                     relevancy_score=
-                        None,
+                        relevancy_result
+                        .score,
 
                     refusal_score=
-                        None,
+                        refusal_result
+                        .score,
 
                     passed=
                         case_passed,
@@ -753,33 +1429,34 @@ class EvalExperimentService:
 
                     judge_metadata={
                         #
-                        # Generation model.
+                        # Generator.
                         #
-                        "llm":
+                        "generator":
                             generation_data[
                                 "llm"
                             ],
 
                         #
-                        # Golden answer.
+                        # Judge.
+                        #
+                        "evaluator":
+                            (
+                                evaluator_metadata
+                                if run_judges
+                                else None
+                            ),
+
+                        #
+                        # Golden information.
                         #
                         "expected_answer":
                             eval_case
                             .expected_answer,
 
-                        #
-                        # Whether the question
-                        # should be answerable
-                        # from the KB.
-                        #
                         "answerable":
                             eval_case
                             .answerable,
 
-                        #
-                        # Portable retrieval
-                        # ground truth.
-                        #
                         "expected_sources":
                             eval_case
                             .expected_sources
@@ -787,7 +1464,7 @@ class EvalExperimentService:
 
                         #
                         # Retrieved portable
-                        # source identities.
+                        # identities.
                         #
                         "retrieved_document_external_ids":
                             generation_data[
@@ -795,24 +1472,31 @@ class EvalExperimentService:
                             ],
 
                         #
-                        # Execution metadata.
+                        # Generator execution.
                         #
-                        "usage":
+                        "generation_usage":
                             usage,
 
-                        "latency":
+                        "generation_latency":
                             latency,
+
+                        #
+                        # Whether judges ran.
+                        #
+                        "run_judges":
+                            run_judges,
                     },
                 )
 
                 self.result_repository.create(
                     db=db,
+
                     entity=
                         eval_result,
                 )
 
             #
-            # Retrieval aggregate.
+            # 8. Retrieval aggregate.
             #
             retrieval_aggregate = (
                 self.retrieval_eval_service
@@ -841,8 +1525,10 @@ class EvalExperimentService:
                     / case_count
                 )
 
-                average_tokens = (
-                    total_tokens
+                average_generation_tokens = (
+                    generation_usage[
+                        "total_tokens"
+                    ]
                     / case_count
                 )
 
@@ -853,11 +1539,111 @@ class EvalExperimentService:
 
                 average_total_ms = 0.0
 
-                average_tokens = 0.0
+                average_generation_tokens = 0.0
+
+            if (
+                judge_usage[
+                    "judge_calls"
+                ]
+            ):
+                average_judge_latency_ms = (
+                    judge_usage[
+                        "latency_ms"
+                    ]
+                    / judge_usage[
+                        "judge_calls"
+                    ]
+                )
+
+                average_judge_tokens = (
+                    judge_usage[
+                        "total_tokens"
+                    ]
+                    / judge_usage[
+                        "judge_calls"
+                    ]
+                )
+
+            else:
+                average_judge_latency_ms = 0.0
+
+                average_judge_tokens = 0.0
+
+            #
+            # 9. Generation metric aggregates.
+            #
+            generation_aggregate = {
+                metric_name:
+                    self._aggregate_metric(
+                        metric_results
+                    )
+
+                for (
+                    metric_name,
+                    metric_results,
+                ) in (
+                    generation_metric_results
+                    .items()
+                )
+            }
+
+            total_evaluation_tokens = (
+                generation_usage[
+                    "total_tokens"
+                ]
+                + judge_usage[
+                    "total_tokens"
+                ]
+            )
+
+            #
+            # 10. Overall run outcome.
+            #
+            scored_overall_cases = (
+                passed_case_count
+                + failed_case_count
+            )
+
+            if scored_overall_cases:
+                overall_pass_rate = (
+                    passed_case_count
+                    / scored_overall_cases
+                )
+
+            else:
+                overall_pass_rate = None
 
             aggregate_metrics = {
                 "retrieval":
                     retrieval_aggregate,
+
+                "generation":
+                    generation_aggregate,
+
+                "cases": {
+                    "case_count":
+                        completed_case_count,
+
+                    "passed_count":
+                        passed_case_count,
+
+                    "failed_count":
+                        failed_case_count,
+
+                    "unscored_count":
+                        unscored_case_count,
+
+                    "pass_rate":
+                        (
+                            round(
+                                overall_pass_rate,
+                                4,
+                            )
+                            if overall_pass_rate
+                            is not None
+                            else None
+                        ),
+                },
 
                 "latency": {
                     "total_retrieval_ms":
@@ -872,7 +1658,7 @@ class EvalExperimentService:
                             2,
                         ),
 
-                    "total_ms":
+                    "total_rag_ms":
                         round(
                             total_latency_ms,
                             2,
@@ -890,32 +1676,91 @@ class EvalExperimentService:
                             2,
                         ),
 
-                    "average_total_ms":
+                    "average_rag_ms":
                         round(
                             average_total_ms,
+                            2,
+                        ),
+
+                    "total_judge_ms":
+                        round(
+                            judge_usage[
+                                "latency_ms"
+                            ],
+                            2,
+                        ),
+
+                    "average_judge_call_ms":
+                        round(
+                            average_judge_latency_ms,
                             2,
                         ),
                 },
 
                 "usage": {
-                    "prompt_tokens":
-                        total_prompt_tokens,
+                    "generation": {
+                        "prompt_tokens":
+                            generation_usage[
+                                "prompt_tokens"
+                            ],
 
-                    "completion_tokens":
-                        total_completion_tokens,
+                        "completion_tokens":
+                            generation_usage[
+                                "completion_tokens"
+                            ],
 
-                    "total_tokens":
-                        total_tokens,
+                        "total_tokens":
+                            generation_usage[
+                                "total_tokens"
+                            ],
 
-                    "average_tokens_per_case":
-                        round(
-                            average_tokens,
-                            2,
-                        ),
+                        "average_tokens_per_case":
+                            round(
+                                average_generation_tokens,
+                                2,
+                            ),
+                    },
+
+                    "judge": {
+                        "judge_calls":
+                            judge_usage[
+                                "judge_calls"
+                            ],
+
+                        "prompt_tokens":
+                            judge_usage[
+                                "prompt_tokens"
+                            ],
+
+                        "completion_tokens":
+                            judge_usage[
+                                "completion_tokens"
+                            ],
+
+                        "total_tokens":
+                            judge_usage[
+                                "total_tokens"
+                            ],
+
+                        "average_tokens_per_call":
+                            round(
+                                average_judge_tokens,
+                                2,
+                            ),
+                    },
+
+                    "total_evaluation_tokens":
+                        total_evaluation_tokens,
                 },
 
-                "llm":
-                    llm_metadata,
+                "generator":
+                    generator_llm_metadata,
+
+                "evaluator":
+                    evaluator_metadata,
+
+                "run_judges":
+                    run_judges,
             }
 
             experiment.hit_rate = (
@@ -930,9 +1775,10 @@ class EvalExperimentService:
                 ]
             )
 
-            if llm_metadata:
+            if generator_llm_metadata:
                 experiment.llm_model = (
-                    llm_metadata.get(
+                    generator_llm_metadata
+                    .get(
                         "model"
                     )
                 )
@@ -975,6 +1821,7 @@ class EvalExperimentService:
             self.experiment_repository
             .get(
                 db=db,
+
                 entity_id=
                     experiment_id,
             )
@@ -984,11 +1831,14 @@ class EvalExperimentService:
         self,
         db: Session,
         dataset_id: UUID,
-    ) -> list[EvalExperiment]:
+    ) -> list[
+        EvalExperiment
+    ]:
         return (
             self.experiment_repository
             .list_by_dataset_id(
                 db=db,
+
                 dataset_id=
                     dataset_id,
             )

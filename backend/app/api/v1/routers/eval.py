@@ -21,16 +21,22 @@ from app.repositories.eval_result_repository import (
 from app.schemas.eval import (
     EvalCaseCreate,
     EvalCaseRead,
+    EvalComparisonRead,
+    EvalComparisonRequest,
     EvalDatasetCreate,
     EvalDatasetImportPayload,
     EvalDatasetImportRead,
     EvalDatasetRead,
     EvalExperimentRead,
     EvalExperimentRun,
+    EvalRAGExperimentRun,
     EvalResultRead,
 )
 from app.services.eval_case_service import (
     EvalCaseService,
+)
+from app.services.eval_comparison_service import (
+    EvalComparisonService,
 )
 from app.services.eval_dataset_import_service import (
     EvalDatasetImportService,
@@ -65,6 +71,10 @@ experiment_service = (
     EvalExperimentService()
 )
 
+comparison_service = (
+    EvalComparisonService()
+)
+
 result_repository = (
     EvalResultRepository()
 )
@@ -95,7 +105,9 @@ def create_dataset(
         return (
             dataset_service.create(
                 db=db,
-                payload=payload,
+
+                payload=
+                    payload,
             )
         )
 
@@ -103,6 +115,7 @@ def create_dataset(
         raise HTTPException(
             status_code=
                 status.HTTP_400_BAD_REQUEST,
+
             detail=str(
                 exc
             ),
@@ -130,14 +143,7 @@ async def import_dataset(
     and all golden test cases from one
     UTF-8 JSON file.
 
-    The import is transactional:
-
-    - dataset created
-    - all cases created
-    - commit only if every case succeeds
-
-    If any case is invalid, the entire
-    import is rolled back.
+    The import is transactional.
     """
 
     filename = (
@@ -151,6 +157,7 @@ async def import_dataset(
         raise HTTPException(
             status_code=
                 status.HTTP_400_BAD_REQUEST,
+
             detail=(
                 "Evaluation dataset "
                 "must be a JSON file."
@@ -179,15 +186,6 @@ async def import_dataset(
                 "must use UTF-8 encoding."
             ) from exc
 
-        #
-        # Pydantic handles:
-        #
-        # - JSON parsing
-        # - UUID validation
-        # - required fields
-        # - list validation
-        # - nested case validation
-        #
         payload = (
             EvalDatasetImportPayload
             .model_validate_json(
@@ -199,7 +197,9 @@ async def import_dataset(
             dataset_import_service
             .import_dataset(
                 db=db,
-                payload=payload,
+
+                payload=
+                    payload,
             )
         )
 
@@ -218,6 +218,7 @@ async def import_dataset(
         raise HTTPException(
             status_code=
                 status.HTTP_400_BAD_REQUEST,
+
             detail=str(
                 exc
             ),
@@ -227,6 +228,7 @@ async def import_dataset(
         raise HTTPException(
             status_code=
                 status.HTTP_400_BAD_REQUEST,
+
             detail=(
                 "Unable to import "
                 "evaluation dataset: "
@@ -255,6 +257,7 @@ def list_datasets(
         dataset_service
         .list_by_knowledge_base_id(
             db=db,
+
             knowledge_base_id=
                 knowledge_base_id,
         )
@@ -278,6 +281,7 @@ def get_dataset(
     dataset = (
         dataset_service.get(
             db=db,
+
             dataset_id=
                 dataset_id,
         )
@@ -287,6 +291,7 @@ def get_dataset(
         raise HTTPException(
             status_code=
                 status.HTTP_404_NOT_FOUND,
+
             detail=(
                 "Eval dataset "
                 "not found."
@@ -321,7 +326,9 @@ def create_case(
         return (
             case_service.create(
                 db=db,
-                payload=payload,
+
+                payload=
+                    payload,
             )
         )
 
@@ -329,6 +336,7 @@ def create_case(
         raise HTTPException(
             status_code=
                 status.HTTP_400_BAD_REQUEST,
+
             detail=str(
                 exc
             ),
@@ -354,6 +362,7 @@ def list_cases(
         case_service
         .list_by_dataset_id(
             db=db,
+
             dataset_id=
                 dataset_id,
         )
@@ -361,7 +370,7 @@ def list_cases(
 
 
 #
-# Retrieval Experiments
+# Retrieval Evaluation Runs
 #
 
 
@@ -406,6 +415,7 @@ def run_retrieval_experiment(
         raise HTTPException(
             status_code=
                 status.HTTP_400_BAD_REQUEST,
+
             detail=str(
                 exc
             ),
@@ -413,7 +423,7 @@ def run_retrieval_experiment(
 
 
 #
-# Full RAG Experiments
+# Full RAG Evaluation Runs
 #
 
 
@@ -425,7 +435,8 @@ def run_retrieval_experiment(
         status.HTTP_201_CREATED,
 )
 def run_rag_experiment(
-    payload: EvalExperimentRun,
+    payload:
+        EvalRAGExperimentRun,
     db: Session = Depends(
         get_db,
     ),
@@ -434,21 +445,25 @@ def run_rag_experiment(
     ),
 ):
     """
-    Execute the full RAG pipeline against
-    every test case in an evaluation dataset.
+    Execute a complete RAG evaluation run.
 
-    Captures:
+    Deterministic metrics:
 
-    - retrieval results
     - Hit@K
     - Reciprocal Rank
     - MRR
-    - generated answer
     - latency
     - token usage
-    - LLM configuration metadata
 
-    LLM-as-a-Judge metrics are added later.
+    LLM-as-a-Judge metrics:
+
+    - Faithfulness
+    - Answer relevancy
+    - Correctness
+    - Refusal correctness
+
+    The evaluator LLM profile may be
+    different from the generator profile.
     """
 
     try:
@@ -469,6 +484,13 @@ def run_rag_experiment(
 
                 top_k=
                     payload.top_k,
+
+                evaluator_llm_configuration_id=
+                    payload
+                    .evaluator_llm_configuration_id,
+
+                run_judges=
+                    payload.run_judges,
             )
         )
 
@@ -476,6 +498,7 @@ def run_rag_experiment(
         raise HTTPException(
             status_code=
                 status.HTTP_400_BAD_REQUEST,
+
             detail=str(
                 exc
             ),
@@ -506,6 +529,7 @@ def list_experiments(
         experiment_service
         .list_by_dataset_id(
             db=db,
+
             dataset_id=
                 dataset_id,
         )
@@ -529,6 +553,7 @@ def get_experiment(
     experiment = (
         experiment_service.get(
             db=db,
+
             experiment_id=
                 experiment_id,
         )
@@ -538,6 +563,7 @@ def get_experiment(
         raise HTTPException(
             status_code=
                 status.HTTP_404_NOT_FOUND,
+
             detail=(
                 "Eval experiment "
                 "not found."
@@ -545,6 +571,73 @@ def get_experiment(
         )
 
     return experiment
+
+
+#
+# Compare Evaluation Runs
+#
+
+
+@router.post(
+    "/experiments/compare",
+    response_model=
+        EvalComparisonRead,
+)
+def compare_experiments(
+    payload:
+        EvalComparisonRequest,
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    """
+    Compare a candidate evaluation run
+    against a baseline run.
+
+    V1 requires:
+
+    - same evaluation dataset
+    - same Knowledge Base
+    - same evaluation type
+    - both runs completed
+
+    Returns:
+
+    - aggregate metric differences
+    - improved metrics
+    - regressed metrics
+    - improved test cases
+    - regressed test cases
+    - unchanged test cases
+    """
+
+    try:
+        return (
+            comparison_service.compare(
+                db=db,
+
+                baseline_experiment_id=
+                    payload
+                    .baseline_experiment_id,
+
+                candidate_experiment_id=
+                    payload
+                    .candidate_experiment_id,
+            )
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=
+                status.HTTP_400_BAD_REQUEST,
+
+            detail=str(
+                exc
+            ),
+        ) from exc
 
 
 #
@@ -571,6 +664,7 @@ def list_results(
     experiment = (
         experiment_service.get(
             db=db,
+
             experiment_id=
                 experiment_id,
         )
@@ -580,6 +674,7 @@ def list_results(
         raise HTTPException(
             status_code=
                 status.HTTP_404_NOT_FOUND,
+
             detail=(
                 "Eval experiment "
                 "not found."
@@ -590,6 +685,7 @@ def list_results(
         result_repository
         .list_by_experiment_id(
             db=db,
+
             experiment_id=
                 experiment_id,
         )

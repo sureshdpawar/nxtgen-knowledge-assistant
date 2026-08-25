@@ -37,7 +37,9 @@ class EvalDatasetCreate(
         max_length=50,
     )
 
-    description: str | None = None
+    description: (
+        str | None
+    ) = None
 
 
 class EvalDatasetRead(
@@ -55,7 +57,9 @@ class EvalDatasetRead(
 
     version: str
 
-    description: str | None
+    description: (
+        str | None
+    )
 
 
 class EvalCaseCreate(
@@ -131,6 +135,11 @@ class EvalCaseRead(
 class EvalExperimentRun(
     BaseModel
 ):
+    """
+    Request for retrieval-only
+    evaluation runs.
+    """
+
     dataset_id: UUID
 
     knowledge_base_id: UUID
@@ -144,6 +153,37 @@ class EvalExperimentRun(
         ge=1,
         le=100,
     )
+
+
+class EvalRAGExperimentRun(
+    EvalExperimentRun
+):
+    """
+    Request for full RAG evaluation.
+
+    evaluator_llm_configuration_id:
+
+    - supplied:
+        use that tenant LLM profile
+        as the evaluator/judge
+
+    - null:
+        use tenant default LLM profile
+
+    run_judges:
+
+    - true:
+        run generation-quality metrics
+
+    - false:
+        run RAG without LLM judges
+    """
+
+    evaluator_llm_configuration_id: (
+        UUID | None
+    ) = None
+
+    run_judges: bool = True
 
 
 class EvalExperimentRead(
@@ -329,3 +369,242 @@ class EvalDatasetImportRead(
     dataset: EvalDatasetRead
 
     case_count: int
+
+
+#
+# Evaluation comparison
+#
+
+
+class EvalComparisonRequest(
+    BaseModel
+):
+    baseline_experiment_id: UUID
+
+    candidate_experiment_id: UUID
+
+
+class EvalComparisonMetricRead(
+    BaseModel
+):
+    metric: str
+
+    baseline: (
+        float
+        | int
+        | None
+    )
+
+    candidate: (
+        float
+        | int
+        | None
+    )
+
+    delta: (
+        float | None
+    )
+
+    higher_is_better: bool
+
+    outcome: str
+
+
+class EvalComparisonRunRead(
+    BaseModel
+):
+    id: UUID
+
+    name: str
+
+    dataset_id: UUID
+
+    knowledge_base_id: UUID
+
+    eval_type: str
+
+    status: str
+
+    top_k: int
+
+    embedding_model: (
+        str | None
+    )
+
+    llm_model: (
+        str | None
+    )
+
+    hit_rate: (
+        float | None
+    )
+
+    mrr: (
+        float | None
+    )
+
+    faithfulness: (
+        float | None
+    )
+
+    answer_relevancy: (
+        float | None
+    )
+
+    correctness: (
+        float | None
+    )
+
+    refusal_correctness: (
+        float | None
+    )
+
+    pass_rate: (
+        float | None
+    )
+
+    average_rag_ms: (
+        float | None
+    )
+
+    generation_tokens: (
+        int | None
+    )
+
+    judge_tokens: (
+        int | None
+    )
+
+    total_evaluation_tokens: (
+        int | None
+    )
+
+    generator: (
+        dict | None
+    )
+
+    evaluator: (
+        dict | None
+    )
+
+
+class EvalComparisonCaseRunRead(
+    BaseModel
+):
+    eval_case_id: UUID
+
+    question: (
+        str | None
+    )
+
+    answerable: (
+        bool | None
+    )
+
+    passed: (
+        bool | None
+    )
+
+    hit_at_k: (
+        bool | None
+    )
+
+    expected_rank: (
+        int | None
+    )
+
+    reciprocal_rank: (
+        float | None
+    )
+
+    faithfulness: (
+        float | None
+    )
+
+    answer_relevancy: (
+        float | None
+    )
+
+    correctness: (
+        float | None
+    )
+
+    refusal_correctness: (
+        float | None
+    )
+
+    quality_score: (
+        float | None
+    )
+
+    actual_answer: (
+        str | None
+    )
+
+
+class EvalComparisonCaseRead(
+    BaseModel
+):
+    eval_case_id: UUID
+
+    question: (
+        str | None
+    )
+
+    answerable: (
+        bool | None
+    )
+
+    outcome: str
+
+    quality_delta: (
+        float | None
+    )
+
+    baseline:EvalComparisonCaseRunRead
+
+    candidate:EvalComparisonCaseRunRead
+
+
+class EvalComparisonSummaryRead(
+    BaseModel
+):
+    improved_metric_count: int
+
+    regressed_metric_count: int
+
+    unchanged_metric_count: int
+
+    improved_case_count: int
+
+    regressed_case_count: int
+
+    unchanged_case_count: int
+
+    compared_case_count: int
+
+
+class EvalComparisonRead(
+    BaseModel
+):
+    baseline:EvalComparisonRunRead
+
+    candidate:EvalComparisonRunRead
+
+    summary:EvalComparisonSummaryRead
+
+    metrics: list[
+        EvalComparisonMetricRead
+    ]
+
+    improved_cases: list[
+        EvalComparisonCaseRead
+    ]
+
+    regressed_cases: list[
+        EvalComparisonCaseRead
+    ]
+
+    unchanged_cases: list[
+        EvalComparisonCaseRead
+    ]

@@ -1,6 +1,12 @@
 from app.services.evaluators.base import (
     BaseEvaluator,
 )
+from app.services.evaluators.generation import (
+    AnswerRelevancyEvaluator,
+    CorrectnessEvaluator,
+    FaithfulnessEvaluator,
+    RefusalCorrectnessEvaluator,
+)
 from app.services.evaluators.retrieval import (
     HitAtKEvaluator,
     ReciprocalRankEvaluator,
@@ -9,11 +15,20 @@ from app.services.evaluators.retrieval import (
 
 class EvaluatorRegistry:
     """
-    Registry of evaluators supported by Knowgentiq.
+    Registry of evaluators supported by
+    Knowgentiq.
 
-    Application code asks for an evaluator by
-    metric name rather than depending directly
-    on DeepEval, RAGAS, or custom implementations.
+    Product/application code asks for
+    evaluators by metric name rather than
+    depending directly on a specific
+    evaluation framework.
+
+    Future engines can include:
+
+    - Knowgentiq native evaluators
+    - DeepEval
+    - RAGAS
+    - enterprise custom evaluators
     """
 
     def __init__(self):
@@ -22,12 +37,34 @@ class EvaluatorRegistry:
             BaseEvaluator,
         ] = {}
 
+        #
+        # Retrieval metrics.
+        #
         self.register(
             HitAtKEvaluator()
         )
 
         self.register(
             ReciprocalRankEvaluator()
+        )
+
+        #
+        # Generation metrics.
+        #
+        self.register(
+            FaithfulnessEvaluator()
+        )
+
+        self.register(
+            AnswerRelevancyEvaluator()
+        )
+
+        self.register(
+            CorrectnessEvaluator()
+        )
+
+        self.register(
+            RefusalCorrectnessEvaluator()
         )
 
     def register(
