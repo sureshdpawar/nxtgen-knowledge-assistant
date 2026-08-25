@@ -3,7 +3,9 @@ from uuid import UUID
 from fastapi import (
     APIRouter,
     Depends,
+    File,
     HTTPException,
+    UploadFile,
     status,
 )
 from sqlalchemy.orm import Session
@@ -20,6 +22,8 @@ from app.schemas.eval import (
     EvalCaseCreate,
     EvalCaseRead,
     EvalDatasetCreate,
+    EvalDatasetImportPayload,
+    EvalDatasetImportRead,
     EvalDatasetRead,
     EvalExperimentRead,
     EvalExperimentRun,
@@ -27,6 +31,9 @@ from app.schemas.eval import (
 )
 from app.services.eval_case_service import (
     EvalCaseService,
+)
+from app.services.eval_dataset_import_service import (
+    EvalDatasetImportService,
 )
 from app.services.eval_dataset_service import (
     EvalDatasetService,
@@ -44,6 +51,10 @@ router = APIRouter(
 
 dataset_service = (
     EvalDatasetService()
+)
+
+dataset_import_service = (
+    EvalDatasetImportService()
 )
 
 case_service = (
@@ -94,6 +105,132 @@ def create_dataset(
                 status.HTTP_400_BAD_REQUEST,
             detail=str(
                 exc
+            ),
+        ) from exc
+
+
+@router.post(
+    "/datasets/import",
+    response_model=
+        EvalDatasetImportRead,
+    status_code=
+        status.HTTP_201_CREATED,
+)
+async def import_dataset(
+    file: UploadFile = File(...),
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    """
+    Import a complete evaluation dataset
+    and all golden test cases from one
+    UTF-8 JSON file.
+
+    The import is transactional:
+
+    - dataset created
+    - all cases created
+    - commit only if every case succeeds
+
+    If any case is invalid, the entire
+    import is rolled back.
+    """
+
+    filename = (
+        file.filename
+        or ""
+    )
+
+    if not filename.lower().endswith(
+        ".json"
+    ):
+        raise HTTPException(
+            status_code=
+                status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Evaluation dataset "
+                "must be a JSON file."
+            ),
+        )
+
+    try:
+        raw_content = await file.read()
+
+        if not raw_content:
+            raise ValueError(
+                "Uploaded JSON file "
+                "is empty."
+            )
+
+        try:
+            json_content = (
+                raw_content.decode(
+                    "utf-8"
+                )
+            )
+
+        except UnicodeDecodeError as exc:
+            raise ValueError(
+                "Evaluation dataset "
+                "must use UTF-8 encoding."
+            ) from exc
+
+        #
+        # Pydantic handles:
+        #
+        # - JSON parsing
+        # - UUID validation
+        # - required fields
+        # - list validation
+        # - nested case validation
+        #
+        payload = (
+            EvalDatasetImportPayload
+            .model_validate_json(
+                json_content
+            )
+        )
+
+        dataset, case_count = (
+            dataset_import_service
+            .import_dataset(
+                db=db,
+                payload=payload,
+            )
+        )
+
+        return {
+            "dataset":
+                dataset,
+
+            "case_count":
+                case_count,
+        }
+
+    except HTTPException:
+        raise
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=
+                status.HTTP_400_BAD_REQUEST,
+            detail=str(
+                exc
+            ),
+        ) from exc
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=
+                status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Unable to import "
+                "evaluation dataset: "
+                f"{str(exc)}"
             ),
         ) from exc
 
@@ -224,7 +361,7 @@ def list_cases(
 
 
 #
-# Experiments
+# Retrieval Experiments
 #
 
 
@@ -249,13 +386,17 @@ def run_retrieval_experiment(
             experiment_service
             .run_retrieval_experiment(
                 db=db,
+
                 dataset_id=
                     payload.dataset_id,
+
                 knowledge_base_id=
                     payload
                     .knowledge_base_id,
+
                 name=
                     payload.name,
+
                 top_k=
                     payload.top_k,
             )
@@ -269,6 +410,81 @@ def run_retrieval_experiment(
                 exc
             ),
         ) from exc
+
+
+#
+# Full RAG Experiments
+#
+
+
+@router.post(
+    "/experiments/rag",
+    response_model=
+        EvalExperimentRead,
+    status_code=
+        status.HTTP_201_CREATED,
+)
+def run_rag_experiment(
+    payload: EvalExperimentRun,
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    """
+    Execute the full RAG pipeline against
+    every test case in an evaluation dataset.
+
+    Captures:
+
+    - retrieval results
+    - Hit@K
+    - Reciprocal Rank
+    - MRR
+    - generated answer
+    - latency
+    - token usage
+    - LLM configuration metadata
+
+    LLM-as-a-Judge metrics are added later.
+    """
+
+    try:
+        return (
+            experiment_service
+            .run_rag_experiment(
+                db=db,
+
+                dataset_id=
+                    payload.dataset_id,
+
+                knowledge_base_id=
+                    payload
+                    .knowledge_base_id,
+
+                name=
+                    payload.name,
+
+                top_k=
+                    payload.top_k,
+            )
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=
+                status.HTTP_400_BAD_REQUEST,
+            detail=str(
+                exc
+            ),
+        ) from exc
+
+
+#
+# Experiment Queries
+#
 
 
 @router.get(

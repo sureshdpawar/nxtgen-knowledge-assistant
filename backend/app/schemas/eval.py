@@ -7,6 +7,20 @@ from pydantic import (
 )
 
 
+class EvalExpectedSource(
+    BaseModel
+):
+    type: str = Field(
+        min_length=1,
+        max_length=50,
+    )
+
+    value: str = Field(
+        min_length=1,
+        max_length=2000,
+    )
+
+
 class EvalDatasetCreate(
     BaseModel
 ):
@@ -61,6 +75,12 @@ class EvalCaseCreate(
         UUID | None
     ) = None
 
+    expected_sources: list[
+        EvalExpectedSource
+    ] = Field(
+        default_factory=list,
+    )
+
     expected_text: (
         str | None
     ) = None
@@ -92,6 +112,10 @@ class EvalCaseRead(
     expected_chunk_id: (
         UUID | None
     )
+
+    expected_sources: list[
+        EvalExpectedSource
+    ]
 
     expected_text: (
         str | None
@@ -230,3 +254,78 @@ class EvalResultRead(
     metrics: dict
 
     judge_metadata: dict
+
+
+class EvalDatasetImportCase(
+    BaseModel
+):
+    question: str = Field(
+        min_length=1,
+    )
+
+    expected_answer: (
+        str | None
+    ) = None
+
+    expected_text: (
+        str | None
+    ) = None
+
+    expected_document_id: (
+        UUID | None
+    ) = None
+
+    expected_chunk_id: (
+        UUID | None
+    ) = None
+
+    expected_sources: list[
+        EvalExpectedSource
+    ] = Field(
+        default_factory=list,
+    )
+
+    answerable: bool = True
+
+    category: (
+        str | None
+    ) = None
+
+    tags: list[str] = Field(
+        default_factory=list,
+    )
+
+
+class EvalDatasetImportPayload(
+    BaseModel
+):
+    knowledge_base_id: UUID
+
+    name: str = Field(
+        min_length=1,
+        max_length=255,
+    )
+
+    version: str = Field(
+        default="v1",
+        min_length=1,
+        max_length=50,
+    )
+
+    description: (
+        str | None
+    ) = None
+
+    cases: list[
+        EvalDatasetImportCase
+    ] = Field(
+        min_length=1,
+    )
+
+
+class EvalDatasetImportRead(
+    BaseModel
+):
+    dataset: EvalDatasetRead
+
+    case_count: int
