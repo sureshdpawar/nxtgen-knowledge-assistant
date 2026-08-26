@@ -200,6 +200,13 @@ export type CompareEvaluationRequest = {
 };
 
 
+export type EvalComparisonOutcome =
+  | "improved"
+  | "unchanged"
+  | "regressed"
+  | "not_comparable";
+
+
 export type EvalComparisonMetric = {
   metric: string;
 
@@ -215,9 +222,14 @@ export type EvalComparisonMetric = {
     | number
     | null;
 
+  relative_delta:
+    | number
+    | null;
+
   higher_is_better: boolean;
 
-  outcome: string;
+  outcome:
+    EvalComparisonOutcome;
 };
 
 
@@ -244,7 +256,18 @@ export type EvalComparisonRun = {
     | string
     | null;
 
+  //
+  // Retrieval.
+  //
   hit_rate:
+    | number
+    | null;
+
+  precision_at_k:
+    | number
+    | null;
+
+  recall_at_k:
     | number
     | null;
 
@@ -252,6 +275,9 @@ export type EvalComparisonRun = {
     | number
     | null;
 
+  //
+  // Generation.
+  //
   faithfulness:
     | number
     | null;
@@ -272,7 +298,22 @@ export type EvalComparisonRun = {
     | number
     | null;
 
+  //
+  // Performance.
+  //
+  average_retrieval_ms:
+    | number
+    | null;
+
+  average_generation_ms:
+    | number
+    | null;
+
   average_rag_ms:
+    | number
+    | null;
+
+  average_generation_tokens:
     | number
     | null;
 
@@ -319,6 +360,9 @@ export type EvalComparisonCaseRun = {
     | boolean
     | null;
 
+  //
+  // Retrieval.
+  //
   hit_at_k:
     | boolean
     | null;
@@ -327,10 +371,21 @@ export type EvalComparisonCaseRun = {
     | number
     | null;
 
+  precision_at_k:
+    | number
+    | null;
+
+  recall_at_k:
+    | number
+    | null;
+
   reciprocal_rank:
     | number
     | null;
 
+  //
+  // Generation.
+  //
   faithfulness:
     | number
     | null;
@@ -347,13 +402,57 @@ export type EvalComparisonCaseRun = {
     | number
     | null;
 
-  quality_score:
+  //
+  // Performance.
+  //
+  retrieval_ms:
+    | number
+    | null;
+
+  generation_ms:
+    | number
+    | null;
+
+  total_ms:
+    | number
+    | null;
+
+  prompt_tokens:
+    | number
+    | null;
+
+  completion_tokens:
+    | number
+    | null;
+
+  total_tokens:
     | number
     | null;
 
   actual_answer:
     | string
     | null;
+};
+
+
+export type EvalComparisonDimension = {
+  outcome:
+    EvalComparisonOutcome;
+
+  metrics:
+    EvalComparisonMetric[];
+};
+
+
+export type EvalComparisonCaseDimensions = {
+  retrieval:
+    EvalComparisonDimension;
+
+  generation:
+    EvalComparisonDimension;
+
+  performance:
+    EvalComparisonDimension;
 };
 
 
@@ -368,11 +467,27 @@ export type EvalComparisonCase = {
     | boolean
     | null;
 
-  outcome: string;
+  //
+  // "outcome" is retained by the backend
+  // for backward compatibility.
+  //
+  outcome:
+    EvalComparisonOutcome;
 
-  quality_delta:
-    | number
-    | null;
+  overall_outcome:
+    EvalComparisonOutcome;
+
+  retrieval_outcome:
+    EvalComparisonOutcome;
+
+  generation_outcome:
+    EvalComparisonOutcome;
+
+  performance_outcome:
+    EvalComparisonOutcome;
+
+  dimensions:
+    EvalComparisonCaseDimensions;
 
   baseline:
     EvalComparisonCaseRun;
@@ -382,18 +497,70 @@ export type EvalComparisonCase = {
 };
 
 
+export type EvalComparisonOverall = {
+  outcome:
+    EvalComparisonOutcome;
+
+  retrieval_outcome:
+    EvalComparisonOutcome;
+
+  generation_outcome:
+    EvalComparisonOutcome;
+
+  performance_outcome:
+    EvalComparisonOutcome;
+};
+
+
+export type EvalComparisonMetricGroups = {
+  retrieval:
+    EvalComparisonDimension;
+
+  generation:
+    EvalComparisonDimension;
+
+  performance:
+    EvalComparisonDimension;
+};
+
+
 export type EvalComparisonSummary = {
+  overall_outcome:
+    EvalComparisonOutcome;
+
+  retrieval_outcome:
+    EvalComparisonOutcome;
+
+  generation_outcome:
+    EvalComparisonOutcome;
+
+  performance_outcome:
+    EvalComparisonOutcome;
+
   improved_metric_count: number;
 
   regressed_metric_count: number;
 
   unchanged_metric_count: number;
 
+  not_comparable_metric_count: number;
+
   improved_case_count: number;
 
   regressed_case_count: number;
 
   unchanged_case_count: number;
+
+  not_comparable_case_count: number;
+
+  retrieval_regressed_case_count:
+    number;
+
+  generation_regressed_case_count:
+    number;
+
+  performance_regressed_case_count:
+    number;
 
   compared_case_count: number;
 };
@@ -406,11 +573,30 @@ export type EvalComparison = {
   candidate:
     EvalComparisonRun;
 
+  overall:
+    EvalComparisonOverall;
+
   summary:
     EvalComparisonSummary;
 
+  //
+  // New dimension-based representation.
+  //
+  metric_groups:
+    EvalComparisonMetricGroups;
+
+  //
+  // Flat metric list retained for
+  // backward compatibility.
+  //
   metrics:
     EvalComparisonMetric[];
+
+  //
+  // Complete comparison set.
+  //
+  cases:
+    EvalComparisonCase[];
 
   improved_cases:
     EvalComparisonCase[];
@@ -419,5 +605,8 @@ export type EvalComparison = {
     EvalComparisonCase[];
 
   unchanged_cases:
+    EvalComparisonCase[];
+
+  not_comparable_cases:
     EvalComparisonCase[];
 };

@@ -9,6 +9,8 @@ from app.services.evaluators.generation import (
 )
 from app.services.evaluators.retrieval import (
     HitAtKEvaluator,
+    PrecisionAtKEvaluator,
+    RecallAtKEvaluator,
     ReciprocalRankEvaluator,
 )
 
@@ -31,7 +33,9 @@ class EvaluatorRegistry:
     - enterprise custom evaluators
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+    ):
         self._evaluators: dict[
             str,
             BaseEvaluator,
@@ -42,6 +46,14 @@ class EvaluatorRegistry:
         #
         self.register(
             HitAtKEvaluator()
+        )
+
+        self.register(
+            PrecisionAtKEvaluator()
+        )
+
+        self.register(
+            RecallAtKEvaluator()
         )
 
         self.register(

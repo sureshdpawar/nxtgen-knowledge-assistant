@@ -21,7 +21,19 @@ from app.repositories.eval_result_repository import (
 
 class EvalComparisonService:
 
-    def __init__(self):
+    #
+    # Small changes below these values are
+    # treated as unchanged.
+    #
+    SCORE_TOLERANCE = 0.001
+
+    LATENCY_TOLERANCE_RATIO = 0.05
+
+    TOKEN_TOLERANCE_RATIO = 0.05
+
+    def __init__(
+        self,
+    ):
         self.experiment_repository = (
             EvalExperimentRepository()
         )
@@ -54,7 +66,7 @@ class EvalComparisonService:
 
     def _get_nested_value(
         self,
-        data: dict,
+        data: dict | None,
         path: list[str],
     ):
         current = (
@@ -80,6 +92,192 @@ class EvalComparisonService:
 
         return current
 
+    def _to_float(
+        self,
+        value,
+    ) -> float | None:
+        if value is None:
+            return None
+
+        try:
+            return float(
+                value
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return None
+
+    def _numeric_delta(
+        self,
+        baseline,
+        candidate,
+    ) -> float | None:
+        baseline_value = (
+            self._to_float(
+                baseline
+            )
+        )
+
+        candidate_value = (
+            self._to_float(
+                candidate
+            )
+        )
+
+        if (
+            baseline_value is None
+            or candidate_value is None
+        ):
+            return None
+
+        return round(
+            candidate_value
+            - baseline_value,
+            6,
+        )
+
+    def _relative_delta(
+        self,
+        baseline,
+        candidate,
+    ) -> float | None:
+        baseline_value = (
+            self._to_float(
+                baseline
+            )
+        )
+
+        candidate_value = (
+            self._to_float(
+                candidate
+            )
+        )
+
+        if (
+            baseline_value is None
+            or candidate_value is None
+        ):
+            return None
+
+        if baseline_value == 0:
+            if candidate_value == 0:
+                return 0.0
+
+            return None
+
+        return round(
+            (
+                candidate_value
+                - baseline_value
+            )
+            / abs(
+                baseline_value
+            ),
+            6,
+        )
+
+    def _metric_comparison(
+        self,
+        metric_name: str,
+        baseline,
+        candidate,
+        higher_is_better: bool,
+        tolerance: float = 0.001,
+        relative_tolerance:
+            float | None = None,
+    ) -> dict:
+        delta = (
+            self._numeric_delta(
+                baseline=
+                    baseline,
+
+                candidate=
+                    candidate,
+            )
+        )
+
+        relative_delta = (
+            self._relative_delta(
+                baseline=
+                    baseline,
+
+                candidate=
+                    candidate,
+            )
+        )
+
+        if delta is None:
+            outcome = (
+                "not_comparable"
+            )
+
+        else:
+            if (
+                relative_tolerance
+                is not None
+                and relative_delta
+                is not None
+            ):
+                unchanged = (
+                    abs(
+                        relative_delta
+                    )
+                    <= relative_tolerance
+                )
+
+            else:
+                unchanged = (
+                    abs(
+                        delta
+                    )
+                    <= tolerance
+                )
+
+            if unchanged:
+                outcome = (
+                    "unchanged"
+                )
+
+            elif higher_is_better:
+                outcome = (
+                    "improved"
+                    if delta > 0
+                    else "regressed"
+                )
+
+            else:
+                outcome = (
+                    "improved"
+                    if delta < 0
+                    else "regressed"
+                )
+
+        return {
+            "metric":
+                metric_name,
+
+            "baseline":
+                baseline,
+
+            "candidate":
+                candidate,
+
+            "delta":
+                delta,
+
+            "relative_delta":
+                relative_delta,
+
+            "higher_is_better":
+                higher_is_better,
+
+            "outcome":
+                outcome,
+        }
+
     def _run_summary(
         self,
         experiment:
@@ -101,7 +299,8 @@ class EvalComparisonService:
                 experiment.dataset_id,
 
             "knowledge_base_id":
-                experiment.knowledge_base_id,
+                experiment
+                .knowledge_base_id,
 
             "eval_type":
                 experiment.eval_type,
@@ -118,12 +317,66 @@ class EvalComparisonService:
             "llm_model":
                 experiment.llm_model,
 
+            #
+            # Retrieval.
+            #
             "hit_rate":
-                experiment.hit_rate,
+                self._get_nested_value(
+                    metrics,
+                    [
+                        "retrieval",
+                        "hit_rate",
+                    ],
+                )
+                if self._get_nested_value(
+                    metrics,
+                    [
+                        "retrieval",
+                        "hit_rate",
+                    ],
+                )
+                is not None
+                else experiment.hit_rate,
+
+            "precision_at_k":
+                self._get_nested_value(
+                    metrics,
+                    [
+                        "retrieval",
+                        "precision_at_k",
+                    ],
+                ),
+
+            "recall_at_k":
+                self._get_nested_value(
+                    metrics,
+                    [
+                        "retrieval",
+                        "recall_at_k",
+                    ],
+                ),
 
             "mrr":
-                experiment.mrr,
+                self._get_nested_value(
+                    metrics,
+                    [
+                        "retrieval",
+                        "mrr",
+                    ],
+                )
+                if self._get_nested_value(
+                    metrics,
+                    [
+                        "retrieval",
+                        "mrr",
+                    ],
+                )
+                is not None
+                else experiment.mrr,
 
+            #
+            # Generation.
+            #
             "faithfulness":
                 self._get_nested_value(
                     metrics,
@@ -173,12 +426,43 @@ class EvalComparisonService:
                     ],
                 ),
 
+            #
+            # Performance.
+            #
+            "average_retrieval_ms":
+                self._get_nested_value(
+                    metrics,
+                    [
+                        "latency",
+                        "average_retrieval_ms",
+                    ],
+                ),
+
+            "average_generation_ms":
+                self._get_nested_value(
+                    metrics,
+                    [
+                        "latency",
+                        "average_generation_ms",
+                    ],
+                ),
+
             "average_rag_ms":
                 self._get_nested_value(
                     metrics,
                     [
                         "latency",
                         "average_rag_ms",
+                    ],
+                ),
+
+            "average_generation_tokens":
+                self._get_nested_value(
+                    metrics,
+                    [
+                        "usage",
+                        "generation",
+                        "average_tokens_per_case",
                     ],
                 ),
 
@@ -222,185 +506,90 @@ class EvalComparisonService:
                 ),
         }
 
-    def _numeric_delta(
+    def _metric_score_from_result(
         self,
-        baseline,
-        candidate,
-    ):
-        if (
-            baseline is None
-            or candidate is None
-        ):
-            return None
-
-        try:
-            return round(
-                float(
-                    candidate
-                )
-                - float(
-                    baseline
-                ),
-                4,
-            )
-
-        except (
-            TypeError,
-            ValueError,
-        ):
-            return None
-
-    def _metric_comparison(
-        self,
+        result: EvalResult,
         metric_name: str,
-        baseline,
-        candidate,
-        higher_is_better: bool,
-    ) -> dict:
-        delta = (
-            self._numeric_delta(
-                baseline=
-                    baseline,
+    ) -> float | None:
+        metrics = (
+            result.metrics
+            or {}
+        )
 
-                candidate=
-                    candidate,
+        metric = (
+            metrics.get(
+                metric_name
             )
         )
 
-        if delta is None:
-            outcome = (
-                "not_comparable"
+        if isinstance(
+            metric,
+            dict,
+        ):
+            return self._to_float(
+                metric.get(
+                    "score"
+                )
             )
 
-        elif abs(
-            delta
-        ) < 0.0001:
-            outcome = (
-                "unchanged"
-            )
+        return None
 
-        elif higher_is_better:
-            outcome = (
-                "improved"
-                if delta > 0
-                else "regressed"
-            )
-
-        else:
-            outcome = (
-                "improved"
-                if delta < 0
-                else "regressed"
-            )
-
-        return {
-            "metric":
-                metric_name,
-
-            "baseline":
-                baseline,
-
-            "candidate":
-                candidate,
-
-            "delta":
-                delta,
-
-            "higher_is_better":
-                higher_is_better,
-
-            "outcome":
-                outcome,
-        }
-
-    def _case_quality_score(
+    def _latency_from_result(
         self,
-        result:
-            EvalResult,
+        result: EvalResult,
+        metric_name: str,
     ) -> float | None:
-        """
-        Produce a comparison-only case score.
+        metrics = (
+            result.metrics
+            or {}
+        )
 
-        This is NOT a Knowgentiq product
-        "AI quality score".
-
-        It exists only to determine whether
-        an individual case generally improved
-        or regressed when its pass/fail state
-        did not change.
-
-        We average only available quality
-        metrics.
-        """
-
-        scores = []
-
-        if (
-            result.reciprocal_rank
-            is not None
-        ):
-            scores.append(
-                float(
-                    result
-                    .reciprocal_rank
-                )
+        latency = (
+            metrics.get(
+                "latency"
             )
+            or {}
+        )
 
-        if (
-            result.faithfulness_score
-            is not None
+        if not isinstance(
+            latency,
+            dict,
         ):
-            scores.append(
-                float(
-                    result
-                    .faithfulness_score
-                )
-            )
-
-        if (
-            result.relevancy_score
-            is not None
-        ):
-            scores.append(
-                float(
-                    result
-                    .relevancy_score
-                )
-            )
-
-        if (
-            result.correctness_score
-            is not None
-        ):
-            scores.append(
-                float(
-                    result
-                    .correctness_score
-                )
-            )
-
-        if (
-            result.refusal_score
-            is not None
-        ):
-            scores.append(
-                float(
-                    result
-                    .refusal_score
-                )
-            )
-
-        if not scores:
             return None
 
-        return round(
-            sum(
-                scores
+        return self._to_float(
+            latency.get(
+                metric_name
             )
-            / len(
-                scores
-            ),
-            4,
+        )
+
+    def _tokens_from_result(
+        self,
+        result: EvalResult,
+        metric_name: str,
+    ) -> float | None:
+        metrics = (
+            result.metrics
+            or {}
+        )
+
+        usage = (
+            metrics.get(
+                "token_usage"
+            )
+            or {}
+        )
+
+        if not isinstance(
+            usage,
+            dict,
+        ):
+            return None
+
+        return self._to_float(
+            usage.get(
+                metric_name
+            )
         )
 
     def _result_to_case_summary(
@@ -412,6 +601,26 @@ class EvalComparisonService:
         eval_case = db.get(
             EvalCase,
             result.eval_case_id,
+        )
+
+        precision_at_k = (
+            self._metric_score_from_result(
+                result=
+                    result,
+
+                metric_name=
+                    "precision_at_k",
+            )
+        )
+
+        recall_at_k = (
+            self._metric_score_from_result(
+                result=
+                    result,
+
+                metric_name=
+                    "recall_at_k",
+            )
         )
 
         return {
@@ -437,15 +646,27 @@ class EvalComparisonService:
             "passed":
                 result.passed,
 
+            #
+            # Retrieval.
+            #
             "hit_at_k":
                 result.hit_at_k,
 
             "expected_rank":
                 result.expected_rank,
 
+            "precision_at_k":
+                precision_at_k,
+
+            "recall_at_k":
+                recall_at_k,
+
             "reciprocal_rank":
                 result.reciprocal_rank,
 
+            #
+            # Generation.
+            #
             "faithfulness":
                 result
                 .faithfulness_score,
@@ -462,14 +683,207 @@ class EvalComparisonService:
                 result
                 .refusal_score,
 
-            "quality_score":
-                self._case_quality_score(
-                    result
+            #
+            # Performance.
+            #
+            "retrieval_ms":
+                self._latency_from_result(
+                    result=
+                        result,
+
+                    metric_name=
+                        "retrieval_ms",
+                ),
+
+            "generation_ms":
+                self._latency_from_result(
+                    result=
+                        result,
+
+                    metric_name=
+                        "generation_ms",
+                ),
+
+            "total_ms":
+                self._latency_from_result(
+                    result=
+                        result,
+
+                    metric_name=
+                        "total_ms",
+                ),
+
+            "prompt_tokens":
+                self._tokens_from_result(
+                    result=
+                        result,
+
+                    metric_name=
+                        "prompt_tokens",
+                ),
+
+            "completion_tokens":
+                self._tokens_from_result(
+                    result=
+                        result,
+
+                    metric_name=
+                        "completion_tokens",
+                ),
+
+            "total_tokens":
+                self._tokens_from_result(
+                    result=
+                        result,
+
+                    metric_name=
+                        "total_tokens",
                 ),
 
             "actual_answer":
                 result.actual_answer,
         }
+
+    def _outcome_from_metrics(
+        self,
+        comparisons: list[dict],
+    ) -> str:
+        comparable = [
+            item
+            for item
+            in comparisons
+            if (
+                item.get(
+                    "outcome"
+                )
+                != "not_comparable"
+            )
+        ]
+
+        if not comparable:
+            return (
+                "not_comparable"
+            )
+
+        has_regression = any(
+            item.get(
+                "outcome"
+            )
+            == "regressed"
+            for item
+            in comparable
+        )
+
+        has_improvement = any(
+            item.get(
+                "outcome"
+            )
+            == "improved"
+            for item
+            in comparable
+        )
+
+        #
+        # Conservative policy:
+        #
+        # Any regression inside a dimension
+        # marks that dimension regressed.
+        #
+        # Otherwise any improvement marks it
+        # improved.
+        #
+        if has_regression:
+            return (
+                "regressed"
+            )
+
+        if has_improvement:
+            return (
+                "improved"
+            )
+
+        return (
+            "unchanged"
+        )
+
+    def _overall_outcome(
+        self,
+        retrieval_outcome: str,
+        generation_outcome: str,
+        performance_outcome: str,
+    ) -> str:
+        quality_outcomes = [
+            outcome
+            for outcome
+            in (
+                retrieval_outcome,
+                generation_outcome,
+            )
+            if outcome
+            != "not_comparable"
+        ]
+
+        #
+        # Quality regressions have priority.
+        #
+        if (
+            "regressed"
+            in quality_outcomes
+        ):
+            return (
+                "regressed"
+            )
+
+        #
+        # If retrieval/generation quality
+        # improved and neither quality
+        # dimension regressed, the overall
+        # result improved.
+        #
+        if (
+            "improved"
+            in quality_outcomes
+        ):
+            return (
+                "improved"
+            )
+
+        #
+        # When quality is unchanged, use
+        # performance as the tie-breaker.
+        #
+        if (
+            performance_outcome
+            == "regressed"
+        ):
+            return (
+                "regressed"
+            )
+
+        if (
+            performance_outcome
+            == "improved"
+        ):
+            return (
+                "improved"
+            )
+
+        if quality_outcomes:
+            return (
+                "unchanged"
+            )
+
+        if (
+            performance_outcome
+            != "not_comparable"
+        ):
+            return (
+                performance_outcome
+            )
+
+        return (
+            "not_comparable"
+        )
 
     def _compare_case(
         self,
@@ -497,70 +911,336 @@ class EvalComparisonService:
             )
         )
 
-        baseline_score = (
-            baseline_data[
-                "quality_score"
-            ]
-        )
+        #
+        # Retrieval.
+        #
+        retrieval_metrics = [
+            self._metric_comparison(
+                metric_name=
+                    "hit_at_k",
 
-        candidate_score = (
-            candidate_data[
-                "quality_score"
-            ]
-        )
+                baseline=(
+                    1.0
+                    if baseline_data[
+                        "hit_at_k"
+                    ]
+                    is True
+                    else (
+                        0.0
+                        if baseline_data[
+                            "hit_at_k"
+                        ]
+                        is False
+                        else None
+                    )
+                ),
 
-        quality_delta = (
-            self._numeric_delta(
+                candidate=(
+                    1.0
+                    if candidate_data[
+                        "hit_at_k"
+                    ]
+                    is True
+                    else (
+                        0.0
+                        if candidate_data[
+                            "hit_at_k"
+                        ]
+                        is False
+                        else None
+                    )
+                ),
+
+                higher_is_better=
+                    True,
+
+                tolerance=
+                    0.0,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "precision_at_k",
+
                 baseline=
-                    baseline_score,
+                    baseline_data[
+                        "precision_at_k"
+                    ],
 
                 candidate=
-                    candidate_score,
+                    candidate_data[
+                        "precision_at_k"
+                    ],
+
+                higher_is_better=
+                    True,
+
+                tolerance=
+                    self
+                    .SCORE_TOLERANCE,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "recall_at_k",
+
+                baseline=
+                    baseline_data[
+                        "recall_at_k"
+                    ],
+
+                candidate=
+                    candidate_data[
+                        "recall_at_k"
+                    ],
+
+                higher_is_better=
+                    True,
+
+                tolerance=
+                    self
+                    .SCORE_TOLERANCE,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "reciprocal_rank",
+
+                baseline=
+                    baseline_data[
+                        "reciprocal_rank"
+                    ],
+
+                candidate=
+                    candidate_data[
+                        "reciprocal_rank"
+                    ],
+
+                higher_is_better=
+                    True,
+
+                tolerance=
+                    self
+                    .SCORE_TOLERANCE,
+            ),
+        ]
+
+        retrieval_outcome = (
+            self._outcome_from_metrics(
+                retrieval_metrics
             )
         )
 
         #
-        # Pass transition has priority.
+        # Generation.
         #
-        if (
-            baseline.passed
-            is False
-            and candidate.passed
-            is True
-        ):
-            outcome = (
-                "improved"
-            )
+        generation_metrics = [
+            self._metric_comparison(
+                metric_name=
+                    "faithfulness",
 
-        elif (
-            baseline.passed
-            is True
-            and candidate.passed
-            is False
-        ):
-            outcome = (
-                "regressed"
-            )
+                baseline=
+                    baseline_data[
+                        "faithfulness"
+                    ],
 
-        elif quality_delta is None:
-            outcome = (
-                "unchanged"
-            )
+                candidate=
+                    candidate_data[
+                        "faithfulness"
+                    ],
 
-        elif quality_delta > 0.001:
-            outcome = (
-                "improved"
-            )
+                higher_is_better=
+                    True,
 
-        elif quality_delta < -0.001:
-            outcome = (
-                "regressed"
-            )
+                tolerance=
+                    self
+                    .SCORE_TOLERANCE,
+            ),
 
-        else:
-            outcome = (
-                "unchanged"
+            self._metric_comparison(
+                metric_name=
+                    "answer_relevancy",
+
+                baseline=
+                    baseline_data[
+                        "answer_relevancy"
+                    ],
+
+                candidate=
+                    candidate_data[
+                        "answer_relevancy"
+                    ],
+
+                higher_is_better=
+                    True,
+
+                tolerance=
+                    self
+                    .SCORE_TOLERANCE,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "correctness",
+
+                baseline=
+                    baseline_data[
+                        "correctness"
+                    ],
+
+                candidate=
+                    candidate_data[
+                        "correctness"
+                    ],
+
+                higher_is_better=
+                    True,
+
+                tolerance=
+                    self
+                    .SCORE_TOLERANCE,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "refusal_correctness",
+
+                baseline=
+                    baseline_data[
+                        "refusal_correctness"
+                    ],
+
+                candidate=
+                    candidate_data[
+                        "refusal_correctness"
+                    ],
+
+                higher_is_better=
+                    True,
+
+                tolerance=
+                    self
+                    .SCORE_TOLERANCE,
+            ),
+        ]
+
+        generation_outcome = (
+            self._outcome_from_metrics(
+                generation_metrics
             )
+        )
+
+        #
+        # Performance.
+        #
+        performance_metrics = [
+            self._metric_comparison(
+                metric_name=
+                    "retrieval_ms",
+
+                baseline=
+                    baseline_data[
+                        "retrieval_ms"
+                    ],
+
+                candidate=
+                    candidate_data[
+                        "retrieval_ms"
+                    ],
+
+                higher_is_better=
+                    False,
+
+                relative_tolerance=
+                    self
+                    .LATENCY_TOLERANCE_RATIO,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "generation_ms",
+
+                baseline=
+                    baseline_data[
+                        "generation_ms"
+                    ],
+
+                candidate=
+                    candidate_data[
+                        "generation_ms"
+                    ],
+
+                higher_is_better=
+                    False,
+
+                relative_tolerance=
+                    self
+                    .LATENCY_TOLERANCE_RATIO,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "total_ms",
+
+                baseline=
+                    baseline_data[
+                        "total_ms"
+                    ],
+
+                candidate=
+                    candidate_data[
+                        "total_ms"
+                    ],
+
+                higher_is_better=
+                    False,
+
+                relative_tolerance=
+                    self
+                    .LATENCY_TOLERANCE_RATIO,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "total_tokens",
+
+                baseline=
+                    baseline_data[
+                        "total_tokens"
+                    ],
+
+                candidate=
+                    candidate_data[
+                        "total_tokens"
+                    ],
+
+                higher_is_better=
+                    False,
+
+                relative_tolerance=
+                    self
+                    .TOKEN_TOLERANCE_RATIO,
+            ),
+        ]
+
+        performance_outcome = (
+            self._outcome_from_metrics(
+                performance_metrics
+            )
+        )
+
+        overall_outcome = (
+            self._overall_outcome(
+                retrieval_outcome=
+                    retrieval_outcome,
+
+                generation_outcome=
+                    generation_outcome,
+
+                performance_outcome=
+                    performance_outcome,
+            )
+        )
 
         return {
             "eval_case_id":
@@ -576,17 +1256,327 @@ class EvalComparisonService:
                     "answerable"
                 ],
 
+            #
+            # Backward-compatible field.
+            #
             "outcome":
-                outcome,
+                overall_outcome,
 
-            "quality_delta":
-                quality_delta,
+            "overall_outcome":
+                overall_outcome,
+
+            "retrieval_outcome":
+                retrieval_outcome,
+
+            "generation_outcome":
+                generation_outcome,
+
+            "performance_outcome":
+                performance_outcome,
+
+            "dimensions": {
+                "retrieval": {
+                    "outcome":
+                        retrieval_outcome,
+
+                    "metrics":
+                        retrieval_metrics,
+                },
+
+                "generation": {
+                    "outcome":
+                        generation_outcome,
+
+                    "metrics":
+                        generation_metrics,
+                },
+
+                "performance": {
+                    "outcome":
+                        performance_outcome,
+
+                    "metrics":
+                        performance_metrics,
+                },
+            },
 
             "baseline":
                 baseline_data,
 
             "candidate":
                 candidate_data,
+        }
+
+    def _build_run_metric_comparisons(
+        self,
+        baseline: dict,
+        candidate: dict,
+    ) -> dict:
+        retrieval = [
+            self._metric_comparison(
+                metric_name=
+                    "hit_rate",
+
+                baseline=
+                    baseline.get(
+                        "hit_rate"
+                    ),
+
+                candidate=
+                    candidate.get(
+                        "hit_rate"
+                    ),
+
+                higher_is_better=
+                    True,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "precision_at_k",
+
+                baseline=
+                    baseline.get(
+                        "precision_at_k"
+                    ),
+
+                candidate=
+                    candidate.get(
+                        "precision_at_k"
+                    ),
+
+                higher_is_better=
+                    True,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "recall_at_k",
+
+                baseline=
+                    baseline.get(
+                        "recall_at_k"
+                    ),
+
+                candidate=
+                    candidate.get(
+                        "recall_at_k"
+                    ),
+
+                higher_is_better=
+                    True,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "mrr",
+
+                baseline=
+                    baseline.get(
+                        "mrr"
+                    ),
+
+                candidate=
+                    candidate.get(
+                        "mrr"
+                    ),
+
+                higher_is_better=
+                    True,
+            ),
+        ]
+
+        generation = [
+            self._metric_comparison(
+                metric_name=
+                    "faithfulness",
+
+                baseline=
+                    baseline.get(
+                        "faithfulness"
+                    ),
+
+                candidate=
+                    candidate.get(
+                        "faithfulness"
+                    ),
+
+                higher_is_better=
+                    True,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "answer_relevancy",
+
+                baseline=
+                    baseline.get(
+                        "answer_relevancy"
+                    ),
+
+                candidate=
+                    candidate.get(
+                        "answer_relevancy"
+                    ),
+
+                higher_is_better=
+                    True,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "correctness",
+
+                baseline=
+                    baseline.get(
+                        "correctness"
+                    ),
+
+                candidate=
+                    candidate.get(
+                        "correctness"
+                    ),
+
+                higher_is_better=
+                    True,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "refusal_correctness",
+
+                baseline=
+                    baseline.get(
+                        "refusal_correctness"
+                    ),
+
+                candidate=
+                    candidate.get(
+                        "refusal_correctness"
+                    ),
+
+                higher_is_better=
+                    True,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "pass_rate",
+
+                baseline=
+                    baseline.get(
+                        "pass_rate"
+                    ),
+
+                candidate=
+                    candidate.get(
+                        "pass_rate"
+                    ),
+
+                higher_is_better=
+                    True,
+            ),
+        ]
+
+        performance = [
+            self._metric_comparison(
+                metric_name=
+                    "average_retrieval_ms",
+
+                baseline=
+                    baseline.get(
+                        "average_retrieval_ms"
+                    ),
+
+                candidate=
+                    candidate.get(
+                        "average_retrieval_ms"
+                    ),
+
+                higher_is_better=
+                    False,
+
+                relative_tolerance=
+                    self
+                    .LATENCY_TOLERANCE_RATIO,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "average_generation_ms",
+
+                baseline=
+                    baseline.get(
+                        "average_generation_ms"
+                    ),
+
+                candidate=
+                    candidate.get(
+                        "average_generation_ms"
+                    ),
+
+                higher_is_better=
+                    False,
+
+                relative_tolerance=
+                    self
+                    .LATENCY_TOLERANCE_RATIO,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "average_rag_ms",
+
+                baseline=
+                    baseline.get(
+                        "average_rag_ms"
+                    ),
+
+                candidate=
+                    candidate.get(
+                        "average_rag_ms"
+                    ),
+
+                higher_is_better=
+                    False,
+
+                relative_tolerance=
+                    self
+                    .LATENCY_TOLERANCE_RATIO,
+            ),
+
+            self._metric_comparison(
+                metric_name=
+                    "average_generation_tokens",
+
+                baseline=
+                    baseline.get(
+                        "average_generation_tokens"
+                    ),
+
+                candidate=
+                    candidate.get(
+                        "average_generation_tokens"
+                    ),
+
+                higher_is_better=
+                    False,
+
+                relative_tolerance=
+                    self
+                    .TOKEN_TOLERANCE_RATIO,
+            ),
+        ]
+
+        return {
+            "retrieval":
+                retrieval,
+
+            "generation":
+                generation,
+
+            "performance":
+                performance,
         }
 
     def compare(
@@ -630,15 +1620,10 @@ class EvalComparisonService:
         ):
             raise ValueError(
                 "Both evaluation runs must "
-                "be completed before comparison."
+                "be completed before "
+                "comparison."
             )
 
-        #
-        # V1 comparisons intentionally require
-        # the same golden dataset.
-        #
-        # This guarantees case-to-case alignment.
-        #
         if (
             baseline.dataset_id
             != candidate.dataset_id
@@ -681,78 +1666,72 @@ class EvalComparisonService:
             )
         )
 
-        metric_definitions = [
-            (
-                "hit_rate",
-                True,
-            ),
-            (
-                "mrr",
-                True,
-            ),
-            (
-                "faithfulness",
-                True,
-            ),
-            (
-                "answer_relevancy",
-                True,
-            ),
-            (
-                "correctness",
-                True,
-            ),
-            (
-                "refusal_correctness",
-                True,
-            ),
-            (
-                "pass_rate",
-                True,
-            ),
-            (
-                "average_rag_ms",
-                False,
-            ),
-            (
-                "generation_tokens",
-                False,
-            ),
-            (
-                "judge_tokens",
-                False,
-            ),
-            (
-                "total_evaluation_tokens",
-                False,
-            ),
-        ]
+        #
+        # Run-level metric comparison.
+        #
+        metric_groups = (
+            self
+            ._build_run_metric_comparisons(
+                baseline=
+                    baseline_summary,
 
-        metric_comparisons = []
-
-        for (
-            metric_name,
-            higher_is_better,
-        ) in metric_definitions:
-            metric_comparisons.append(
-                self._metric_comparison(
-                    metric_name=
-                        metric_name,
-
-                    baseline=
-                        baseline_summary.get(
-                            metric_name
-                        ),
-
-                    candidate=
-                        candidate_summary.get(
-                            metric_name
-                        ),
-
-                    higher_is_better=
-                        higher_is_better,
-                )
+                candidate=
+                    candidate_summary,
             )
+        )
+
+        retrieval_outcome = (
+            self._outcome_from_metrics(
+                metric_groups[
+                    "retrieval"
+                ]
+            )
+        )
+
+        generation_outcome = (
+            self._outcome_from_metrics(
+                metric_groups[
+                    "generation"
+                ]
+            )
+        )
+
+        performance_outcome = (
+            self._outcome_from_metrics(
+                metric_groups[
+                    "performance"
+                ]
+            )
+        )
+
+        overall_outcome = (
+            self._overall_outcome(
+                retrieval_outcome=
+                    retrieval_outcome,
+
+                generation_outcome=
+                    generation_outcome,
+
+                performance_outcome=
+                    performance_outcome,
+            )
+        )
+
+        #
+        # Flat metric list retained for
+        # backward compatibility with the UI.
+        #
+        metric_comparisons = (
+            metric_groups[
+                "retrieval"
+            ]
+            + metric_groups[
+                "generation"
+            ]
+            + metric_groups[
+                "performance"
+            ]
+        )
 
         baseline_results = (
             self.result_repository
@@ -819,7 +1798,7 @@ class EvalComparisonService:
             )
 
         #
-        # Stable order for UI.
+        # Stable ordering for the UI.
         #
         case_comparisons.sort(
             key=lambda item: (
@@ -836,7 +1815,7 @@ class EvalComparisonService:
             in case_comparisons
             if (
                 item[
-                    "outcome"
+                    "overall_outcome"
                 ]
                 == "improved"
             )
@@ -848,7 +1827,7 @@ class EvalComparisonService:
             in case_comparisons
             if (
                 item[
-                    "outcome"
+                    "overall_outcome"
                 ]
                 == "regressed"
             )
@@ -860,9 +1839,21 @@ class EvalComparisonService:
             in case_comparisons
             if (
                 item[
-                    "outcome"
+                    "overall_outcome"
                 ]
                 == "unchanged"
+            )
+        ]
+
+        not_comparable_cases = [
+            item
+            for item
+            in case_comparisons
+            if (
+                item[
+                    "overall_outcome"
+                ]
+                == "not_comparable"
             )
         ]
 
@@ -902,6 +1893,54 @@ class EvalComparisonService:
             )
         )
 
+        not_comparable_metrics = sum(
+            1
+            for item
+            in metric_comparisons
+            if (
+                item[
+                    "outcome"
+                ]
+                == "not_comparable"
+            )
+        )
+
+        retrieval_regressed_cases = sum(
+            1
+            for item
+            in case_comparisons
+            if (
+                item[
+                    "retrieval_outcome"
+                ]
+                == "regressed"
+            )
+        )
+
+        generation_regressed_cases = sum(
+            1
+            for item
+            in case_comparisons
+            if (
+                item[
+                    "generation_outcome"
+                ]
+                == "regressed"
+            )
+        )
+
+        performance_regressed_cases = sum(
+            1
+            for item
+            in case_comparisons
+            if (
+                item[
+                    "performance_outcome"
+                ]
+                == "regressed"
+            )
+        )
+
         return {
             "baseline":
                 baseline_summary,
@@ -909,7 +1948,33 @@ class EvalComparisonService:
             "candidate":
                 candidate_summary,
 
+            "overall": {
+                "outcome":
+                    overall_outcome,
+
+                "retrieval_outcome":
+                    retrieval_outcome,
+
+                "generation_outcome":
+                    generation_outcome,
+
+                "performance_outcome":
+                    performance_outcome,
+            },
+
             "summary": {
+                "overall_outcome":
+                    overall_outcome,
+
+                "retrieval_outcome":
+                    retrieval_outcome,
+
+                "generation_outcome":
+                    generation_outcome,
+
+                "performance_outcome":
+                    performance_outcome,
+
                 "improved_metric_count":
                     improved_metrics,
 
@@ -918,6 +1983,9 @@ class EvalComparisonService:
 
                 "unchanged_metric_count":
                     unchanged_metrics,
+
+                "not_comparable_metric_count":
+                    not_comparable_metrics,
 
                 "improved_case_count":
                     len(
@@ -934,14 +2002,69 @@ class EvalComparisonService:
                         unchanged_cases
                     ),
 
+                "not_comparable_case_count":
+                    len(
+                        not_comparable_cases
+                    ),
+
+                "retrieval_regressed_case_count":
+                    retrieval_regressed_cases,
+
+                "generation_regressed_case_count":
+                    generation_regressed_cases,
+
+                "performance_regressed_case_count":
+                    performance_regressed_cases,
+
                 "compared_case_count":
                     len(
                         case_comparisons
                     ),
             },
 
+            #
+            # New grouped representation.
+            #
+            "metric_groups": {
+                "retrieval": {
+                    "outcome":
+                        retrieval_outcome,
+
+                    "metrics":
+                        metric_groups[
+                            "retrieval"
+                        ],
+                },
+
+                "generation": {
+                    "outcome":
+                        generation_outcome,
+
+                    "metrics":
+                        metric_groups[
+                            "generation"
+                        ],
+                },
+
+                "performance": {
+                    "outcome":
+                        performance_outcome,
+
+                    "metrics":
+                        metric_groups[
+                            "performance"
+                        ],
+                },
+            },
+
+            #
+            # Backward-compatible flat list.
+            #
             "metrics":
                 metric_comparisons,
+
+            "cases":
+                case_comparisons,
 
             "improved_cases":
                 improved_cases,
@@ -951,4 +2074,7 @@ class EvalComparisonService:
 
             "unchanged_cases":
                 unchanged_cases,
+
+            "not_comparable_cases":
+                not_comparable_cases,
         }

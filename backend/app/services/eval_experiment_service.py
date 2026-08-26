@@ -41,7 +41,9 @@ from app.services.retrieval_eval_service import (
 
 class EvalExperimentService:
 
-    def __init__(self):
+    def __init__(
+        self,
+    ):
         self.experiment_repository = (
             EvalExperimentRepository()
         )
@@ -167,8 +169,12 @@ class EvalExperimentService:
             EvaluationMetricResult,
     ) -> dict:
         """
-        Normalize metric output for
+        Normalize evaluator output for
         EvalResult.metrics JSON.
+
+        This product-level representation
+        keeps Knowgentiq independent from
+        the underlying evaluation engine.
         """
 
         return {
@@ -201,14 +207,18 @@ class EvalExperimentService:
         ],
     ) -> dict:
         """
-        Aggregate one metric across a run.
+        Aggregate one evaluator metric.
 
-        Metrics returning score=None are
-        intentionally excluded.
+        Results with score=None are excluded
+        from the metric denominator.
 
-        Example:
-        correctness is excluded for
-        unanswerable cases.
+        Examples:
+
+        - correctness is normally unscored
+          for unanswerable cases.
+
+        - refusal correctness is normally
+          unscored for answerable cases.
         """
 
         scored = [
@@ -223,7 +233,9 @@ class EvalExperimentService:
         )
 
         unscored_case_count = (
-            len(results)
+            len(
+                results
+            )
             - scored_case_count
         )
 
@@ -310,11 +322,8 @@ class EvalExperimentService:
         totals: dict,
     ) -> None:
         """
-        Add LLM judge usage/latency to
-        run-level totals.
-
-        Skipped deterministic/None metrics
-        simply contribute nothing.
+        Add evaluator LLM usage and latency
+        into run-level totals.
         """
 
         metadata = (
@@ -389,26 +398,51 @@ class EvalExperimentService:
         run_judges: bool,
     ) -> bool | None:
         """
-        Determine overall case pass.
+        Determine the generation/RAG answer
+        pass state for one evaluation case.
+
+        IMPORTANT:
+
+        Retrieval quality and generation
+        quality are separate dimensions.
+
+        A retrieval Hit@K miss does NOT
+        automatically make a generated answer
+        fail when judge metrics demonstrate
+        that the answer is good.
+
+        This is necessary because:
+
+        - multiple sources may support the
+          same answer;
+
+        - a golden dataset may identify one
+          preferred source while another
+          retrieved source is still valid;
+
+        - Hit@K measures retrieval against
+          configured ground truth, not answer
+          correctness.
 
         When judges are enabled:
 
         Answerable cases require:
-        - retrieval hit if retrieval GT exists
         - faithfulness
         - answer relevancy
         - correctness
 
         Unanswerable cases require:
-        - retrieval hit if retrieval GT exists
         - faithfulness
         - answer relevancy
         - refusal correctness
 
         When judges are disabled:
-        - retrieval Hit@K is used when
-          retrieval ground truth exists
-        - otherwise overall pass is unknown
+
+        Retrieval Hit@K is used as the only
+        available deterministic case outcome
+        when retrieval ground truth exists.
+
+        Otherwise the case remains unscored.
         """
 
         has_retrieval_ground_truth = (
@@ -444,12 +478,16 @@ class EvalExperimentService:
                 refusal_result.passed
             )
 
-        if has_retrieval_ground_truth:
-            required_results.append(
-                retrieval_data.get(
-                    "hit_at_k"
-                )
-            )
+        #
+        # None means the required judge metric
+        # could not produce a result.
+        #
+        if any(
+            result is None
+            for result
+            in required_results
+        ):
+            return None
 
         return all(
             result is True
@@ -465,6 +503,18 @@ class EvalExperimentService:
         name: str,
         top_k: int,
     ) -> EvalExperiment:
+        """
+        Run retrieval-only evaluation.
+
+        Metrics:
+
+        - Hit@K
+        - Precision@K
+        - Recall@K
+        - Reciprocal Rank
+        - Mean Reciprocal Rank
+        """
+
         if top_k < 1:
             raise ValueError(
                 "top_k must be greater than 0."
@@ -630,6 +680,11 @@ class EvalExperimentService:
                             eval_case
                             .expected_sources
                             or [],
+
+                        "retrieved_document_external_ids":
+                            result_data[
+                                "retrieved_document_external_ids"
+                            ],
                     },
                 )
 
@@ -663,9 +718,32 @@ class EvalExperimentService:
                 ]
             )
 
-            experiment.metrics = (
-                aggregate
-            )
+            #
+            # Retrieval-only experiment keeps
+            # a consistent top-level structure
+            # with full RAG experiments.
+            #
+            experiment.metrics = {
+                "retrieval":
+                    aggregate,
+
+                "cases": {
+                    "case_count":
+                        len(
+                            cases
+                        ),
+
+                    "scored_case_count":
+                        aggregate[
+                            "scored_case_count"
+                        ],
+
+                    "unscored_case_count":
+                        aggregate[
+                            "unscored_case_count"
+                        ],
+                },
+            }
 
             experiment.status = (
                 "completed"
@@ -704,28 +782,32 @@ class EvalExperimentService:
         run_judges: bool = True,
     ) -> EvalExperiment:
         """
-        Execute full Knowgentiq RAG evaluation.
+        Execute a full Knowgentiq RAG
+        evaluation run.
 
-        Captures deterministic retrieval metrics:
+        Retrieval:
 
         - Hit@K
+        - Precision@K
+        - Recall@K
         - Reciprocal Rank
         - MRR
 
-        Captures LLM judge metrics:
+        Generation:
 
         - Faithfulness
         - Answer relevancy
         - Correctness
         - Refusal correctness
 
-        Captures performance:
+        Performance:
 
-        - retrieval latency
-        - generation latency
-        - generation token usage
-        - judge latency
-        - judge token usage
+        - Retrieval latency
+        - Generation latency
+        - Total RAG latency
+        - Generation tokens
+        - Judge tokens
+        - Total evaluation tokens
         """
 
         if top_k < 1:
@@ -818,17 +900,31 @@ class EvalExperimentService:
         }
 
         generation_usage = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
+            "prompt_tokens":
+                0,
+
+            "completion_tokens":
+                0,
+
+            "total_tokens":
+                0,
         }
 
         judge_usage = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-            "latency_ms": 0.0,
-            "judge_calls": 0,
+            "prompt_tokens":
+                0,
+
+            "completion_tokens":
+                0,
+
+            "total_tokens":
+                0,
+
+            "latency_ms":
+                0.0,
+
+            "judge_calls":
+                0,
         }
 
         total_retrieval_ms = 0.0
@@ -851,8 +947,10 @@ class EvalExperimentService:
 
         try:
             for eval_case in cases:
+
                 #
-                # 1. Execute full RAG pipeline.
+                # 1. Execute the real RAG
+                # pipeline.
                 #
                 generation_data = (
                     self.generation_eval_service
@@ -871,8 +969,8 @@ class EvalExperimentService:
                 )
 
                 #
-                # 2. Score exact retrieval used
-                # by the generator.
+                # 2. Score the exact retrieval
+                # context used by generation.
                 #
                 retrieval_data = (
                     self.retrieval_eval_service
@@ -975,7 +1073,7 @@ class EvalExperimentService:
                 )
 
                 #
-                # 3. Build common generation
+                # 3. Common generation
                 # evaluation input.
                 #
                 evaluation_input = (
@@ -1008,14 +1106,16 @@ class EvalExperimentService:
                                 eval_case
                                 .expected_text
                             ]
-                            if eval_case
-                            .expected_text
+                            if (
+                                eval_case
+                                .expected_text
+                            )
                             else []
                         ),
 
                         metadata={
                             #
-                            # Runtime-only judge
+                            # Runtime judge
                             # dependencies.
                             #
                             "db":
@@ -1029,7 +1129,8 @@ class EvalExperimentService:
                                 evaluator_llm_configuration_id,
 
                             #
-                            # Golden metadata.
+                            # Golden case
+                            # metadata.
                             #
                             "answerable":
                                 eval_case
@@ -1039,7 +1140,7 @@ class EvalExperimentService:
                 )
 
                 #
-                # 4. Run generation-quality
+                # 4. Generation-quality
                 # evaluators.
                 #
                 if run_judges:
@@ -1095,9 +1196,10 @@ class EvalExperimentService:
                             passed=
                                 None,
 
-                            reason=
+                            reason=(
                                 "LLM judge evaluation "
-                                "was disabled.",
+                                "was disabled."
+                            ),
 
                             evaluator_type=
                                 "llm_judge",
@@ -1118,9 +1220,10 @@ class EvalExperimentService:
                             passed=
                                 None,
 
-                            reason=
+                            reason=(
                                 "LLM judge evaluation "
-                                "was disabled.",
+                                "was disabled."
+                            ),
 
                             evaluator_type=
                                 "llm_judge",
@@ -1141,9 +1244,10 @@ class EvalExperimentService:
                             passed=
                                 None,
 
-                            reason=
+                            reason=(
                                 "LLM judge evaluation "
-                                "was disabled.",
+                                "was disabled."
+                            ),
 
                             evaluator_type=
                                 "llm_judge",
@@ -1164,9 +1268,10 @@ class EvalExperimentService:
                             passed=
                                 None,
 
-                            reason=
+                            reason=(
                                 "LLM judge evaluation "
-                                "was disabled.",
+                                "was disabled."
+                            ),
 
                             evaluator_type=
                                 "llm_judge",
@@ -1201,8 +1306,8 @@ class EvalExperimentService:
                 )
 
                 #
-                # Capture evaluator profile from
-                # the first real judge result.
+                # Capture evaluator profile
+                # and judge usage.
                 #
                 for metric_result in (
                     faithfulness_result,
@@ -1216,12 +1321,16 @@ class EvalExperimentService:
                         .get(
                             "evaluator"
                         )
-                        if metric_result.metadata
+                        if (
+                            metric_result
+                            .metadata
+                        )
                         else None
                     )
 
                     if (
-                        evaluator_metadata is None
+                        evaluator_metadata
+                        is None
                         and metric_evaluator
                     ):
                         evaluator_metadata = (
@@ -1234,14 +1343,25 @@ class EvalExperimentService:
                     )
 
                 #
-                # 5. Build complete per-case
-                # metric bundle.
+                # 5. Complete per-case metric
+                # bundle.
                 #
                 metrics = {
+                    #
+                    # Retrieval metrics:
+                    #
+                    # hit_at_k
+                    # precision_at_k
+                    # recall_at_k
+                    # reciprocal_rank
+                    #
                     **retrieval_data[
                         "metrics"
                     ],
 
+                    #
+                    # Generation.
+                    #
                     "faithfulness":
                         self._metric_to_dict(
                             faithfulness_result
@@ -1262,6 +1382,9 @@ class EvalExperimentService:
                             refusal_result
                         ),
 
+                    #
+                    # Performance.
+                    #
                     "latency": {
                         "retrieval_ms":
                             latency[
@@ -1315,8 +1438,11 @@ class EvalExperimentService:
                 }
 
                 #
-                # 6. Determine overall case
-                # regression pass/fail.
+                # 6. Determine generation/RAG
+                # answer pass state.
+                #
+                # Retrieval is intentionally
+                # evaluated separately.
                 #
                 case_passed = (
                     self._determine_case_passed(
@@ -1428,17 +1554,11 @@ class EvalExperimentService:
                         metrics,
 
                     judge_metadata={
-                        #
-                        # Generator.
-                        #
                         "generator":
                             generation_data[
                                 "llm"
                             ],
 
-                        #
-                        # Judge.
-                        #
                         "evaluator":
                             (
                                 evaluator_metadata
@@ -1446,9 +1566,6 @@ class EvalExperimentService:
                                 else None
                             ),
 
-                        #
-                        # Golden information.
-                        #
                         "expected_answer":
                             eval_case
                             .expected_answer,
@@ -1462,27 +1579,17 @@ class EvalExperimentService:
                             .expected_sources
                             or [],
 
-                        #
-                        # Retrieved portable
-                        # identities.
-                        #
                         "retrieved_document_external_ids":
                             generation_data[
                                 "retrieved_document_external_ids"
                             ],
 
-                        #
-                        # Generator execution.
-                        #
                         "generation_usage":
                             usage,
 
                         "generation_latency":
                             latency,
 
-                        #
-                        # Whether judges ran.
-                        #
                         "run_judges":
                             run_judges,
                     },
@@ -1496,7 +1603,7 @@ class EvalExperimentService:
                 )
 
             #
-            # 8. Retrieval aggregate.
+            # 8. Aggregate retrieval.
             #
             retrieval_aggregate = (
                 self.retrieval_eval_service
@@ -1533,13 +1640,21 @@ class EvalExperimentService:
                 )
 
             else:
-                average_retrieval_ms = 0.0
+                average_retrieval_ms = (
+                    0.0
+                )
 
-                average_generation_ms = 0.0
+                average_generation_ms = (
+                    0.0
+                )
 
-                average_total_ms = 0.0
+                average_total_ms = (
+                    0.0
+                )
 
-                average_generation_tokens = 0.0
+                average_generation_tokens = (
+                    0.0
+                )
 
             if (
                 judge_usage[
@@ -1565,12 +1680,16 @@ class EvalExperimentService:
                 )
 
             else:
-                average_judge_latency_ms = 0.0
+                average_judge_latency_ms = (
+                    0.0
+                )
 
-                average_judge_tokens = 0.0
+                average_judge_tokens = (
+                    0.0
+                )
 
             #
-            # 9. Generation metric aggregates.
+            # 9. Aggregate generation.
             #
             generation_aggregate = {
                 metric_name:
@@ -1597,7 +1716,8 @@ class EvalExperimentService:
             )
 
             #
-            # 10. Overall run outcome.
+            # 10. Overall generation-quality
+            # pass rate.
             #
             scored_overall_cases = (
                 passed_case_count
@@ -1611,8 +1731,14 @@ class EvalExperimentService:
                 )
 
             else:
-                overall_pass_rate = None
+                overall_pass_rate = (
+                    None
+                )
 
+            #
+            # 11. Persist the complete
+            # experiment metric hierarchy.
+            #
             aggregate_metrics = {
                 "retrieval":
                     retrieval_aggregate,
@@ -1639,8 +1765,10 @@ class EvalExperimentService:
                                 overall_pass_rate,
                                 4,
                             )
-                            if overall_pass_rate
-                            is not None
+                            if (
+                                overall_pass_rate
+                                is not None
+                            )
                             else None
                         ),
                 },

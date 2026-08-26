@@ -405,6 +405,10 @@ class EvalComparisonMetricRead(
         float | None
     )
 
+    relative_delta: (
+        float | None
+    ) = None
+
     higher_is_better: bool
 
     outcome: str
@@ -435,7 +439,18 @@ class EvalComparisonRunRead(
         str | None
     )
 
+    #
+    # Retrieval.
+    #
     hit_rate: (
+        float | None
+    )
+
+    precision_at_k: (
+        float | None
+    )
+
+    recall_at_k: (
         float | None
     )
 
@@ -443,6 +458,9 @@ class EvalComparisonRunRead(
         float | None
     )
 
+    #
+    # Generation.
+    #
     faithfulness: (
         float | None
     )
@@ -463,7 +481,22 @@ class EvalComparisonRunRead(
         float | None
     )
 
+    #
+    # Performance.
+    #
+    average_retrieval_ms: (
+        float | None
+    )
+
+    average_generation_ms: (
+        float | None
+    )
+
     average_rag_ms: (
+        float | None
+    )
+
+    average_generation_tokens: (
         float | None
     )
 
@@ -505,6 +538,9 @@ class EvalComparisonCaseRunRead(
         bool | None
     )
 
+    #
+    # Retrieval.
+    #
     hit_at_k: (
         bool | None
     )
@@ -513,10 +549,21 @@ class EvalComparisonCaseRunRead(
         int | None
     )
 
+    precision_at_k: (
+        float | None
+    )
+
+    recall_at_k: (
+        float | None
+    )
+
     reciprocal_rank: (
         float | None
     )
 
+    #
+    # Generation.
+    #
     faithfulness: (
         float | None
     )
@@ -533,13 +580,56 @@ class EvalComparisonCaseRunRead(
         float | None
     )
 
-    quality_score: (
+    #
+    # Performance.
+    #
+    retrieval_ms: (
+        float | None
+    )
+
+    generation_ms: (
+        float | None
+    )
+
+    total_ms: (
+        float | None
+    )
+
+    prompt_tokens: (
+        float | None
+    )
+
+    completion_tokens: (
+        float | None
+    )
+
+    total_tokens: (
         float | None
     )
 
     actual_answer: (
         str | None
     )
+
+
+class EvalComparisonDimensionRead(
+    BaseModel
+):
+    outcome: str
+
+    metrics: list[
+        EvalComparisonMetricRead
+    ]
+
+
+class EvalComparisonCaseDimensionsRead(
+    BaseModel
+):
+    retrieval:EvalComparisonDimensionRead
+
+    generation: EvalComparisonDimensionRead
+
+    performance:EvalComparisonDimensionRead
 
 
 class EvalComparisonCaseRead(
@@ -555,31 +645,80 @@ class EvalComparisonCaseRead(
         bool | None
     )
 
+    #
+    # Backward-compatible overall field.
+    #
     outcome: str
 
-    quality_delta: (
-        float | None
-    )
+    overall_outcome: str
+
+    retrieval_outcome: str
+
+    generation_outcome: str
+
+    performance_outcome: str
+
+    dimensions:EvalComparisonCaseDimensionsRead
 
     baseline:EvalComparisonCaseRunRead
 
     candidate:EvalComparisonCaseRunRead
 
 
+class EvalComparisonOverallRead(
+    BaseModel
+):
+    outcome: str
+
+    retrieval_outcome: str
+
+    generation_outcome: str
+
+    performance_outcome: str
+
+
+class EvalComparisonMetricGroupsRead(
+    BaseModel
+):
+    retrieval:EvalComparisonDimensionRead
+
+    generation:EvalComparisonDimensionRead
+
+    performance: EvalComparisonDimensionRead
+
+
 class EvalComparisonSummaryRead(
     BaseModel
 ):
+    overall_outcome: str
+
+    retrieval_outcome: str
+
+    generation_outcome: str
+
+    performance_outcome: str
+
     improved_metric_count: int
 
     regressed_metric_count: int
 
     unchanged_metric_count: int
 
+    not_comparable_metric_count: int
+
     improved_case_count: int
 
     regressed_case_count: int
 
     unchanged_case_count: int
+
+    not_comparable_case_count: int
+
+    retrieval_regressed_case_count: int
+
+    generation_regressed_case_count: int
+
+    performance_regressed_case_count: int
 
     compared_case_count: int
 
@@ -589,12 +728,28 @@ class EvalComparisonRead(
 ):
     baseline:EvalComparisonRunRead
 
-    candidate:EvalComparisonRunRead
+    candidate: EvalComparisonRunRead
 
-    summary:EvalComparisonSummaryRead
+    overall:EvalComparisonOverallRead
 
+    summary: EvalComparisonSummaryRead
+
+    metric_groups: EvalComparisonMetricGroupsRead
+
+    #
+    # Flat list retained because the
+    # existing frontend currently consumes
+    # comparison.metrics.
+    #
     metrics: list[
         EvalComparisonMetricRead
+    ]
+
+    #
+    # Complete case list.
+    #
+    cases: list[
+        EvalComparisonCaseRead
     ]
 
     improved_cases: list[
@@ -606,5 +761,9 @@ class EvalComparisonRead(
     ]
 
     unchanged_cases: list[
+        EvalComparisonCaseRead
+    ]
+
+    not_comparable_cases: list[
         EvalComparisonCaseRead
     ]

@@ -16,7 +16,9 @@ from app.services.evaluators import (
 
 class RetrievalEvalService:
 
-    def __init__(self):
+    def __init__(
+        self,
+    ):
         self.search_service = (
             DocumentSearchService()
         )
@@ -197,6 +199,13 @@ class RetrievalEvalService:
         retrieval metrics are calculated
         against the exact context that was
         sent to the generator.
+
+        Metrics:
+
+        - Hit@K
+        - Precision@K
+        - Recall@K
+        - Reciprocal Rank
         """
 
         if top_k < 1:
@@ -320,9 +329,45 @@ class RetrievalEvalService:
             )
         )
 
+        #
+        # The remaining retrieval metrics
+        # use the rank determined by Hit@K.
+        #
         evaluation_input.metadata[
             "expected_rank"
         ] = expected_rank
+
+        #
+        # Precision@K
+        #
+        precision_evaluator = (
+            self.evaluator_registry
+            .get(
+                "precision_at_k"
+            )
+        )
+
+        precision_result = (
+            precision_evaluator.evaluate(
+                evaluation_input
+            )
+        )
+
+        #
+        # Recall@K
+        #
+        recall_evaluator = (
+            self.evaluator_registry
+            .get(
+                "recall_at_k"
+            )
+        )
+
+        recall_result = (
+            recall_evaluator.evaluate(
+                evaluation_input
+            )
+        )
 
         #
         # Reciprocal Rank
@@ -364,6 +409,56 @@ class RetrievalEvalService:
 
                 "metadata":
                     hit_result.metadata,
+            },
+
+            "precision_at_k": {
+                "score":
+                    precision_result.score,
+
+                "passed":
+                    precision_result.passed,
+
+                "threshold":
+                    precision_result.threshold,
+
+                "reason":
+                    precision_result.reason,
+
+                "evaluator_type":
+                    precision_result
+                    .evaluator_type,
+
+                "evaluator_engine":
+                    precision_result
+                    .evaluator_engine,
+
+                "metadata":
+                    precision_result.metadata,
+            },
+
+            "recall_at_k": {
+                "score":
+                    recall_result.score,
+
+                "passed":
+                    recall_result.passed,
+
+                "threshold":
+                    recall_result.threshold,
+
+                "reason":
+                    recall_result.reason,
+
+                "evaluator_type":
+                    recall_result
+                    .evaluator_type,
+
+                "evaluator_engine":
+                    recall_result
+                    .evaluator_engine,
+
+                "metadata":
+                    recall_result.metadata,
             },
 
             "reciprocal_rank": {
@@ -414,6 +509,12 @@ class RetrievalEvalService:
             "hit_at_k":
                 hit_result.passed,
 
+            "precision_at_k":
+                precision_result.score,
+
+            "recall_at_k":
+                recall_result.score,
+
             "reciprocal_rank":
                 rr_result.score,
 
@@ -429,22 +530,52 @@ class RetrievalEvalService:
         results: list[dict],
     ) -> dict:
         """
-        Aggregate only cases that actually
-        have retrieval ground truth.
+        Aggregate retrieval evaluation.
+
+        Only cases that actually have
+        retrieval ground truth contribute
+        to retrieval metrics.
+
+        Aggregate metrics:
+
+        - Hit Rate
+        - Mean Precision@K
+        - Mean Recall@K
+        - MRR
 
         Unanswerable/refusal cases without
-        expected sources are excluded.
+        expected retrieval sources are
+        excluded.
         """
 
         if not results:
             return {
-                "case_count": 0,
-                "scored_case_count": 0,
-                "unscored_case_count": 0,
-                "hit_count": 0,
-                "miss_count": 0,
-                "hit_rate": 0.0,
-                "mrr": 0.0,
+                "case_count":
+                    0,
+
+                "scored_case_count":
+                    0,
+
+                "unscored_case_count":
+                    0,
+
+                "hit_count":
+                    0,
+
+                "miss_count":
+                    0,
+
+                "hit_rate":
+                    0.0,
+
+                "precision_at_k":
+                    0.0,
+
+                "recall_at_k":
+                    0.0,
+
+                "mrr":
+                    0.0,
             }
 
         scored_results = [
@@ -492,6 +623,12 @@ class RetrievalEvalService:
                 "hit_rate":
                     0.0,
 
+                "precision_at_k":
+                    0.0,
+
+                "recall_at_k":
+                    0.0,
+
                 "mrr":
                     0.0,
             }
@@ -513,25 +650,95 @@ class RetrievalEvalService:
             - hit_count
         )
 
-        reciprocal_rank_sum = sum(
+        #
+        # Some metrics can theoretically
+        # be unscored independently, so
+        # aggregate only non-None values.
+        #
+        precision_values = [
             float(
-                result.get(
-                    "reciprocal_rank"
-                )
-                or 0.0
+                result[
+                    "precision_at_k"
+                ]
             )
             for result
             in scored_results
-        )
+            if (
+                result.get(
+                    "precision_at_k"
+                )
+                is not None
+            )
+        ]
+
+        recall_values = [
+            float(
+                result[
+                    "recall_at_k"
+                ]
+            )
+            for result
+            in scored_results
+            if (
+                result.get(
+                    "recall_at_k"
+                )
+                is not None
+            )
+        ]
+
+        reciprocal_rank_values = [
+            float(
+                result[
+                    "reciprocal_rank"
+                ]
+            )
+            for result
+            in scored_results
+            if (
+                result.get(
+                    "reciprocal_rank"
+                )
+                is not None
+            )
+        ]
 
         hit_rate = (
             hit_count
             / scored_case_count
         )
 
+        mean_precision_at_k = (
+            sum(
+                precision_values
+            )
+            / len(
+                precision_values
+            )
+            if precision_values
+            else 0.0
+        )
+
+        mean_recall_at_k = (
+            sum(
+                recall_values
+            )
+            / len(
+                recall_values
+            )
+            if recall_values
+            else 0.0
+        )
+
         mrr = (
-            reciprocal_rank_sum
-            / scored_case_count
+            sum(
+                reciprocal_rank_values
+            )
+            / len(
+                reciprocal_rank_values
+            )
+            if reciprocal_rank_values
+            else 0.0
         )
 
         return {
@@ -552,6 +759,12 @@ class RetrievalEvalService:
 
             "hit_rate":
                 hit_rate,
+
+            "precision_at_k":
+                mean_precision_at_k,
+
+            "recall_at_k":
+                mean_recall_at_k,
 
             "mrr":
                 mrr,
