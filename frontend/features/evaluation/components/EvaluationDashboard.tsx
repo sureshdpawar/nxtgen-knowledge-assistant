@@ -175,15 +175,63 @@ function getMetricAverage(
 }
 
 
-function getAverageLatency(
+function getRetrievalMetric(
   experiment:
     EvalExperiment,
+  metric: string,
+) {
+  return getNestedNumber(
+    experiment.metrics,
+    [
+      "retrieval",
+      metric,
+    ],
+  );
+}
+
+
+function getLatencyMetric(
+  experiment:
+    EvalExperiment,
+  metric: string,
 ) {
   return getNestedNumber(
     experiment.metrics,
     [
       "latency",
-      "average_rag_ms",
+      metric,
+    ],
+  );
+}
+
+
+function getGenerationUsageMetric(
+  experiment:
+    EvalExperiment,
+  metric: string,
+) {
+  return getNestedNumber(
+    experiment.metrics,
+    [
+      "usage",
+      "generation",
+      metric,
+    ],
+  );
+}
+
+
+function getJudgeUsageMetric(
+  experiment:
+    EvalExperiment,
+  metric: string,
+) {
+  return getNestedNumber(
+    experiment.metrics,
+    [
+      "usage",
+      "judge",
+      metric,
     ],
   );
 }
@@ -1303,120 +1351,253 @@ export default function EvaluationDashboard() {
                     </div>
 
 
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                      <MetricCard
-                        label="Hit@K"
-                        value={
-                          formatScore(
-                            selectedRun
-                              .hit_rate,
-                          )
-                        }
-                      />
+                    <div className="space-y-5">
+                      <div>
+                        <div className="mb-3">
+                          <h3 className="text-sm font-semibold text-slate-900">
+                            Retrieval
+                          </h3>
 
-                      <MetricCard
-                        label="MRR"
-                        value={
-                          formatScore(
-                            selectedRun
-                              .mrr,
-                          )
-                        }
-                      />
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            How effectively the retriever
+                            found the expected evidence.
+                          </p>
+                        </div>
 
-                      <MetricCard
-                        label="Faithfulness"
-                        value={
-                          formatScore(
-                            getMetricAverage(
-                              selectedRun,
-                              "faithfulness",
-                            ),
-                          )
-                        }
-                      />
+                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                          <MetricCard
+                            label="Hit@K"
+                            value={
+                              formatScore(
+                                selectedRun
+                                  .hit_rate,
+                              )
+                            }
+                            subtitle={`Top K = ${selectedRun.top_k}`}
+                          />
 
-                      <MetricCard
-                        label="Answer Relevancy"
-                        value={
-                          formatScore(
-                            getMetricAverage(
-                              selectedRun,
-                              "answer_relevancy",
-                            ),
-                          )
-                        }
-                      />
+                          <MetricCard
+                            label="Precision@K"
+                            value={
+                              formatScore(
+                                getRetrievalMetric(
+                                  selectedRun,
+                                  "precision_at_k",
+                                ),
+                              )
+                            }
+                            subtitle={`Top K = ${selectedRun.top_k}`}
+                          />
 
-                      <MetricCard
-                        label="Correctness"
-                        value={
-                          formatScore(
-                            getMetricAverage(
-                              selectedRun,
-                              "correctness",
-                            ),
-                          )
-                        }
-                      />
+                          <MetricCard
+                            label="Recall@K"
+                            value={
+                              formatScore(
+                                getRetrievalMetric(
+                                  selectedRun,
+                                  "recall_at_k",
+                                ),
+                              )
+                            }
+                            subtitle={`Top K = ${selectedRun.top_k}`}
+                          />
 
-                      <MetricCard
-                        label="Refusal"
-                        value={
-                          formatScore(
-                            getMetricAverage(
-                              selectedRun,
-                              "refusal_correctness",
-                            ),
-                          )
-                        }
-                      />
-
-                      <MetricCard
-                        label="Pass Rate"
-                        value={
-                          formatScore(
-                            getPassRate(
-                              selectedRun,
-                            ),
-                          )
-                        }
-                      />
-
-                      <MetricCard
-                        label="Avg RAG Latency"
-                        value={
-                          formatMilliseconds(
-                            getAverageLatency(
-                              selectedRun,
-                            ),
-                          )
-                        }
-                      />
-                    </div>
+                          <MetricCard
+                            label="MRR"
+                            value={
+                              formatScore(
+                                selectedRun
+                                  .mrr,
+                              )
+                            }
+                            subtitle="Mean Reciprocal Rank"
+                          />
+                        </div>
+                      </div>
 
 
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <MetricCard
-                        label="Total Evaluation Tokens"
-                        value={
-                          formatNumber(
-                            getTotalTokens(
-                              selectedRun,
-                            ),
-                          )
-                        }
-                        subtitle="Generator + judge"
-                      />
+                      <div>
+                        <div className="mb-3">
+                          <h3 className="text-sm font-semibold text-slate-900">
+                            Generation
+                          </h3>
 
-                      <MetricCard
-                        label="Dataset Cases"
-                        value={
-                          formatNumber(
-                            cases.length,
-                          )
-                        }
-                      />
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            Quality of the generated
+                            answers against the golden set.
+                          </p>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                          <MetricCard
+                            label="Faithfulness"
+                            value={
+                              formatScore(
+                                getMetricAverage(
+                                  selectedRun,
+                                  "faithfulness",
+                                ),
+                              )
+                            }
+                          />
+
+                          <MetricCard
+                            label="Answer Relevancy"
+                            value={
+                              formatScore(
+                                getMetricAverage(
+                                  selectedRun,
+                                  "answer_relevancy",
+                                ),
+                              )
+                            }
+                          />
+
+                          <MetricCard
+                            label="Correctness"
+                            value={
+                              formatScore(
+                                getMetricAverage(
+                                  selectedRun,
+                                  "correctness",
+                                ),
+                              )
+                            }
+                          />
+
+                          <MetricCard
+                            label="Refusal"
+                            value={
+                              formatScore(
+                                getMetricAverage(
+                                  selectedRun,
+                                  "refusal_correctness",
+                                ),
+                              )
+                            }
+                          />
+
+                          <MetricCard
+                            label="Pass Rate"
+                            value={
+                              formatScore(
+                                getPassRate(
+                                  selectedRun,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+
+
+                      <div>
+                        <div className="mb-3">
+                          <h3 className="text-sm font-semibold text-slate-900">
+                            Performance
+                          </h3>
+
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            Retrieval and generation
+                            execution cost.
+                          </p>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                          <MetricCard
+                            label="Avg Retrieval Latency"
+                            value={
+                              formatMilliseconds(
+                                getLatencyMetric(
+                                  selectedRun,
+                                  "average_retrieval_ms",
+                                ),
+                              )
+                            }
+                          />
+
+                          <MetricCard
+                            label="Avg Generation Latency"
+                            value={
+                              formatMilliseconds(
+                                getLatencyMetric(
+                                  selectedRun,
+                                  "average_generation_ms",
+                                ),
+                              )
+                            }
+                          />
+
+                          <MetricCard
+                            label="Avg RAG Latency"
+                            value={
+                              formatMilliseconds(
+                                getLatencyMetric(
+                                  selectedRun,
+                                  "average_rag_ms",
+                                ),
+                              )
+                            }
+                          />
+
+                          <MetricCard
+                            label="Avg Generation Tokens"
+                            value={
+                              formatNumber(
+                                getGenerationUsageMetric(
+                                  selectedRun,
+                                  "average_tokens_per_case",
+                                ),
+                              )
+                            }
+                          />
+
+                          <MetricCard
+                            label="Generation Tokens"
+                            value={
+                              formatNumber(
+                                getGenerationUsageMetric(
+                                  selectedRun,
+                                  "total_tokens",
+                                ),
+                              )
+                            }
+                          />
+
+                          <MetricCard
+                            label="Judge Tokens"
+                            value={
+                              formatNumber(
+                                getJudgeUsageMetric(
+                                  selectedRun,
+                                  "total_tokens",
+                                ),
+                              )
+                            }
+                          />
+
+                          <MetricCard
+                            label="Total Evaluation Tokens"
+                            value={
+                              formatNumber(
+                                getTotalTokens(
+                                  selectedRun,
+                                ),
+                              )
+                            }
+                            subtitle="Generator + judge"
+                          />
+
+                          <MetricCard
+                            label="Dataset Cases"
+                            value={
+                              formatNumber(
+                                cases.length,
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
                     </div>
 
 
