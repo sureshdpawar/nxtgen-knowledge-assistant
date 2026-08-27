@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy import (
     Boolean,
     ForeignKey,
+    JSON,
     Text,
 )
 from sqlalchemy.orm import (
@@ -17,6 +18,7 @@ from app.db.mixins import (
     TimestampMixin,
     UUIDMixin,
 )
+
 
 if TYPE_CHECKING:
     from app.models.eval_dataset import (
@@ -52,6 +54,12 @@ class EvalCase(
         nullable=False,
     )
 
+    #
+    # Environment-specific ground truth.
+    #
+    # Useful when a golden dataset is created
+    # directly against one KB/database.
+    #
     expected_document_id: Mapped[
         UUID | None
     ] = mapped_column(
@@ -72,6 +80,32 @@ class EvalCase(
         ),
         nullable=True,
         index=True,
+    )
+
+    #
+    # Portable source ground truth.
+    #
+    # Example:
+    #
+    # [
+    #     {
+    #         "type": "url",
+    #         "value":
+    #           "https://nxtgeninnovate.com/"
+    #           "ai-data-science-solutions.html"
+    #     }
+    # ]
+    #
+    # This allows the same golden dataset
+    # to work across dev/staging/prod even
+    # when document UUIDs are different.
+    #
+    expected_sources: Mapped[
+        list
+    ] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
     )
 
     expected_text: Mapped[

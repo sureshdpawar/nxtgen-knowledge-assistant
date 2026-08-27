@@ -3,7 +3,9 @@ from uuid import UUID
 from fastapi import (
     APIRouter,
     Depends,
+    File,
     HTTPException,
+    UploadFile,
     status,
 )
 from sqlalchemy.orm import Session
@@ -19,14 +21,25 @@ from app.repositories.eval_result_repository import (
 from app.schemas.eval import (
     EvalCaseCreate,
     EvalCaseRead,
+    EvalComparisonRead,
+    EvalComparisonRequest,
     EvalDatasetCreate,
+    EvalDatasetImportPayload,
+    EvalDatasetImportRead,
     EvalDatasetRead,
     EvalExperimentRead,
     EvalExperimentRun,
+    EvalRAGExperimentRun,
     EvalResultRead,
 )
 from app.services.eval_case_service import (
     EvalCaseService,
+)
+from app.services.eval_comparison_service import (
+    EvalComparisonService,
+)
+from app.services.eval_dataset_import_service import (
+    EvalDatasetImportService,
 )
 from app.services.eval_dataset_service import (
     EvalDatasetService,
@@ -46,12 +59,20 @@ dataset_service = (
     EvalDatasetService()
 )
 
+dataset_import_service = (
+    EvalDatasetImportService()
+)
+
 case_service = (
     EvalCaseService()
 )
 
 experiment_service = (
     EvalExperimentService()
+)
+
+comparison_service = (
+    EvalComparisonService()
 )
 
 result_repository = (
@@ -84,7 +105,9 @@ def create_dataset(
         return (
             dataset_service.create(
                 db=db,
-                payload=payload,
+
+                payload=
+                    payload,
             )
         )
 
@@ -92,8 +115,124 @@ def create_dataset(
         raise HTTPException(
             status_code=
                 status.HTTP_400_BAD_REQUEST,
+
             detail=str(
                 exc
+            ),
+        ) from exc
+
+
+@router.post(
+    "/datasets/import",
+    response_model=
+        EvalDatasetImportRead,
+    status_code=
+        status.HTTP_201_CREATED,
+)
+async def import_dataset(
+    file: UploadFile = File(...),
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    """
+    Import a complete evaluation dataset
+    and all golden test cases from one
+    UTF-8 JSON file.
+
+    The import is transactional.
+    """
+
+    filename = (
+        file.filename
+        or ""
+    )
+
+    if not filename.lower().endswith(
+        ".json"
+    ):
+        raise HTTPException(
+            status_code=
+                status.HTTP_400_BAD_REQUEST,
+
+            detail=(
+                "Evaluation dataset "
+                "must be a JSON file."
+            ),
+        )
+
+    try:
+        raw_content = await file.read()
+
+        if not raw_content:
+            raise ValueError(
+                "Uploaded JSON file "
+                "is empty."
+            )
+
+        try:
+            json_content = (
+                raw_content.decode(
+                    "utf-8"
+                )
+            )
+
+        except UnicodeDecodeError as exc:
+            raise ValueError(
+                "Evaluation dataset "
+                "must use UTF-8 encoding."
+            ) from exc
+
+        payload = (
+            EvalDatasetImportPayload
+            .model_validate_json(
+                json_content
+            )
+        )
+
+        dataset, case_count = (
+            dataset_import_service
+            .import_dataset(
+                db=db,
+
+                payload=
+                    payload,
+            )
+        )
+
+        return {
+            "dataset":
+                dataset,
+
+            "case_count":
+                case_count,
+        }
+
+    except HTTPException:
+        raise
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=
+                status.HTTP_400_BAD_REQUEST,
+
+            detail=str(
+                exc
+            ),
+        ) from exc
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=
+                status.HTTP_400_BAD_REQUEST,
+
+            detail=(
+                "Unable to import "
+                "evaluation dataset: "
+                f"{str(exc)}"
             ),
         ) from exc
 
@@ -118,6 +257,7 @@ def list_datasets(
         dataset_service
         .list_by_knowledge_base_id(
             db=db,
+
             knowledge_base_id=
                 knowledge_base_id,
         )
@@ -141,6 +281,7 @@ def get_dataset(
     dataset = (
         dataset_service.get(
             db=db,
+
             dataset_id=
                 dataset_id,
         )
@@ -150,6 +291,7 @@ def get_dataset(
         raise HTTPException(
             status_code=
                 status.HTTP_404_NOT_FOUND,
+
             detail=(
                 "Eval dataset "
                 "not found."
@@ -184,7 +326,9 @@ def create_case(
         return (
             case_service.create(
                 db=db,
-                payload=payload,
+
+                payload=
+                    payload,
             )
         )
 
@@ -192,6 +336,7 @@ def create_case(
         raise HTTPException(
             status_code=
                 status.HTTP_400_BAD_REQUEST,
+
             detail=str(
                 exc
             ),
@@ -217,6 +362,7 @@ def list_cases(
         case_service
         .list_by_dataset_id(
             db=db,
+
             dataset_id=
                 dataset_id,
         )
@@ -224,7 +370,7 @@ def list_cases(
 
 
 #
-# Experiments
+# Retrieval Evaluation Runs
 #
 
 
@@ -249,13 +395,17 @@ def run_retrieval_experiment(
             experiment_service
             .run_retrieval_experiment(
                 db=db,
+
                 dataset_id=
                     payload.dataset_id,
+
                 knowledge_base_id=
                     payload
                     .knowledge_base_id,
+
                 name=
                     payload.name,
+
                 top_k=
                     payload.top_k,
             )
@@ -265,10 +415,99 @@ def run_retrieval_experiment(
         raise HTTPException(
             status_code=
                 status.HTTP_400_BAD_REQUEST,
+
             detail=str(
                 exc
             ),
         ) from exc
+
+
+#
+# Full RAG Evaluation Runs
+#
+
+
+@router.post(
+    "/experiments/rag",
+    response_model=
+        EvalExperimentRead,
+    status_code=
+        status.HTTP_201_CREATED,
+)
+def run_rag_experiment(
+    payload:
+        EvalRAGExperimentRun,
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    """
+    Execute a complete RAG evaluation run.
+
+    Deterministic metrics:
+
+    - Hit@K
+    - Reciprocal Rank
+    - MRR
+    - latency
+    - token usage
+
+    LLM-as-a-Judge metrics:
+
+    - Faithfulness
+    - Answer relevancy
+    - Correctness
+    - Refusal correctness
+
+    The evaluator LLM profile may be
+    different from the generator profile.
+    """
+
+    try:
+        return (
+            experiment_service
+            .run_rag_experiment(
+                db=db,
+
+                dataset_id=
+                    payload.dataset_id,
+
+                knowledge_base_id=
+                    payload
+                    .knowledge_base_id,
+
+                name=
+                    payload.name,
+
+                top_k=
+                    payload.top_k,
+
+                evaluator_llm_configuration_id=
+                    payload
+                    .evaluator_llm_configuration_id,
+
+                run_judges=
+                    payload.run_judges,
+            )
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=
+                status.HTTP_400_BAD_REQUEST,
+
+            detail=str(
+                exc
+            ),
+        ) from exc
+
+
+#
+# Experiment Queries
+#
 
 
 @router.get(
@@ -290,6 +529,7 @@ def list_experiments(
         experiment_service
         .list_by_dataset_id(
             db=db,
+
             dataset_id=
                 dataset_id,
         )
@@ -313,6 +553,7 @@ def get_experiment(
     experiment = (
         experiment_service.get(
             db=db,
+
             experiment_id=
                 experiment_id,
         )
@@ -322,6 +563,7 @@ def get_experiment(
         raise HTTPException(
             status_code=
                 status.HTTP_404_NOT_FOUND,
+
             detail=(
                 "Eval experiment "
                 "not found."
@@ -329,6 +571,73 @@ def get_experiment(
         )
 
     return experiment
+
+
+#
+# Compare Evaluation Runs
+#
+
+
+@router.post(
+    "/experiments/compare",
+    response_model=
+        EvalComparisonRead,
+)
+def compare_experiments(
+    payload:
+        EvalComparisonRequest,
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    """
+    Compare a candidate evaluation run
+    against a baseline run.
+
+    V1 requires:
+
+    - same evaluation dataset
+    - same Knowledge Base
+    - same evaluation type
+    - both runs completed
+
+    Returns:
+
+    - aggregate metric differences
+    - improved metrics
+    - regressed metrics
+    - improved test cases
+    - regressed test cases
+    - unchanged test cases
+    """
+
+    try:
+        return (
+            comparison_service.compare(
+                db=db,
+
+                baseline_experiment_id=
+                    payload
+                    .baseline_experiment_id,
+
+                candidate_experiment_id=
+                    payload
+                    .candidate_experiment_id,
+            )
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=
+                status.HTTP_400_BAD_REQUEST,
+
+            detail=str(
+                exc
+            ),
+        ) from exc
 
 
 #
@@ -355,6 +664,7 @@ def list_results(
     experiment = (
         experiment_service.get(
             db=db,
+
             experiment_id=
                 experiment_id,
         )
@@ -364,6 +674,7 @@ def list_results(
         raise HTTPException(
             status_code=
                 status.HTTP_404_NOT_FOUND,
+
             detail=(
                 "Eval experiment "
                 "not found."
@@ -374,6 +685,7 @@ def list_results(
         result_repository
         .list_by_experiment_id(
             db=db,
+
             experiment_id=
                 experiment_id,
         )

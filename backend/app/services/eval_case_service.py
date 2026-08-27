@@ -137,19 +137,91 @@ class EvalCaseService:
                     "expected document."
                 )
 
+        #
+        # Validate portable expected sources.
+        #
+        # For V1 we support URL-based sources.
+        #
+        # We do not resolve the URL to a
+        # document here because the purpose
+        # of expected_sources is portability
+        # across environments.
+        #
+        expected_sources = []
+
+        for source in payload.expected_sources:
+            source_type = (
+                source.type
+                .strip()
+                .lower()
+            )
+
+            source_value = (
+                source.value
+                .strip()
+            )
+
+            if not source_value:
+                raise ValueError(
+                    "Expected source value "
+                    "cannot be empty."
+                )
+
+            if source_type not in {
+                "url",
+                "external_id",
+            }:
+                raise ValueError(
+                    "Unsupported expected "
+                    "source type: "
+                    f"{source.type}"
+                )
+
+            expected_sources.append(
+                {
+                    "type":
+                        source_type,
+
+                    "value":
+                        source_value,
+                }
+            )
+
+        #
+        # Basic golden-case validation.
+        #
+        if (
+            payload.answerable
+            and not payload.expected_answer
+        ):
+            raise ValueError(
+                "Answerable evaluation "
+                "cases should have an "
+                "expected answer."
+            )
+
         eval_case = EvalCase(
             dataset_id=
                 payload.dataset_id,
+
             question=
                 payload.question,
+
             expected_document_id=
                 payload.expected_document_id,
+
             expected_chunk_id=
                 payload.expected_chunk_id,
+
+            expected_sources=
+                expected_sources,
+
             expected_text=
                 payload.expected_text,
+
             expected_answer=
                 payload.expected_answer,
+
             answerable=
                 payload.answerable,
         )
@@ -174,9 +246,12 @@ class EvalCaseService:
         db: Session,
         eval_case_id: UUID,
     ) -> EvalCase | None:
-        return self.repository.get(
-            db=db,
-            entity_id=eval_case_id,
+        return (
+            self.repository.get(
+                db=db,
+                entity_id=
+                    eval_case_id,
+            )
         )
 
     def list_by_dataset_id(

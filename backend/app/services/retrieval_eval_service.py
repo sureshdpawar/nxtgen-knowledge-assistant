@@ -8,13 +8,23 @@ from app.models.eval_case import (
 from app.services.document_search_service import (
     DocumentSearchService,
 )
+from app.services.evaluators import (
+    EvaluationInput,
+    EvaluatorRegistry,
+)
 
 
 class RetrievalEvalService:
 
-    def __init__(self):
+    def __init__(
+        self,
+    ):
         self.search_service = (
             DocumentSearchService()
+        )
+
+        self.evaluator_registry = (
+            EvaluatorRegistry()
         )
 
     def evaluate_case(
@@ -24,6 +34,11 @@ class RetrievalEvalService:
         eval_case: EvalCase,
         top_k: int,
     ) -> dict:
+        """
+        Execute retrieval and evaluate
+        the retrieved results.
+        """
+
         if top_k < 1:
             raise ValueError(
                 "top_k must be "
@@ -33,21 +48,27 @@ class RetrievalEvalService:
         results = (
             self.search_service.search(
                 db=db,
+
                 knowledge_base_id=
                     knowledge_base_id,
+
                 query=
                     eval_case.question,
+
                 top_k_override=
                     top_k,
             )
         )
 
         retrieved_document_ids = []
-        retrieved_chunk_ids = []
-        retrieved_distances = []
-        retrieval_context = []
 
-        expected_rank = None
+        retrieved_document_external_ids = []
+
+        retrieved_chunk_ids = []
+
+        retrieved_distances = []
+
+        retrieval_context = []
 
         for (
             rank,
@@ -67,12 +88,20 @@ class RetrievalEvalService:
                 document.id
             )
 
+            document_external_id = (
+                document.external_id
+            )
+
             chunk_id = str(
                 chunk.id
             )
 
             retrieved_document_ids.append(
                 document_id
+            )
+
+            retrieved_document_external_ids.append(
+                document_external_id
             )
 
             retrieved_chunk_ids.append(
@@ -87,17 +116,38 @@ class RetrievalEvalService:
 
             retrieval_context.append(
                 {
-                    "rank": rank,
+                    "rank":
+                        rank,
+
                     "document_id":
                         document_id,
+
+                    "document_external_id":
+                        document_external_id,
+
                     "chunk_id":
                         chunk_id,
+
                     "document_name":
                         document.original_filename,
+
+                    "knowledge_source_id":
+                        str(
+                            knowledge_source.id
+                        ),
+
+                    "knowledge_source_name":
+                        knowledge_source.name,
+
                     "chunk_index":
                         chunk.chunk_index,
+
                     "text":
-                        chunk.text,
+                        (
+                            chunk.text
+                            or ""
+                        ),
+
                     "distance":
                         float(
                             distance
@@ -105,49 +155,344 @@ class RetrievalEvalService:
                 }
             )
 
-            if (
-                eval_case
-                .expected_document_id
-                is not None
-                and document.id
-                == eval_case
-                .expected_document_id
-                and expected_rank
-                is None
-            ):
-                expected_rank = rank
+        return (
+            self.evaluate_retrieved_case(
+                eval_case=
+                    eval_case,
 
-        #
-        # Retrieval metrics.
-        #
-        # For Eval v1 we score against
-        # expected_document_id.
-        #
-        # If the expected document appears
-        # anywhere inside the top K results:
-        #
-        #     Hit@K = True
-        #
-        # Reciprocal Rank:
-        #
-        #     rank 1 -> 1.0
-        #     rank 2 -> 0.5
-        #     rank 3 -> 0.333...
-        #
-        hit_at_k = (
-            expected_rank is not None
+                top_k=
+                    top_k,
+
+                retrieved_document_ids=
+                    retrieved_document_ids,
+
+                retrieved_document_external_ids=
+                    retrieved_document_external_ids,
+
+                retrieved_chunk_ids=
+                    retrieved_chunk_ids,
+
+                retrieved_distances=
+                    retrieved_distances,
+
+                retrieval_context=
+                    retrieval_context,
+            )
         )
 
-        reciprocal_rank = (
-            1.0 / expected_rank
-            if expected_rank
-            is not None
-            else 0.0
+    def evaluate_retrieved_case(
+        self,
+        eval_case: EvalCase,
+        top_k: int,
+        retrieved_document_ids: list,
+        retrieved_chunk_ids: list,
+        retrieved_distances: list,
+        retrieval_context: list,
+        retrieved_document_external_ids:
+            list | None = None,
+    ) -> dict:
+        """
+        Score retrieval results already
+        produced by another service.
+
+        Full RAG evaluation uses this so
+        retrieval metrics are calculated
+        against the exact context that was
+        sent to the generator.
+
+        Metrics:
+
+        - Hit@K
+        - Precision@K
+        - Recall@K
+        - Reciprocal Rank
+        """
+
+        if top_k < 1:
+            raise ValueError(
+                "top_k must be "
+                "greater than 0."
+            )
+
+        if (
+            retrieved_document_external_ids
+            is None
+        ):
+            retrieved_document_external_ids = [
+                item.get(
+                    "document_external_id"
+                )
+                for item
+                in retrieval_context
+            ]
+
+        expected_sources = (
+            eval_case.expected_sources
+            or []
         )
+
+        has_retrieval_ground_truth = any(
+            [
+                (
+                    eval_case
+                    .expected_document_id
+                    is not None
+                ),
+                (
+                    eval_case
+                    .expected_chunk_id
+                    is not None
+                ),
+                bool(
+                    expected_sources
+                ),
+            ]
+        )
+
+        evaluation_input = (
+            EvaluationInput(
+                question=
+                    eval_case.question,
+
+                retrieved_context=[
+                    item.get(
+                        "text",
+                        "",
+                    )
+                    for item
+                    in retrieval_context
+                ],
+
+                expected_context=(
+                    [
+                        eval_case
+                        .expected_text
+                    ]
+                    if (
+                        eval_case
+                        .expected_text
+                    )
+                    else []
+                ),
+
+                metadata={
+                    "top_k":
+                        top_k,
+
+                    "expected_document_id":
+                        eval_case
+                        .expected_document_id,
+
+                    "expected_chunk_id":
+                        eval_case
+                        .expected_chunk_id,
+
+                    "expected_sources":
+                        expected_sources,
+
+                    "retrieved_document_ids":
+                        retrieved_document_ids,
+
+                    "retrieved_document_external_ids":
+                        retrieved_document_external_ids,
+
+                    "retrieved_chunk_ids":
+                        retrieved_chunk_ids,
+
+                    "has_retrieval_ground_truth":
+                        has_retrieval_ground_truth,
+                },
+            )
+        )
+
+        #
+        # Hit@K
+        #
+        hit_evaluator = (
+            self.evaluator_registry
+            .get(
+                "hit_at_k"
+            )
+        )
+
+        hit_result = (
+            hit_evaluator.evaluate(
+                evaluation_input
+            )
+        )
+
+        expected_rank = (
+            hit_result
+            .metadata
+            .get(
+                "expected_rank"
+            )
+        )
+
+        #
+        # The remaining retrieval metrics
+        # use the rank determined by Hit@K.
+        #
+        evaluation_input.metadata[
+            "expected_rank"
+        ] = expected_rank
+
+        #
+        # Precision@K
+        #
+        precision_evaluator = (
+            self.evaluator_registry
+            .get(
+                "precision_at_k"
+            )
+        )
+
+        precision_result = (
+            precision_evaluator.evaluate(
+                evaluation_input
+            )
+        )
+
+        #
+        # Recall@K
+        #
+        recall_evaluator = (
+            self.evaluator_registry
+            .get(
+                "recall_at_k"
+            )
+        )
+
+        recall_result = (
+            recall_evaluator.evaluate(
+                evaluation_input
+            )
+        )
+
+        #
+        # Reciprocal Rank
+        #
+        rr_evaluator = (
+            self.evaluator_registry
+            .get(
+                "reciprocal_rank"
+            )
+        )
+
+        rr_result = (
+            rr_evaluator.evaluate(
+                evaluation_input
+            )
+        )
+
+        metrics = {
+            "hit_at_k": {
+                "score":
+                    hit_result.score,
+
+                "passed":
+                    hit_result.passed,
+
+                "threshold":
+                    hit_result.threshold,
+
+                "reason":
+                    hit_result.reason,
+
+                "evaluator_type":
+                    hit_result
+                    .evaluator_type,
+
+                "evaluator_engine":
+                    hit_result
+                    .evaluator_engine,
+
+                "metadata":
+                    hit_result.metadata,
+            },
+
+            "precision_at_k": {
+                "score":
+                    precision_result.score,
+
+                "passed":
+                    precision_result.passed,
+
+                "threshold":
+                    precision_result.threshold,
+
+                "reason":
+                    precision_result.reason,
+
+                "evaluator_type":
+                    precision_result
+                    .evaluator_type,
+
+                "evaluator_engine":
+                    precision_result
+                    .evaluator_engine,
+
+                "metadata":
+                    precision_result.metadata,
+            },
+
+            "recall_at_k": {
+                "score":
+                    recall_result.score,
+
+                "passed":
+                    recall_result.passed,
+
+                "threshold":
+                    recall_result.threshold,
+
+                "reason":
+                    recall_result.reason,
+
+                "evaluator_type":
+                    recall_result
+                    .evaluator_type,
+
+                "evaluator_engine":
+                    recall_result
+                    .evaluator_engine,
+
+                "metadata":
+                    recall_result.metadata,
+            },
+
+            "reciprocal_rank": {
+                "score":
+                    rr_result.score,
+
+                "passed":
+                    rr_result.passed,
+
+                "threshold":
+                    rr_result.threshold,
+
+                "reason":
+                    rr_result.reason,
+
+                "evaluator_type":
+                    rr_result
+                    .evaluator_type,
+
+                "evaluator_engine":
+                    rr_result
+                    .evaluator_engine,
+
+                "metadata":
+                    rr_result.metadata,
+            },
+        }
 
         return {
             "retrieved_document_ids":
                 retrieved_document_ids,
+
+            "retrieved_document_external_ids":
+                retrieved_document_external_ids,
 
             "retrieved_chunk_ids":
                 retrieved_chunk_ids,
@@ -162,62 +507,264 @@ class RetrievalEvalService:
                 expected_rank,
 
             "hit_at_k":
-                hit_at_k,
+                hit_result.passed,
+
+            "precision_at_k":
+                precision_result.score,
+
+            "recall_at_k":
+                recall_result.score,
 
             "reciprocal_rank":
-                reciprocal_rank,
+                rr_result.score,
+
+            "has_retrieval_ground_truth":
+                has_retrieval_ground_truth,
+
+            "metrics":
+                metrics,
         }
 
     def aggregate(
         self,
         results: list[dict],
     ) -> dict:
+        """
+        Aggregate retrieval evaluation.
+
+        Only cases that actually have
+        retrieval ground truth contribute
+        to retrieval metrics.
+
+        Aggregate metrics:
+
+        - Hit Rate
+        - Mean Precision@K
+        - Mean Recall@K
+        - MRR
+
+        Unanswerable/refusal cases without
+        expected retrieval sources are
+        excluded.
+        """
+
         if not results:
             return {
-                "case_count": 0,
-                "hit_count": 0,
-                "hit_rate": 0.0,
-                "mrr": 0.0,
+                "case_count":
+                    0,
+
+                "scored_case_count":
+                    0,
+
+                "unscored_case_count":
+                    0,
+
+                "hit_count":
+                    0,
+
+                "miss_count":
+                    0,
+
+                "hit_rate":
+                    0.0,
+
+                "precision_at_k":
+                    0.0,
+
+                "recall_at_k":
+                    0.0,
+
+                "mrr":
+                    0.0,
             }
+
+        scored_results = [
+            result
+            for result
+            in results
+            if (
+                result.get(
+                    "has_retrieval_ground_truth",
+                    False,
+                )
+            )
+        ]
 
         case_count = len(
             results
         )
 
-        hit_count = sum(
-            1
-            for result in results
-            if result[
-                "hit_at_k"
-            ]
+        scored_case_count = len(
+            scored_results
         )
 
-        reciprocal_rank_sum = sum(
-            result[
-                "reciprocal_rank"
-            ]
-            for result in results
+        unscored_case_count = (
+            case_count
+            - scored_case_count
         )
+
+        if scored_case_count == 0:
+            return {
+                "case_count":
+                    case_count,
+
+                "scored_case_count":
+                    0,
+
+                "unscored_case_count":
+                    unscored_case_count,
+
+                "hit_count":
+                    0,
+
+                "miss_count":
+                    0,
+
+                "hit_rate":
+                    0.0,
+
+                "precision_at_k":
+                    0.0,
+
+                "recall_at_k":
+                    0.0,
+
+                "mrr":
+                    0.0,
+            }
+
+        hit_count = sum(
+            1
+            for result
+            in scored_results
+            if (
+                result.get(
+                    "hit_at_k"
+                )
+                is True
+            )
+        )
+
+        miss_count = (
+            scored_case_count
+            - hit_count
+        )
+
+        #
+        # Some metrics can theoretically
+        # be unscored independently, so
+        # aggregate only non-None values.
+        #
+        precision_values = [
+            float(
+                result[
+                    "precision_at_k"
+                ]
+            )
+            for result
+            in scored_results
+            if (
+                result.get(
+                    "precision_at_k"
+                )
+                is not None
+            )
+        ]
+
+        recall_values = [
+            float(
+                result[
+                    "recall_at_k"
+                ]
+            )
+            for result
+            in scored_results
+            if (
+                result.get(
+                    "recall_at_k"
+                )
+                is not None
+            )
+        ]
+
+        reciprocal_rank_values = [
+            float(
+                result[
+                    "reciprocal_rank"
+                ]
+            )
+            for result
+            in scored_results
+            if (
+                result.get(
+                    "reciprocal_rank"
+                )
+                is not None
+            )
+        ]
 
         hit_rate = (
             hit_count
-            / case_count
+            / scored_case_count
+        )
+
+        mean_precision_at_k = (
+            sum(
+                precision_values
+            )
+            / len(
+                precision_values
+            )
+            if precision_values
+            else 0.0
+        )
+
+        mean_recall_at_k = (
+            sum(
+                recall_values
+            )
+            / len(
+                recall_values
+            )
+            if recall_values
+            else 0.0
         )
 
         mrr = (
-            reciprocal_rank_sum
-            / case_count
+            sum(
+                reciprocal_rank_values
+            )
+            / len(
+                reciprocal_rank_values
+            )
+            if reciprocal_rank_values
+            else 0.0
         )
 
         return {
             "case_count":
                 case_count,
 
+            "scored_case_count":
+                scored_case_count,
+
+            "unscored_case_count":
+                unscored_case_count,
+
             "hit_count":
                 hit_count,
 
+            "miss_count":
+                miss_count,
+
             "hit_rate":
                 hit_rate,
+
+            "precision_at_k":
+                mean_precision_at_k,
+
+            "recall_at_k":
+                mean_recall_at_k,
 
             "mrr":
                 mrr,

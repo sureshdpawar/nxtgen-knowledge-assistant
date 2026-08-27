@@ -1,17 +1,15 @@
 "use client";
 
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+
 import {
   LogOut,
+  Menu,
   Settings,
 } from "lucide-react";
 
-import {
-  useRouter,
-} from "next/navigation";
-
-import {
-  useAuth,
-} from "@/hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth";
 
 import {
   Avatar,
@@ -28,15 +26,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 
-export default function Header() {
-  const router =
-    useRouter();
+type HeaderProps = {
+  onMenuClick?: () => void;
+};
+
+
+export default function Header({
+  onMenuClick,
+}: HeaderProps) {
+  const router = useRouter();
 
   const {
     user,
     logout,
-  } =
-    useAuth();
+  } = useAuth();
 
 
   function initials() {
@@ -47,18 +50,16 @@ export default function Header() {
     const firstInitial =
       user.first_name
         ?.charAt(0)
-        .toUpperCase()
-      ?? "";
+        .toUpperCase() ?? "";
 
     const lastInitial =
       user.last_name
         ?.charAt(0)
-        .toUpperCase()
-      ?? "";
+        .toUpperCase() ?? "";
 
     return (
-      `${firstInitial}${lastInitial}`
-      || "NA"
+      `${firstInitial}${lastInitial}` ||
+      "NA"
     );
   }
 
@@ -66,126 +67,480 @@ export default function Header() {
   function onLogout() {
     logout();
 
-    router.replace(
-      "/login",
-    );
+    router.replace("/login");
   }
 
 
   function openAccountSettings() {
-    router.push(
-      "/account",
-    );
+    router.push("/account");
+  }
+
+
+  function goToDashboard() {
+    router.push("/dashboard");
   }
 
 
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-white px-6">
+    <header
+      className="
+        relative
+        z-40
 
-      <h1 className="text-xl font-semibold text-slate-900">
-        NXTGEN Knowledge Assistant
-      </h1>
+        flex
+        h-[72px]
+        shrink-0
+        items-center
+        justify-between
 
+        border-b
+        border-slate-200
 
-      <DropdownMenu>
+        bg-white
 
-        <DropdownMenuTrigger
-          className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+        px-3
+
+        shadow-sm
+
+        sm:px-5
+        md:px-6
+      "
+    >
+
+      {/*
+       * =====================================================
+       * LEFT SIDE
+       * Mobile Menu + Knowgentiq Branding
+       * =====================================================
+       */}
+      <div
+        className="
+          flex
+          min-w-0
+          items-center
+
+          gap-2
+
+          sm:gap-3
+        "
+      >
+
+        {/*
+         * ===================================================
+         * MOBILE MENU BUTTON
+         * ===================================================
+         */}
+        <button
+          type="button"
+          onClick={onMenuClick}
+          aria-label="Open navigation menu"
+          className="
+            dashboard-mobile-menu-button
+
+            h-10
+            w-10
+
+            shrink-0
+
+            items-center
+            justify-center
+
+            rounded-lg
+
+            border
+            border-slate-200
+
+            bg-white
+
+            text-slate-700
+
+            transition
+
+            hover:border-slate-300
+            hover:bg-slate-50
+            hover:text-slate-950
+
+            focus:outline-none
+            focus:ring-2
+            focus:ring-blue-500/30
+          "
         >
-          <Avatar className="cursor-pointer">
+          <Menu
+            className="
+              h-5
+              w-5
+            "
+          />
+        </button>
 
-            <AvatarFallback className="bg-blue-50 font-semibold text-blue-700">
-              {initials()}
-            </AvatarFallback>
 
-          </Avatar>
-        </DropdownMenuTrigger>
+        {/*
+         * ===================================================
+         * BRAND + PRODUCT POSITIONING
+         * ===================================================
+         */}
+        <button
+          type="button"
+          onClick={goToDashboard}
+          aria-label="Go to Knowgentiq dashboard"
+          className="
+            flex
+            min-w-0
+            items-center
 
+            gap-3
 
-        <DropdownMenuContent
-          align="end"
-          className="w-64"
+            rounded-lg
+
+            text-left
+
+            focus:outline-none
+            focus:ring-2
+            focus:ring-blue-500/30
+          "
         >
 
-          <div className="px-3 py-3">
+          {/*
+           * =================================================
+           * KNOWGENTIQ LOGO
+           *
+           * Full logo gets enough horizontal room.
+           * =================================================
+           */}
+          <div
+            className="
+              flex
 
-            <p className="truncate text-sm font-semibold text-slate-900">
-              {user?.first_name}{" "}
-              {user?.last_name}
-            </p>
+              h-[52px]
 
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-              {user?.email}
-            </p>
+              w-[115px]
+              shrink-0
 
+              items-center
+              justify-start
 
-            {user && (
-              <div className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-slate-500">
+              overflow-hidden
 
-                <span className="font-medium">
-                  {user.role}
-                </span>
+              sm:w-[145px]
+              md:w-[165px]
+              lg:w-[180px]
+            "
+          >
+            <Image
+              src="/branding/knowgentiq-logo.png"
+              alt="Knowgentiq"
+              width={700}
+              height={420}
+              priority
+              className="
+                block
 
+                h-auto
+                w-full
 
-                {(
-                  user.role ===
-                    "ADMIN"
-                  || user.role ===
-                    "USER"
-                )
-                  && user.tenant_name && (
-                  <>
-                    <span className="text-slate-300">
-                      ·
-                    </span>
-
-                    <span className="truncate">
-                      {
-                        user.tenant_name
-                      }
-                    </span>
-                  </>
-                )}
-
-              </div>
-            )}
-
+                object-contain
+                object-left
+              "
+            />
           </div>
 
 
-          <DropdownMenuSeparator />
+          {/*
+           * =================================================
+           * PRODUCT POSITIONING
+           *
+           * Logo already contains the Knowgentiq brand,
+           * so we don't repeat the product name here.
+           * =================================================
+           */}
+          <div
+            className="
+              hidden
+              min-w-0
 
+              border-l
+              border-slate-200
 
-          <DropdownMenuGroup>
+              pl-4
 
-            <DropdownMenuItem
-              onClick={
-                openAccountSettings
-              }
-              className="cursor-pointer"
+              sm:block
+            "
+          >
+
+            <div
+              className="
+                truncate
+
+                text-[15px]
+                font-semibold
+
+                leading-tight
+
+                tracking-tight
+
+                text-slate-800
+
+                md:text-base
+              "
             >
-              <Settings className="mr-2 h-4 w-4" />
-
-              Account Settings
-            </DropdownMenuItem>
+              Enterprise AI Intelligence Platform
+            </div>
 
 
-            <DropdownMenuItem
-              onClick={
-                onLogout
-              }
-              className="cursor-pointer text-red-600 focus:text-red-600"
+            <div
+              className="
+                mt-1
+
+                truncate
+
+                text-[9px]
+                font-medium
+
+                uppercase
+
+                tracking-[0.16em]
+
+                text-slate-400
+
+                md:text-[10px]
+              "
             >
-              <LogOut className="mr-2 h-4 w-4" />
+              KNOWLEDGE • AGENTS • EVALUATION • GOVERNANCE
+            </div>
 
-              Logout
-            </DropdownMenuItem>
+          </div>
 
-          </DropdownMenuGroup>
+        </button>
 
-        </DropdownMenuContent>
+      </div>
 
-      </DropdownMenu>
+
+      {/*
+       * =====================================================
+       * RIGHT SIDE
+       * User Account
+       * =====================================================
+       */}
+      <div
+        className="
+          ml-3
+
+          flex
+          shrink-0
+          items-center
+        "
+      >
+
+        <DropdownMenu>
+
+          {/*
+           * =================================================
+           * USER AVATAR
+           * =================================================
+           */}
+          <DropdownMenuTrigger
+            className="
+              rounded-full
+
+              outline-none
+
+              focus-visible:ring-2
+              focus-visible:ring-blue-500
+              focus-visible:ring-offset-2
+            "
+          >
+
+            <Avatar
+              className="
+                h-9
+                w-9
+
+                cursor-pointer
+
+                border
+                border-blue-100
+
+                shadow-sm
+
+                sm:h-10
+                sm:w-10
+              "
+            >
+
+              <AvatarFallback
+                className="
+                  bg-gradient-to-br
+                  from-blue-50
+                  via-indigo-50
+                  to-violet-50
+
+                  font-semibold
+
+                  text-blue-700
+                "
+              >
+                {initials()}
+              </AvatarFallback>
+
+            </Avatar>
+
+          </DropdownMenuTrigger>
+
+
+          {/*
+           * =================================================
+           * ACCOUNT DROPDOWN
+           * =================================================
+           */}
+          <DropdownMenuContent
+            align="end"
+            className="w-64"
+          >
+
+            {/*
+             * User Information
+             */}
+            <div
+              className="
+                px-3
+                py-3
+              "
+            >
+
+              <p
+                className="
+                  truncate
+
+                  text-sm
+                  font-semibold
+
+                  text-slate-900
+                "
+              >
+                {user?.first_name}{" "}
+                {user?.last_name}
+              </p>
+
+
+              <p
+                className="
+                  mt-1
+
+                  truncate
+
+                  text-xs
+                  text-muted-foreground
+                "
+              >
+                {user?.email}
+              </p>
+
+
+              {user && (
+                <div
+                  className="
+                    mt-2
+
+                    flex
+                    min-w-0
+                    items-center
+
+                    gap-1.5
+
+                    text-xs
+                    text-slate-500
+                  "
+                >
+
+                  <span className="font-medium">
+                    {user.role}
+                  </span>
+
+
+                  {(
+                    user.role === "ADMIN" ||
+                    user.role === "USER"
+                  ) &&
+                    user.tenant_name && (
+                      <>
+
+                        <span className="text-slate-300">
+                          ·
+                        </span>
+
+
+                        <span className="truncate">
+                          {user.tenant_name}
+                        </span>
+
+                      </>
+                    )}
+
+                </div>
+              )}
+
+            </div>
+
+
+            <DropdownMenuSeparator />
+
+
+            <DropdownMenuGroup>
+
+              {/*
+               * Account Settings
+               */}
+              <DropdownMenuItem
+                onClick={openAccountSettings}
+                className="cursor-pointer"
+              >
+
+                <Settings
+                  className="
+                    mr-2
+                    h-4
+                    w-4
+                  "
+                />
+
+                Account Settings
+
+              </DropdownMenuItem>
+
+
+              {/*
+               * Logout
+               */}
+              <DropdownMenuItem
+                onClick={onLogout}
+                className="
+                  cursor-pointer
+
+                  text-red-600
+
+                  focus:text-red-600
+                "
+              >
+
+                <LogOut
+                  className="
+                    mr-2
+                    h-4
+                    w-4
+                  "
+                />
+
+                Logout
+
+              </DropdownMenuItem>
+
+            </DropdownMenuGroup>
+
+          </DropdownMenuContent>
+
+        </DropdownMenu>
+
+      </div>
 
     </header>
   );
