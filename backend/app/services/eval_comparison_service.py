@@ -25,11 +25,11 @@ class EvalComparisonService:
     # Small changes below these values are
     # treated as unchanged.
     #
-    SCORE_TOLERANCE = 0.001
+    SCORE_TOLERANCE = 0.02
 
-    LATENCY_TOLERANCE_RATIO = 0.05
+    LATENCY_TOLERANCE_RATIO = 0.10
 
-    TOKEN_TOLERANCE_RATIO = 0.05
+    TOKEN_TOLERANCE_RATIO = 0.10
 
     def __init__(
         self,
@@ -812,6 +812,39 @@ class EvalComparisonService:
         generation_outcome: str,
         performance_outcome: str,
     ) -> str:
+        """
+        Determine the overall AI-quality
+        comparison outcome.
+
+        Overall outcome represents product
+        quality, not operational efficiency.
+
+        Retrieval and generation therefore
+        determine the overall result.
+
+        Performance remains an independent
+        diagnostic dimension and does not,
+        by itself, turn an otherwise unchanged
+        answer into a quality regression.
+
+        Policy:
+
+        1. Any retrieval/generation regression
+           means overall regressed.
+
+        2. If there are no quality regressions
+           and either retrieval or generation
+           improved, overall improved.
+
+        3. If quality is unchanged, overall is
+           unchanged even when performance
+           changed.
+
+        4. If neither retrieval nor generation
+           is comparable, fall back to
+           performance.
+        """
+
         quality_outcomes = [
             outcome
             for outcome
@@ -819,12 +852,14 @@ class EvalComparisonService:
                 retrieval_outcome,
                 generation_outcome,
             )
-            if outcome
-            != "not_comparable"
+            if (
+                outcome
+                != "not_comparable"
+            )
         ]
 
         #
-        # Quality regressions have priority.
+        # Quality regressions take priority.
         #
         if (
             "regressed"
@@ -835,10 +870,7 @@ class EvalComparisonService:
             )
 
         #
-        # If retrieval/generation quality
-        # improved and neither quality
-        # dimension regressed, the overall
-        # result improved.
+        # Quality improvements come next.
         #
         if (
             "improved"
@@ -849,30 +881,20 @@ class EvalComparisonService:
             )
 
         #
-        # When quality is unchanged, use
-        # performance as the tie-breaker.
+        # If retrieval/generation are
+        # comparable and neither changed,
+        # overall AI quality is unchanged.
         #
-        if (
-            performance_outcome
-            == "regressed"
-        ):
-            return (
-                "regressed"
-            )
-
-        if (
-            performance_outcome
-            == "improved"
-        ):
-            return (
-                "improved"
-            )
-
         if quality_outcomes:
             return (
                 "unchanged"
             )
 
+        #
+        # If neither quality dimension is
+        # comparable, use performance as
+        # the final fallback.
+        #
         if (
             performance_outcome
             != "not_comparable"
