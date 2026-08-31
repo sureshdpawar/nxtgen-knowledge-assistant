@@ -2,9 +2,17 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.constants import (
-    EMBEDDING_MODEL,
+from deepeval import evaluate
+from deepeval.metrics import (
+    AnswerRelevancyMetric,
+    ContextualPrecisionMetric,
+    ContextualRecallMetric,
+    ContextualRelevancyMetric,
+    FaithfulnessMetric,
 )
+from deepeval.test_case import LLMTestCase
+
+from app.core.config import settings
 from app.models.eval_dataset import (
     EvalDataset,
 )
@@ -66,6 +74,132 @@ class EvalExperimentService:
 
         self.evaluator_registry = (
             EvaluatorRegistry()
+        )
+
+    def _run_deepeval_rag_case(
+        self,
+        eval_case,
+        generation_data: dict,
+    ):
+        """
+        Execute DeepEval natively against one
+        answerable Knowgentiq RAG case.
+
+        This is intentionally a proving-stage
+        integration. It lets Knowgentiq use
+        DeepEval's native RAG evaluation
+        capabilities before we decide which
+        existing custom semantic evaluators
+        should be retired.
+
+        DeepEval owns:
+
+        - test-case semantics
+        - RAG metric implementations
+        - LLM-as-a-judge execution
+        - metric thresholds
+        - evaluation result generation
+
+        Knowgentiq continues to own:
+
+        - datasets and golden cases
+        - RAG execution
+        - retrieval traces
+        - experiments
+        - persistence
+        - governance
+        - release policies
+
+        Unanswerable cases are intentionally
+        left to the existing Knowgentiq refusal
+        evaluator for now. We should not force
+        answer-oriented RAG metrics onto refusal
+        test cases.
+        """
+
+        if not eval_case.answerable:
+            return None
+
+        retrieval_context = [
+            item.get(
+                "text",
+                "",
+            )
+            for item
+            in generation_data[
+                "retrieval_context"
+            ]
+            if item.get(
+                "text"
+            )
+        ]
+
+        test_case = LLMTestCase(
+            input=
+                eval_case.question,
+
+            actual_output=
+                generation_data[
+                    "actual_answer"
+                ],
+
+            expected_output=
+                eval_case.expected_answer,
+
+            retrieval_context=
+                retrieval_context,
+        )
+
+        metrics = [
+            FaithfulnessMetric(
+                threshold=0.8,
+            ),
+
+            AnswerRelevancyMetric(
+                threshold=0.8,
+            ),
+
+            ContextualRelevancyMetric(
+                threshold=0.8,
+            ),
+        ]
+
+        #
+        # DeepEval's contextual precision and
+        # contextual recall are reference-based
+        # metrics. Only enable them when the
+        # golden case has an expected answer.
+        #
+        if eval_case.expected_answer:
+            metrics.extend(
+                [
+                    ContextualPrecisionMetric(
+                        threshold=0.8,
+                    ),
+
+                    ContextualRecallMetric(
+                        threshold=0.8,
+                    ),
+                ]
+            )
+
+        return evaluate(
+            test_cases=[
+                test_case
+            ],
+
+            metrics=
+                metrics,
+
+            hyperparameters={
+                "evaluation_source":
+                    "knowgentiq",
+
+                "rag_top_k":
+                    len(
+                        retrieval_context
+                    ),
+            },
         )
 
     def _validate_dataset(
@@ -557,7 +691,7 @@ class EvalExperimentService:
                 None,
 
             embedding_model=
-                EMBEDDING_MODEL,
+                settings.EMBEDDING_MODEL,
 
             llm_model=
                 None,
@@ -852,7 +986,7 @@ class EvalExperimentService:
                 None,
 
             embedding_model=
-                EMBEDDING_MODEL,
+                settings.EMBEDDING_MODEL,
 
             llm_model=
                 None,
@@ -967,6 +1101,23 @@ class EvalExperimentService:
                             top_k,
                     )
                 )
+
+                #
+                # Native DeepEval proving path.
+                #
+                # Keep the existing Knowgentiq
+                # semantic evaluators below for
+                # side-by-side validation during
+                # this integration stage.
+                #
+                if run_judges:
+                    self._run_deepeval_rag_case(
+                        eval_case=
+                            eval_case,
+
+                        generation_data=
+                            generation_data,
+                    )
 
                 #
                 # 2. Score the exact retrieval

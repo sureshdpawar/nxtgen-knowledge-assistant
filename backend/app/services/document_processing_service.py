@@ -168,12 +168,6 @@ class DocumentProcessingService:
             # Resolve the effective
             # KB-level RAG configuration.
             #
-            # If the KB has an override,
-            # the property uses it.
-            #
-            # Otherwise the property falls
-            # back to the platform setting.
-            #
             chunk_size = (
                 knowledge_base
                 .effective_chunk_size
@@ -184,14 +178,21 @@ class DocumentProcessingService:
                 .effective_chunk_overlap
             )
 
+            chunking_strategy = (
+                self.chunking_service
+                .strategy_name
+            )
+
             logger.info(
                 "Resolved KB chunking config "
                 "document=%s "
                 "kb=%s "
+                "strategy=%s "
                 "chunk_size=%s "
                 "chunk_overlap=%s",
                 document.id,
                 knowledge_base.id,
+                chunking_strategy,
                 chunk_size,
                 chunk_overlap,
             )
@@ -276,10 +277,12 @@ class DocumentProcessingService:
                 self.chunking_service
                 .chunk(
                     pages=pages,
-                    chunk_size=
-                        chunk_size,
-                    chunk_overlap=
-                        chunk_overlap,
+                    chunk_size=(
+                        chunk_size
+                    ),
+                    chunk_overlap=(
+                        chunk_overlap
+                    ),
                 )
             )
 
@@ -399,19 +402,23 @@ class DocumentProcessingService:
             ):
                 document_chunk = (
                     DocumentChunk(
-                        document_id=
-                            document.id,
+                        document_id=(
+                            document.id
+                        ),
 
-                        chunk_index=
-                            index,
+                        chunk_index=(
+                            index
+                        ),
 
-                        text=
+                        text=(
                             chunk[
                                 "text"
-                            ],
+                            ]
+                        ),
 
-                        token_count=
-                            0,
+                        token_count=(
+                            0
+                        ),
 
                         chunk_metadata={
                             "page":
@@ -420,17 +427,14 @@ class DocumentProcessingService:
                                     1,
                                 ),
 
-                            #
-                            # Record which
-                            # chunking config
-                            # produced this
-                            # chunk.
-                            #
                             "chunk_size":
                                 chunk_size,
 
                             "chunk_overlap":
                                 chunk_overlap,
+
+                            "chunking_strategy":
+                                chunking_strategy,
                         },
                     )
                 )
@@ -443,13 +447,15 @@ class DocumentProcessingService:
 
                 document_embedding = (
                     DocumentEmbedding(
-                        chunk_id=
-                            document_chunk.id,
+                        chunk_id=(
+                            document_chunk.id
+                        ),
 
-                        embedding=
+                        embedding=(
                             embeddings[
                                 index
-                            ],
+                            ]
+                        ),
                     )
                 )
 
@@ -479,6 +485,7 @@ class DocumentProcessingService:
                 "Document processing completed "
                 "document=%s "
                 "kb=%s "
+                "strategy=%s "
                 "chunk_size=%s "
                 "chunk_overlap=%s "
                 "raw_chunks=%s "
@@ -490,6 +497,7 @@ class DocumentProcessingService:
                 "total_ms=%.2f",
                 document.id,
                 knowledge_base.id,
+                chunking_strategy,
                 chunk_size,
                 chunk_overlap,
                 len(raw_chunks),
@@ -513,6 +521,9 @@ class DocumentProcessingService:
 
                 "chunk_overlap":
                     chunk_overlap,
+
+                "chunking_strategy":
+                    chunking_strategy,
 
                 "chunks_created":
                     len(chunks),

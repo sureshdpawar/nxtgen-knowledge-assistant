@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.exceptions.knowledge_base import (
     KnowledgeBaseNotFoundError,
 )
@@ -16,6 +17,9 @@ from app.repositories.document_embedding_repository import (
 )
 from app.services.embedding_service import (
     EmbeddingService,
+)
+from app.services.reranker_service import (
+    RerankerService,
 )
 
 
@@ -35,6 +39,10 @@ class DocumentSearchService:
             DocumentEmbeddingRepository()
         )
 
+        self.reranker_service = (
+            RerankerService()
+        )
+
     def search(
         self,
         db: Session,
@@ -46,11 +54,6 @@ class DocumentSearchService:
             time.perf_counter()
         )
 
-        #
-        # Resolve the Knowledge Base so
-        # retrieval can use its optional
-        # KB-level top_k override.
-        #
         knowledge_base = (
             db.get(
                 KnowledgeBase,
@@ -63,24 +66,7 @@ class DocumentSearchService:
                 KnowledgeBaseNotFoundError()
             )
 
-        #
-        # Resolve top_k.
-        #
-        # Normal application retrieval:
-        #
-        #     KB top_k
-        #         if configured
-        #
-        #     otherwise
-        #
-        #     settings.TOP_K
-        #
-        # Evaluation retrieval may provide
-        # top_k_override so different K
-        # values can be tested without
-        # modifying the Knowledge Base.
-        #
-        top_k = (
+        final_top_k = (
             top_k_override
             if top_k_override
             is not None
@@ -88,17 +74,22 @@ class DocumentSearchService:
             .effective_top_k
         )
 
-        #
-        # Protect the repository from
-        # invalid explicit evaluation
-        # configuration.
-        #
-        if top_k < 1:
+        if final_top_k < 1:
             raise ValueError(
                 "top_k must be "
                 "greater than 0."
             )
 
+        candidate_top_k = (
+            self._candidate_top_k(
+                final_top_k,
+            )
+        )
+
+        #
+        # Stage 1:
+        # Embed the user query.
+        #
         embedding_started_at = (
             time.perf_counter()
         )
@@ -117,11 +108,16 @@ class DocumentSearchService:
             * 1000
         )
 
+        #
+        # Stage 2:
+        # Retrieve a broader candidate set
+        # from pgvector.
+        #
         repository_started_at = (
             time.perf_counter()
         )
 
-        results = (
+        candidates = (
             self.embedding_repository.search(
                 db=db,
                 knowledge_base_id=
@@ -129,7 +125,7 @@ class DocumentSearchService:
                 query_embedding=
                     query_embedding,
                 top_k=
-                    top_k,
+                    candidate_top_k,
             )
         )
 
@@ -137,6 +133,31 @@ class DocumentSearchService:
             (
                 time.perf_counter()
                 - repository_started_at
+            )
+            * 1000
+        )
+
+        #
+        # Stage 3:
+        # Rerank vector candidates using
+        # the configured cross-encoder.
+        #
+        reranker_started_at = (
+            time.perf_counter()
+        )
+
+        results = (
+            self.reranker_service.rerank(
+                query=query,
+                candidates=candidates,
+                top_k=final_top_k,
+            )
+        )
+
+        reranker_elapsed_ms = (
+            (
+                time.perf_counter()
+                - reranker_started_at
             )
             * 1000
         )
@@ -152,33 +173,63 @@ class DocumentSearchService:
         logger.info(
             "KB search completed "
             "kb=%s "
+            "candidates=%s "
             "results=%s "
-            "top_k=%s "
+            "candidate_top_k=%s "
+            "final_top_k=%s "
             "top_k_override=%s "
+            "embedding_model='%s' "
+            "embedding_dimensions=%s "
+            "reranker_model='%s' "
             "embedding_ms=%.2f "
             "repository_ms=%.2f "
+            "reranker_ms=%.2f "
             "total_ms=%.2f",
             knowledge_base_id,
+            len(candidates),
             len(results),
-            top_k,
+            candidate_top_k,
+            final_top_k,
             top_k_override,
+            settings.EMBEDDING_MODEL,
+            settings.EMBEDDING_DIMENSIONS,
+            settings.RERANKER_MODEL,
             embedding_elapsed_ms,
             repository_elapsed_ms,
+            reranker_elapsed_ms,
             total_elapsed_ms,
         )
 
-        if (
-            total_elapsed_ms
-            > 1000
-        ):
+        if total_elapsed_ms > 1000:
             logger.warning(
                 "Slow KB search "
                 "kb=%s "
-                "top_k=%s "
+                "candidate_top_k=%s "
+                "final_top_k=%s "
+                "reranker_model='%s' "
                 "total_ms=%.2f",
                 knowledge_base_id,
-                top_k,
+                candidate_top_k,
+                final_top_k,
+                settings.RERANKER_MODEL,
                 total_elapsed_ms,
             )
 
         return results
+
+    @staticmethod
+    def _candidate_top_k(
+        final_top_k: int,
+    ) -> int:
+        candidate_top_k = max(
+            final_top_k,
+            final_top_k
+            * settings
+            .RERANKER_CANDIDATE_MULTIPLIER,
+        )
+
+        return min(
+            candidate_top_k,
+            settings
+            .RERANKER_MAX_CANDIDATES,
+        )

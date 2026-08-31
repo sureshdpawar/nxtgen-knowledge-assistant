@@ -1,0 +1,36 @@
+suite:
+  name: knowgentiq-rag-ci
+  description: >
+    End-to-end RAG quality evaluation for
+    the Knowgentiq knowledge pipeline.
+
+target:
+  knowledge_base_id: "0c905e3f-d1f6-4330-af76-dc581e33bb6c"
+
+retrieval:
+  top_k: 5
+
+metrics:
+  faithfulness:
+    enabled: true
+    threshold: 0.80
+
+  answer_relevancy:
+    enabled: true
+    threshold: 0.80
+
+  contextual_precision:
+    enabled: true
+    threshold: 0.80
+
+  contextual_recall:
+    enabled: true
+    threshold: 0.80
+
+  contextual_relevancy:
+    enabled: true
+    threshold: 0.80
+
+execution:
+  fail_on_threshold: true
+  fail_fast: false

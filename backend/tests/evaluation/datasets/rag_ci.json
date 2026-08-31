@@ -1,0 +1,67 @@
+{
+  "name": "knowgentiq-rag-ci",
+  "version": "v1",
+  "description": "Portable golden dataset for Knowgentiq RAG CI evaluation.",
+  "cases": [
+    {
+      "id": "company-mission-001",
+      "question": "What is the mission of NXTGEN Innovate Technologies?",
+      "expected_answer": "The mission of NXTGEN Innovate Technologies is to empower organizations with technology, innovation, and talent so they can adapt, innovate, and thrive in a fast-changing digital world.",
+      "expected_text": null,
+      "expected_sources": [],
+      "answerable": true,
+      "metadata": {
+        "category": "company",
+        "priority": "smoke"
+      }
+    },
+    {
+      "id": "company-services-001",
+      "question": "What services does NXTGEN Innovate Technologies provide?",
+      "expected_answer": "NXTGEN Innovate Technologies provides Software & Product Development, AI & Data Science Solutions, Digital Marketing, Consulting, and Staffing Services.",
+      "expected_text": null,
+      "expected_sources": [],
+      "answerable": true,
+      "metadata": {
+        "category": "services",
+        "priority": "smoke"
+      }
+    },
+    {
+      "id": "company-ai-001",
+      "question": "What AI capabilities does NXTGEN Innovate Technologies offer?",
+      "expected_answer": "NXTGEN Innovate Technologies offers AI capabilities including Predictive Analytics & Machine Learning, Business Intelligence Dashboards, AI-driven Automation, Generative AI Solutions, and RAG and Agentic AI Solutions.",
+      "expected_text": null,
+      "expected_sources": [],
+      "answerable": true,
+      "metadata": {
+        "category": "ai",
+        "priority": "smoke"
+      }
+    },
+    {
+      "id": "company-cloud-001",
+      "question": "What cloud services does NXTGEN Innovate Technologies provide?",
+      "expected_answer": "NXTGEN Innovate Technologies provides AWS, Azure, and Google Cloud services, including cloud migration and optimization and cloud and API integration.",
+      "expected_text": null,
+      "expected_sources": [],
+      "answerable": true,
+      "metadata": {
+        "category": "cloud",
+        "priority": "standard"
+      }
+    },
+    {
+      "id": "company-contact-001",
+      "question": "How can someone contact NXTGEN Innovate Technologies?",
+      "expected_answer": "NXTGEN Innovate Technologies can be contacted by phone at +91 8087099101 or by email at info@nxtgeninnovate.com.",
+      "expected_text": null,
+      "expected_sources": [],
+      "answerable": true,
+      "metadata": {
+        "category": "contact",
+        "priority": "standard"
+      }
+    }
+  ]
+}

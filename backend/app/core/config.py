@@ -88,21 +88,62 @@ class Settings(BaseSettings):
     ) = 3
 
     #
-    # Search
+    # Retrieval
+    #
+    # Final number of chunks returned by
+    # retrieval and supplied to generation.
     #
     TOP_K: int = 5
 
     #
+    # Embedding model used for document
+    # and query embeddings.
+    #
+    EMBEDDING_MODEL: str = (
+        "BAAI/bge-small-en-v1.5"
+    )
+
+    #
+    # Vector dimensionality produced by
+    # EMBEDDING_MODEL.
+    #
+    # Changing this value may require a
+    # pgvector schema migration as well as
+    # re-embedding all persisted content.
+    #
+    EMBEDDING_DIMENSIONS: int = 384
+
+    #
+    # Cross-encoder reranker used after
+    # broad vector candidate retrieval.
+    #
+    RERANKER_MODEL: str = (
+        "mixedbread-ai/"
+        "mxbai-rerank-base-v1"
+    )
+
+    #
+    # Candidate retrieval policy.
+    #
+    # Example:
+    #
+    # final_top_k = 5
+    # multiplier = 3
+    # candidate_top_k = 15
+    #
+    RERANKER_CANDIDATE_MULTIPLIER: (
+        int
+    ) = 3
+
+    #
+    # Safety cap on vector candidates sent
+    # to the reranker.
+    #
+    RERANKER_MAX_CANDIDATES: int = 50
+
+    #
     # Usage quota platform defaults
     #
-    # These defaults protect a tenant even
-    # when no tenant-level UsageLimit row
-    # has been configured.
-    #
-    # They represent the platform's
-    # default/free entitlement.
-    #
-
     DEFAULT_DAILY_MESSAGE_LIMIT: (
         int
     ) = 50
