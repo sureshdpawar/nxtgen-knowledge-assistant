@@ -13,6 +13,7 @@ from app.api.v1.routers import eval
 from app.api.v1.routers import integration
 from app.api.v1.routers import knowledge_base
 from app.api.v1.routers import knowledge_source
+from app.api.v1.routers import online_eval
 from app.api.v1.routers import search
 from app.api.v1.routers import tenant
 from app.api.v1.routers import (
@@ -96,6 +97,10 @@ api_router.include_router(
 
 api_router.include_router(
     eval.router,
+)
+
+api_router.include_router(
+    online_eval.router,
 )
 
 api_router.include_router(

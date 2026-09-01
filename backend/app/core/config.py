@@ -202,6 +202,13 @@ class Settings(BaseSettings):
     ) = 30
 
     #
+    # Online evaluation
+    #
+    ONLINE_EVAL_ENABLED: bool = True
+
+    ONLINE_EVAL_SAMPLE_RATE: float = 0.05
+    
+    #
     # OpenTelemetry
     #
     OTEL_ENABLED: bool = True

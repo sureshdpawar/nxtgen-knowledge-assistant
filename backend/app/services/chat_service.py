@@ -20,6 +20,9 @@ from opentelemetry.trace import (
     StatusCode,
 )
 
+from app.core.config import (
+    settings,
+)
 from app.core.telemetry import (
     get_tracer,
 )
@@ -44,6 +47,9 @@ from app.services.llm_client_factory import (
 )
 from app.services.llm_usage_service import (
     LLMUsageService,
+)
+from app.services.online_eval_capture_service import (
+    OnlineEvalCaptureService,
 )
 from app.services.prompt_builder_service import (
     PromptBuilderService,
@@ -87,6 +93,10 @@ class ChatService:
 
         self.llm_usage_service = (
             LLMUsageService()
+        )
+
+        self.online_eval_capture_service = (
+            OnlineEvalCaptureService()
         )
 
 
@@ -226,6 +236,154 @@ class ChatService:
                 str(exc),
             )
         )
+
+    def _capture_online_eval_if_sampled(
+        self,
+        db: Session,
+        *,
+        tenant_id: UUID,
+        knowledge_base_id: UUID,
+        conversation_id: UUID,
+        message_id: UUID,
+        query: str,
+        answer: str,
+        contexts: list[str],
+        config,
+        usage_event,
+    ) -> None:
+        """
+        Persist a production interaction for
+        later asynchronous online evaluation.
+
+        Online evaluation must never make a
+        successful chat request fail.
+        """
+
+        if not settings.ONLINE_EVAL_ENABLED:
+            return
+
+        try:
+            should_sample = (
+                self.online_eval_capture_service
+                .should_sample(
+                    sample_rate=
+                        settings
+                        .ONLINE_EVAL_SAMPLE_RATE,
+                )
+            )
+
+        except Exception:
+            logger.exception(
+                "Online evaluation sampling "
+                "decision failed tenant=%s kb=%s",
+                tenant_id,
+                knowledge_base_id,
+            )
+
+            return
+
+        if not should_sample:
+            return
+
+        usage_metadata = (
+            usage_event.usage_metadata
+            or {}
+        )
+
+        source_trace_id = (
+            usage_metadata.get(
+                "trace_id"
+            )
+        )
+
+        if not source_trace_id:
+            logger.warning(
+                "Online evaluation capture "
+                "skipped because source "
+                "trace_id was unavailable "
+                "tenant=%s kb=%s",
+                tenant_id,
+                knowledge_base_id,
+            )
+
+            return
+
+        try:
+            #
+            # A savepoint isolates optional
+            # evaluation persistence from the
+            # primary chat transaction.
+            #
+            with db.begin_nested():
+                captured = (
+                    self.online_eval_capture_service
+                    .capture(
+                        db=db,
+
+                        tenant_id=
+                            tenant_id,
+
+                        knowledge_base_id=
+                            knowledge_base_id,
+
+                        conversation_id=
+                            conversation_id,
+
+                        message_id=
+                            message_id,
+
+                        question=
+                            query,
+
+                        actual_answer=
+                            answer,
+
+                        retrieval_context=
+                            contexts,
+
+                        generator_provider=
+                            config.provider.value,
+
+                        generator_model=
+                            config.model_name,
+
+                        sample_reason=
+                            "random",
+
+                        source_trace_id=
+                            source_trace_id,
+
+                        evaluation_metadata={
+                            "capture_source":
+                                "chat",
+
+                            "sampling_rate":
+                                settings
+                                .ONLINE_EVAL_SAMPLE_RATE,
+                        },
+                    )
+                )
+
+            if captured is not None:
+                logger.info(
+                    "Online evaluation candidate "
+                    "captured tenant=%s kb=%s "
+                    "conversation=%s trace_id=%s",
+                    tenant_id,
+                    knowledge_base_id,
+                    conversation_id,
+                    source_trace_id,
+                )
+
+        except Exception:
+            logger.exception(
+                "Online evaluation capture "
+                "failed tenant=%s kb=%s "
+                "conversation=%s",
+                tenant_id,
+                knowledge_base_id,
+                conversation_id,
+            )
 
     def _estimate_tokens(
         self,
@@ -945,6 +1103,37 @@ class ChatService:
             usage_event=usage_event,
         )
 
+        self._capture_online_eval_if_sampled(
+            db=db,
+
+            tenant_id=
+                tenant_id,
+
+            knowledge_base_id=
+                knowledge_base_id,
+
+            conversation_id=
+                conversation.id,
+
+            message_id=
+                assistant_message.id,
+
+            query=
+                query,
+
+            answer=
+                answer,
+
+            contexts=
+                contexts,
+
+            config=
+                config,
+
+            usage_event=
+                usage_event,
+        )
+
         llm_span.set_status(
             Status(
                 StatusCode.OK
@@ -1567,6 +1756,37 @@ class ChatService:
             output_tokens=output_tokens,
             estimated=True,
             usage_event=usage_event,
+        )
+
+        self._capture_online_eval_if_sampled(
+            db=db,
+
+            tenant_id=
+                tenant_id,
+
+            knowledge_base_id=
+                knowledge_base_id,
+
+            conversation_id=
+                conversation.id,
+
+            message_id=
+                assistant_message.id,
+
+            query=
+                query,
+
+            answer=
+                answer,
+
+            contexts=
+                contexts,
+
+            config=
+                config,
+
+            usage_event=
+                usage_event,
         )
 
         llm_span.set_status(

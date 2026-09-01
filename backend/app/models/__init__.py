@@ -87,6 +87,9 @@ from app.models.llm_usage_event import (
     LLMUsageEvent,
 )
 
+from app.models.online_eval_result import (
+    OnlineEvalResult,
+)
 
 __all__ = [
     "Tenant",
@@ -120,4 +123,5 @@ __all__ = [
     "EvalResult",
     "UsageLimit",
     "LLMUsageEvent",
+    "OnlineEvalResult",
 ]
