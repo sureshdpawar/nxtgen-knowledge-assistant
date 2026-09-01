@@ -1,0 +1,140 @@
+{
+  "version": "v1",
+  "description": "Generic offline RAG evaluation learning dataset",
+  "cases": [
+    {
+      "id": "clean-success",
+      "input": "How long do customers have to request a refund?",
+      "expected_output": "Customers have 30 days to request a refund.",
+      "expected_sources": [
+        {
+          "type": "external_id",
+          "value": "refund-policy"
+        }
+      ],
+      "actual_output": "Customers have 30 days to request a refund.",
+      "retrieved": [
+        {
+          "source": "refund-policy",
+          "text": "Customers may request a refund within 30 days of purchase."
+        },
+        {
+          "source": "shipping-policy",
+          "text": "Standard shipping takes three to five business days."
+        },
+        {
+          "source": "company-history",
+          "text": "The company was founded in 2015."
+        }
+      ]
+    },
+    {
+      "id": "relevant-ranked-low",
+      "input": "How long do customers have to request a refund?",
+      "expected_output": "Customers have 30 days to request a refund.",
+      "expected_sources": [
+        {
+          "type": "external_id",
+          "value": "refund-policy"
+        }
+      ],
+      "actual_output": "Customers have 30 days to request a refund.",
+      "retrieved": [
+        {
+          "source": "shipping-policy",
+          "text": "Standard shipping takes three to five business days."
+        },
+        {
+          "source": "company-history",
+          "text": "The company was founded in 2015."
+        },
+        {
+          "source": "refund-policy",
+          "text": "Customers may request a refund within 30 days of purchase."
+        }
+      ]
+    },
+    {
+      "id": "partial-retrieval",
+      "input": "What is the refund period and when is support available?",
+      "expected_output": "Customers have 30 days to request a refund, and support is available Monday through Friday from 9 AM to 5 PM.",
+      "expected_sources": [
+        {
+          "type": "external_id",
+          "value": "refund-policy"
+        },
+        {
+          "type": "external_id",
+          "value": "support-hours"
+        }
+      ],
+      "actual_output": "Customers have 30 days to request a refund.",
+      "retrieved": [
+        {
+          "source": "refund-policy",
+          "text": "Customers may request a refund within 30 days of purchase."
+        },
+        {
+          "source": "company-history",
+          "text": "The company was founded in 2015."
+        },
+        {
+          "source": "shipping-policy",
+          "text": "Standard shipping takes three to five business days."
+        }
+      ]
+    },
+    {
+      "id": "generation-hallucination",
+      "input": "When is customer support available?",
+      "expected_output": "Support is available Monday through Friday from 9 AM to 5 PM.",
+      "expected_sources": [
+        {
+          "type": "external_id",
+          "value": "support-hours"
+        }
+      ],
+      "actual_output": "Customer support is available 24 hours a day, seven days a week.",
+      "retrieved": [
+        {
+          "source": "support-hours",
+          "text": "Customer support is available Monday through Friday from 9 AM to 5 PM."
+        },
+        {
+          "source": "contact-information",
+          "text": "Customers may contact support by email."
+        },
+        {
+          "source": "company-history",
+          "text": "The company was founded in 2015."
+        }
+      ]
+    },
+    {
+      "id": "alternate-valid-source",
+      "input": "How long do customers have to request a refund?",
+      "expected_output": "Customers have 30 days to request a refund.",
+      "expected_sources": [
+        {
+          "type": "external_id",
+          "value": "refund-policy"
+        }
+      ],
+      "actual_output": "Customers have 30 days to request a refund.",
+      "retrieved": [
+        {
+          "source": "customer-handbook",
+          "text": "A customer may request a refund for a purchase within 30 days."
+        },
+        {
+          "source": "shipping-policy",
+          "text": "Standard shipping takes three to five business days."
+        },
+        {
+          "source": "company-history",
+          "text": "The company was founded in 2015."
+        }
+      ]
+    }
+  ]
+}

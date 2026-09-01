@@ -1,0 +1,25 @@
+suite:
+  name: generic-offline-rag-learning
+
+retrieval:
+  top_k: 3
+
+judge:
+  model: gpt-5.4
+  verbose: false
+
+metrics:
+  contextual_precision:
+    threshold: 0.80
+
+  contextual_recall:
+    threshold: 0.80
+
+  contextual_relevancy:
+    threshold: 0.80
+
+  faithfulness:
+    threshold: 0.80
+
+  answer_relevancy:
+    threshold: 0.80
