@@ -1642,6 +1642,11 @@ class EvalExperimentService:
                     eval_case_id=
                         eval_case.id,
 
+                    trace_id=
+                        generation_data[
+                            "trace_id"
+                        ],
+
                     retrieved_document_ids=
                         generation_data[
                             "retrieved_document_ids"

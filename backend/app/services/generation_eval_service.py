@@ -4,6 +4,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.telemetry import (
+    get_current_trace_id,
+    get_tracer,
+)
 from app.models.knowledge_base import (
     KnowledgeBase,
 )
@@ -15,6 +19,11 @@ from app.services.llm_client_factory import (
 )
 from app.services.prompt_builder_service import (
     PromptBuilderService,
+)
+
+
+tracer = get_tracer(
+    __name__
 )
 
 
@@ -61,26 +70,90 @@ class GenerationEvalService:
     ) -> dict:
         """
         Execute one complete RAG evaluation
-        case.
+        case inside its own traceable span.
 
-        Captures:
-
-        - retrieval results
-        - document IDs
-        - document external IDs
-        - chunk IDs
-        - distances
-        - retrieved context
-        - generated answer
-        - prompt
-        - latency
-        - token usage
-        - LLM profile metadata
-
-        Retrieval quality scoring is handled
-        separately by retrieval evaluators.
+        The returned trace_id is persisted by
+        EvalExperimentService so an evaluation
+        result can be correlated with the exact
+        retrieval/generation trace.
         """
 
+        with tracer.start_as_current_span(
+            "evaluation.rag.case"
+        ) as case_span:
+            case_span.set_attribute(
+                "knowgentiq.knowledge_base.id",
+                str(
+                    knowledge_base_id
+                ),
+            )
+
+            case_span.set_attribute(
+                "knowgentiq.evaluation.top_k",
+                top_k,
+            )
+
+            trace_id = (
+                get_current_trace_id()
+            )
+
+            result = self._evaluate_case_impl(
+                db=db,
+                knowledge_base_id=
+                    knowledge_base_id,
+                question=
+                    question,
+                top_k=
+                    top_k,
+            )
+
+            result["trace_id"] = (
+                trace_id
+            )
+
+            case_span.set_attribute(
+                "knowgentiq.evaluation."
+                "retrieved_count",
+                len(
+                    result[
+                        "retrieved_chunk_ids"
+                    ]
+                ),
+            )
+
+            case_span.set_attribute(
+                "knowgentiq.evaluation."
+                "usage_estimated",
+                bool(
+                    result[
+                        "usage"
+                    ][
+                        "estimated"
+                    ]
+                ),
+            )
+
+            case_span.set_attribute(
+                "knowgentiq.evaluation."
+                "total_tokens",
+                int(
+                    result[
+                        "usage"
+                    ][
+                        "total_tokens"
+                    ]
+                ),
+            )
+
+            return result
+
+    def _evaluate_case_impl(
+        self,
+        db: Session,
+        knowledge_base_id: UUID,
+        question: str,
+        top_k: int,
+    ) -> dict:
         if top_k < 1:
             raise ValueError(
                 "top_k must be greater than 0."
@@ -173,13 +246,6 @@ class GenerationEvalService:
                 document_id
             )
 
-            #
-            # Keep this list aligned with
-            # retrieved_document_ids.
-            #
-            # external_id may be None for
-            # some ingestion types.
-            #
             retrieved_document_external_ids.append(
                 document_external_id
             )
@@ -206,13 +272,6 @@ class GenerationEvalService:
                     "document_id":
                         document_id,
 
-                    #
-                    # Stable source identity.
-                    #
-                    # For website ingestion
-                    # this is currently the
-                    # source page URL.
-                    #
                     "document_external_id":
                         document_external_id,
 
@@ -282,29 +341,58 @@ class GenerationEvalService:
             time.perf_counter()
         )
 
-        response = (
-            client.chat.completions
-            .create(
-                model=
-                    config.model_name,
-
-                messages=[
-                    {
-                        "role":
-                            "user",
-
-                        "content":
-                            prompt,
-                    }
-                ],
-
-                temperature=
-                    config.temperature,
-
-                max_tokens=
-                    config.max_tokens,
+        with tracer.start_as_current_span(
+            "llm.generate"
+        ) as llm_span:
+            provider = (
+                config.provider.value
+                if getattr(
+                    config,
+                    "provider",
+                    None,
+                )
+                else None
             )
-        )
+
+            if provider:
+                llm_span.set_attribute(
+                    "gen_ai.system",
+                    provider,
+                )
+
+            llm_span.set_attribute(
+                "gen_ai.request.model",
+                config.model_name,
+            )
+
+            llm_span.set_attribute(
+                "knowgentiq.llm.streaming",
+                False,
+            )
+
+            response = (
+                client.chat.completions
+                .create(
+                    model=
+                        config.model_name,
+
+                    messages=[
+                        {
+                            "role":
+                                "user",
+
+                            "content":
+                                prompt,
+                        }
+                    ],
+
+                    temperature=
+                        config.temperature,
+
+                    max_tokens=
+                        config.max_tokens,
+                )
+            )
 
         generation_latency_ms = (
             (
@@ -314,9 +402,6 @@ class GenerationEvalService:
             * 1000
         )
 
-        #
-        # Extract generated answer.
-        #
         actual_answer = ""
 
         if (
@@ -337,11 +422,6 @@ class GenerationEvalService:
 
         #
         # Token usage.
-        #
-        # Prefer provider-reported usage.
-        #
-        # Fall back to a rough estimate
-        # when usage is unavailable.
         #
         if response.usage:
             prompt_tokens = int(
@@ -395,10 +475,6 @@ class GenerationEvalService:
             + generation_latency_ms
         )
 
-        #
-        # Capture the exact LLM profile
-        # used for this evaluation case.
-        #
         llm_metadata = {
             "profile_id":
                 (
@@ -482,19 +558,9 @@ class GenerationEvalService:
             "actual_answer":
                 actual_answer,
 
-            #
-            # Environment-specific
-            # identifiers.
-            #
             "retrieved_document_ids":
                 retrieved_document_ids,
 
-            #
-            # Portable source identifiers.
-            #
-            # For website documents these
-            # are URLs.
-            #
             "retrieved_document_external_ids":
                 retrieved_document_external_ids,
 
@@ -504,18 +570,6 @@ class GenerationEvalService:
             "retrieved_distances":
                 retrieved_distances,
 
-            #
-            # Rich retrieval trace.
-            #
-            # Each context now contains:
-            #
-            # document_id
-            # document_external_id
-            # chunk_id
-            # rank
-            # text
-            # distance
-            #
             "retrieval_context":
                 retrieval_context,
 

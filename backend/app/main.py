@@ -11,6 +11,9 @@ from app.core.logging import setup_logging
 from app.core.startup_validation import (
     validate_startup_configuration,
 )
+from app.core.telemetry import (
+    configure_telemetry,
+)
 from app.exceptions.handlers import (
     register_exception_handlers,
 )
@@ -36,6 +39,24 @@ app = FastAPI(
         "NXTGEN Knowledge Assistant API"
     ),
     version="1.0.0",
+)
+
+
+#
+# ---------------------------------------------------------
+# OpenTelemetry
+# ---------------------------------------------------------
+#
+# Instrument the FastAPI application once at startup.
+#
+# OpenTelemetry remains independent of the eventual
+# observability backend. Today spans can be written to the
+# console. Later the same instrumentation can export over
+# OTLP to a Collector, Datadog, Elastic, Grafana, or another
+# compatible backend.
+#
+configure_telemetry(
+    app
 )
 
 

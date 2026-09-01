@@ -76,6 +76,15 @@ loguru>=0.7,<0.8
 
 
 # -------------------------
+# OpenTelemetry
+# -------------------------
+opentelemetry-api>=1.44,<1.45
+opentelemetry-sdk>=1.44,<1.45
+opentelemetry-exporter-otlp-proto-http>=1.44,<1.45
+opentelemetry-instrumentation-fastapi>=0.65b0,<0.66
+
+
+# -------------------------
 # Document Processing
 # -------------------------
 pypdf>=6.0,<6.1

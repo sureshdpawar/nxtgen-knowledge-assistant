@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import (
     BaseSettings,
@@ -192,12 +193,32 @@ class Settings(BaseSettings):
     # Website widget authentication
     #
     WEBSITE_WIDGET_TOKEN_SECRET: str = (
-        "hJBA8tg8T3Nq2JWJBWh2GEFhpw6Exu4hxXytWg77K11pq45D5MEbnjPMvZJEHTsf"
+        "hJBA8tg8T3Nq2JWJBWh2GEFhpw6Exu4h"
+        "xXytWg77K11pq45D5MEbnjPMvZJEHTsf"
     )
 
     WEBSITE_WIDGET_TOKEN_TTL_MINUTES: (
         int
     ) = 30
+
+    #
+    # OpenTelemetry
+    #
+    OTEL_ENABLED: bool = True
+
+    OTEL_SERVICE_NAME: str = (
+        "knowgentiq-backend"
+    )
+
+    OTEL_TRACE_EXPORTER: Literal[
+        "none",
+        "console",
+        "otlp",
+    ] = "console"
+
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: (
+        str | None
+    ) = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

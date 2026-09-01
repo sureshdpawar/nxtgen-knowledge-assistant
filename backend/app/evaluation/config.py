@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -28,6 +29,29 @@ class EvaluationTargetConfig(
     )
 
     knowledge_base_id: str = Field(
+        min_length=1,
+    )
+
+
+class EvaluationJudgeConfig(
+    BaseModel
+):
+    """
+    Identifies the configured LLM profile used
+    as the evaluation judge.
+
+    The evaluation run references an existing
+    LLM configuration by ID.
+
+    Provider and model names are deliberately
+    not hard-coded into evaluation code.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+    llm_configuration_id: str = Field(
         min_length=1,
     )
 
@@ -77,6 +101,7 @@ class EvaluationExecutionConfig(
     Controls execution behavior.
 
     CI usually fails on metric thresholds.
+
     Product runs can instead persist results
     and evaluate release policy separately.
     """
@@ -105,7 +130,9 @@ class EvaluationSuiteConfig(
         min_length=1,
     )
 
-    description: str | None = None
+    description: (
+        str | None
+    ) = None
 
 
 class EvaluationRunConfig(
@@ -121,6 +148,10 @@ class EvaluationRunConfig(
     Production:
         constructed from platform/database
         configuration.
+
+    The judge is referenced using an LLM
+    configuration ID rather than a provider
+    or model name.
     """
 
     model_config = ConfigDict(
@@ -131,18 +162,20 @@ class EvaluationRunConfig(
 
     target: EvaluationTargetConfig
 
-    retrieval: EvaluationRetrievalConfig = (
-        EvaluationRetrievalConfig()
-    )
+    judge: EvaluationJudgeConfig
+
+    retrieval: (
+        EvaluationRetrievalConfig
+    ) = EvaluationRetrievalConfig()
 
     metrics: dict[
         str,
         EvaluationMetricConfig,
     ]
 
-    execution: EvaluationExecutionConfig = (
-        EvaluationExecutionConfig()
-    )
+    execution: (
+        EvaluationExecutionConfig
+    ) = EvaluationExecutionConfig()
 
     @model_validator(
         mode="after"

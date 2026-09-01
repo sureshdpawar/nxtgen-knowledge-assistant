@@ -5,7 +5,10 @@ suite:
     the Knowgentiq knowledge pipeline.
 
 target:
-  knowledge_base_id: "0c905e3f-d1f6-4330-af76-dc581e33bb6c"
+  knowledge_base_id: "<your-kb-id>"
+
+judge:
+  llm_configuration_id: "<your-evaluator-llm-profile-id>"
 
 retrieval:
   top_k: 5
