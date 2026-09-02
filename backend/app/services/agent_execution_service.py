@@ -50,6 +50,9 @@ from app.models.user import User
 from app.repositories.agent_repository import (
     AgentRepository,
 )
+from app.services.llm_usage_service import (
+    LLMUsageService,
+)
 
 
 logger = logging.getLogger(
@@ -82,14 +85,15 @@ class AgentExecutionService:
             AgentRuntime()
         )
 
+        self.llm_usage_service = (
+            LLMUsageService()
+        )
+
     async def _emit_progress(
         self,
         progress_callback:
             ProgressCallback | None,
-        event: dict[
-            str,
-            Any,
-        ],
+        event: dict[str, Any],
     ) -> None:
         if progress_callback is None:
             return
@@ -259,6 +263,197 @@ class AgentExecutionService:
             db.add(
                 step,
             )
+
+    def _extract_llm_usage(
+        self,
+        message,
+    ) -> tuple[int, int] | None:
+        """
+        Extract provider-reported token usage from
+        LangChain AIMessage objects.
+
+        ChatOpenAI normally exposes normalized
+        usage_metadata. response_metadata.token_usage
+        is retained as a compatibility fallback.
+
+        If token usage is unavailable, do not invent
+        zero-token usage because that would create
+        misleading cost records.
+        """
+
+        usage_metadata = (
+            getattr(
+                message,
+                "usage_metadata",
+                None,
+            )
+            or {}
+        )
+
+        input_tokens = (
+            usage_metadata.get(
+                "input_tokens"
+            )
+        )
+
+        output_tokens = (
+            usage_metadata.get(
+                "output_tokens"
+            )
+        )
+
+        if (
+            input_tokens is not None
+            and output_tokens is not None
+        ):
+            return (
+                int(
+                    input_tokens
+                ),
+                int(
+                    output_tokens
+                ),
+            )
+
+        response_metadata = (
+            getattr(
+                message,
+                "response_metadata",
+                None,
+            )
+            or {}
+        )
+
+        token_usage = (
+            response_metadata.get(
+                "token_usage"
+            )
+            or response_metadata.get(
+                "usage"
+            )
+            or {}
+        )
+
+        input_tokens = (
+            token_usage.get(
+                "prompt_tokens"
+            )
+        )
+
+        output_tokens = (
+            token_usage.get(
+                "completion_tokens"
+            )
+        )
+
+        if (
+            input_tokens is None
+            or output_tokens is None
+        ):
+            return None
+
+        return (
+            int(
+                input_tokens
+            ),
+            int(
+                output_tokens
+            ),
+        )
+
+    def _record_agent_llm_usage(
+        self,
+        db: Session,
+        *,
+        agent: Agent,
+        run: AgentRun,
+        configuration:
+            TenantLLMConfiguration,
+        messages: list,
+    ) -> int:
+        """
+        Meter every actual agent LLM invocation.
+
+        Agent usage enters the same centralized
+        pricing/cost path as chat and evaluation,
+        but is attributed with:
+
+            request_type = "agent"
+
+        agent_id and agent_run_id are stored in
+        usage_metadata so no schema migration is
+        required for workload-level Cost Analytics.
+        """
+
+        recorded = 0
+
+        for message in messages:
+            usage = (
+                self._extract_llm_usage(
+                    message
+                )
+            )
+
+            if usage is None:
+                continue
+
+            (
+                input_tokens,
+                output_tokens,
+            ) = usage
+
+            recorded += 1
+
+            self.llm_usage_service.record(
+                db=db,
+
+                tenant_id=
+                    agent.tenant_id,
+
+                provider=
+                    configuration
+                    .provider
+                    .value,
+
+                model=
+                    configuration
+                    .model_name,
+
+                input_tokens=
+                    input_tokens,
+
+                output_tokens=
+                    output_tokens,
+
+                knowledge_base_id=
+                    None,
+
+                request_type=
+                    "agent",
+
+                usage_metadata={
+                    "estimated":
+                        False,
+
+                    "agent_id":
+                        str(
+                            agent.id
+                        ),
+
+                    "agent_name":
+                        agent.name,
+
+                    "agent_run_id":
+                        str(
+                            run.id
+                        ),
+
+                    "agent_llm_call":
+                        recorded,
+                },
+            )
+
+        return recorded
 
     async def run(
         self,
@@ -515,6 +710,38 @@ class AgentExecutionService:
                     ),
             )
 
+            metered_llm_calls = (
+                self._record_agent_llm_usage(
+                    db=db,
+                    agent=agent,
+                    run=run,
+                    configuration=
+                        configuration,
+                    messages=
+                        result.get(
+                            "messages",
+                            [],
+                        ),
+                )
+            )
+
+            if (
+                metered_llm_calls
+                != result[
+                    "llm_calls"
+                ]
+            ):
+                logger.warning(
+                    "Agent LLM metering count "
+                    "differs from runtime count "
+                    "run=%s runtime=%s metered=%s",
+                    run_id,
+                    result[
+                        "llm_calls"
+                    ],
+                    metered_llm_calls,
+                )
+
             duration_ms = (
                 (
                     time.perf_counter()
@@ -560,6 +787,7 @@ class AgentExecutionService:
                 "run=%s "
                 "agent=%s "
                 "llm_calls=%s "
+                "metered_llm_calls=%s "
                 "tools_used=%s "
                 "duration_ms=%.2f",
                 run_id,
@@ -567,6 +795,7 @@ class AgentExecutionService:
                 result[
                     "llm_calls"
                 ],
+                metered_llm_calls,
                 tools_used,
                 duration_ms,
             )
