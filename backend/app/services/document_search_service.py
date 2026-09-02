@@ -109,10 +109,22 @@ class DocumentSearchService:
                     "greater than 0."
                 )
 
+            reranking_enabled = (
+                knowledge_base
+                .effective_reranking_enabled
+            )
+
+            #
+            # Only broaden vector retrieval
+            # when those extra candidates
+            # will actually be reranked.
+            #
             candidate_top_k = (
                 self._candidate_top_k(
                     final_top_k,
                 )
+                if reranking_enabled
+                else final_top_k
             )
 
             retrieval_span.set_attribute(
@@ -134,6 +146,12 @@ class DocumentSearchService:
                     top_k_override
                     is not None
                 ),
+            )
+
+            retrieval_span.set_attribute(
+                "knowgentiq.reranker."
+                "enabled",
+                reranking_enabled,
             )
 
             #
@@ -167,9 +185,7 @@ class DocumentSearchService:
 
                 #
                 # Privacy:
-                #
-                # Do not attach the query text
-                # itself to the trace.
+                # Do not attach query text.
                 #
                 embedding_span.set_attribute(
                     "knowgentiq.embedding."
@@ -204,8 +220,9 @@ class DocumentSearchService:
 
             #
             # Stage 2:
-            # Retrieve a broader candidate
-            # set from pgvector.
+            # Retrieve either the final
+            # Top-K directly or a broader
+            # reranking candidate set.
             #
             repository_started_at = (
                 time.perf_counter()
@@ -261,63 +278,84 @@ class DocumentSearchService:
 
             #
             # Stage 3:
-            # Rerank vector candidates using
-            # the configured cross-encoder.
+            # Rerank only when enabled for
+            # this knowledge base.
             #
-            reranker_started_at = (
-                time.perf_counter()
-            )
+            reranker_elapsed_ms = 0.0
 
-            with (
-                tracer
-                .start_as_current_span(
-                    "rag.reranking"
-                )
-            ) as reranker_span:
-                reranker_span.set_attribute(
-                    "knowgentiq.reranker."
-                    "model",
-                    settings.RERANKER_MODEL,
-                )
-
-                reranker_span.set_attribute(
-                    "knowgentiq.reranker."
-                    "candidate_count",
-                    len(
-                        candidates
-                    ),
-                )
-
-                reranker_span.set_attribute(
-                    "knowgentiq.reranker."
-                    "top_k",
-                    final_top_k,
-                )
-
-                results = (
-                    self.reranker_service
-                    .rerank(
-                        query=query,
-                        candidates=candidates,
-                        top_k=final_top_k,
-                    )
-                )
-
-                reranker_span.set_attribute(
-                    "knowgentiq.reranker."
-                    "result_count",
-                    len(
-                        results
-                    ),
-                )
-
-            reranker_elapsed_ms = (
-                (
+            if reranking_enabled:
+                reranker_started_at = (
                     time.perf_counter()
-                    - reranker_started_at
                 )
-                * 1000
-            )
+
+                with (
+                    tracer
+                    .start_as_current_span(
+                        "rag.reranking"
+                    )
+                ) as reranker_span:
+                    reranker_span.set_attribute(
+                        "knowgentiq.reranker."
+                        "enabled",
+                        True,
+                    )
+
+                    reranker_span.set_attribute(
+                        "knowgentiq.reranker."
+                        "model",
+                        settings.RERANKER_MODEL,
+                    )
+
+                    reranker_span.set_attribute(
+                        "knowgentiq.reranker."
+                        "candidate_count",
+                        len(
+                            candidates
+                        ),
+                    )
+
+                    reranker_span.set_attribute(
+                        "knowgentiq.reranker."
+                        "top_k",
+                        final_top_k,
+                    )
+
+                    results = (
+                        self.reranker_service
+                        .rerank(
+                            query=query,
+                            candidates=candidates,
+                            top_k=final_top_k,
+                        )
+                    )
+
+                    reranker_span.set_attribute(
+                        "knowgentiq.reranker."
+                        "result_count",
+                        len(
+                            results
+                        ),
+                    )
+
+                reranker_elapsed_ms = (
+                    (
+                        time.perf_counter()
+                        - reranker_started_at
+                    )
+                    * 1000
+                )
+
+            else:
+                #
+                # Vector search already used
+                # final_top_k, so no extra
+                # ranking work is needed.
+                #
+                results = (
+                    candidates[
+                        :final_top_k
+                    ]
+                )
 
             total_elapsed_ms = (
                 (
@@ -352,6 +390,7 @@ class DocumentSearchService:
             logger.info(
                 "KB search completed "
                 "kb=%s "
+                "reranking_enabled=%s "
                 "candidates=%s "
                 "results=%s "
                 "candidate_top_k=%s "
@@ -365,6 +404,7 @@ class DocumentSearchService:
                 "reranker_ms=%.2f "
                 "total_ms=%.2f",
                 knowledge_base_id,
+                reranking_enabled,
                 len(
                     candidates
                 ),
@@ -390,11 +430,13 @@ class DocumentSearchService:
                 logger.warning(
                     "Slow KB search "
                     "kb=%s "
+                    "reranking_enabled=%s "
                     "candidate_top_k=%s "
                     "final_top_k=%s "
                     "reranker_model='%s' "
                     "total_ms=%.2f",
                     knowledge_base_id,
+                    reranking_enabled,
                     candidate_top_k,
                     final_top_k,
                     settings.RERANKER_MODEL,

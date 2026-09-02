@@ -115,8 +115,19 @@ class Settings(BaseSettings):
     EMBEDDING_DIMENSIONS: int = 384
 
     #
+    # Platform default for reranking.
+    #
+    # Individual knowledge bases can
+    # override this setting. False keeps
+    # the default retrieval path fast and
+    # makes reranking an explicit opt-in.
+    #
+    RERANKING_ENABLED: bool = False
+
+    #
     # Cross-encoder reranker used after
-    # broad vector candidate retrieval.
+    # broad vector candidate retrieval when
+    # reranking is enabled.
     #
     RERANKER_MODEL: str = (
         "mixedbread-ai/"
@@ -124,7 +135,8 @@ class Settings(BaseSettings):
     )
 
     #
-    # Candidate retrieval policy.
+    # Candidate retrieval policy used only
+    # when reranking is enabled.
     #
     # Example:
     #

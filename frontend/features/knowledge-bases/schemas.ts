@@ -12,6 +12,9 @@ export const PLATFORM_DEFAULT_CHUNK_OVERLAP =
 export const PLATFORM_DEFAULT_TOP_K =
   5;
 
+export const PLATFORM_DEFAULT_RERANKING_ENABLED =
+  false;
+
 
 const optionalInteger = (
   min: number,
@@ -105,6 +108,11 @@ export const knowledgeBaseSchema =
           20,
           "Top K",
         ),
+
+      reranking_enabled:
+        z
+          .boolean()
+          .nullable(),
     })
     .superRefine(
       (
@@ -153,14 +161,6 @@ export type KnowledgeBaseFormInput =
 /*
  * Validated / transformed values
  * produced by Zod.
- *
- * chunk_size,
- * chunk_overlap,
- * top_k
- *
- * become:
- *
- * number | null
  */
 export type KnowledgeBaseForm =
   z.output<
