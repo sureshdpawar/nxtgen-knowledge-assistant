@@ -7,6 +7,7 @@ from app.api.v1.routers import auth
 from app.api.v1.routers import chat
 from app.api.v1.routers import chat_channel
 from app.api.v1.routers import conversation
+from app.api.v1.routers import cost_analytics
 from app.api.v1.routers import dashboard
 from app.api.v1.routers import document
 from app.api.v1.routers import eval
@@ -110,4 +111,8 @@ api_router.include_router(
 
 api_router.include_router(
     usage_limit.router,
+)
+
+api_router.include_router(
+    cost_analytics.router,
 )

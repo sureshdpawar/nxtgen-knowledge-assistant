@@ -9,6 +9,7 @@ import {
   Building2,
   BrainCircuit,
   Cable,
+  CircleDollarSign,
   ClipboardCheck,
   Database,
   Gauge,
@@ -161,9 +162,19 @@ const menu: MenuItem[] = [
   },
 
   {
-    label: "Usage & Limits",
+    label: "Usage & Quotas",
     href: "/usage",
     icon: Gauge,
+    roles: [
+      "ADMIN",
+    ],
+    section: "governance",
+  },
+
+  {
+    label: "Cost Analytics",
+    href: "/cost-analytics",
+    icon: CircleDollarSign,
     roles: [
       "ADMIN",
     ],
@@ -286,9 +297,6 @@ export default function Sidebar({
       `}
     >
 
-      {/*
-       * Mobile drawer header
-       */}
       {mobile && (
         <div
           className="
@@ -351,9 +359,6 @@ export default function Sidebar({
       )}
 
 
-      {/*
-       * Signed-in user
-       */}
       <div
         className="
           shrink-0
@@ -437,9 +442,6 @@ export default function Sidebar({
       </div>
 
 
-      {/*
-       * Navigation
-       */}
       <nav
         className="
           min-h-0
