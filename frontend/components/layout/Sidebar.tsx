@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import {
+  Activity,
   Bot,
   Building2,
   BrainCircuit,
@@ -76,6 +77,16 @@ const menu: MenuItem[] = [
     label: "Evaluation",
     href: "/evaluation",
     icon: ClipboardCheck,
+    roles: [
+      "ADMIN",
+    ],
+    section: "knowledge",
+  },
+
+  {
+    label: "Online Evaluation",
+    href: "/online-evaluation",
+    icon: Activity,
     roles: [
       "ADMIN",
     ],
