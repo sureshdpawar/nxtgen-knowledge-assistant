@@ -93,6 +93,9 @@ export default function KnowledgeBaseGrid() {
 
         top_k:
           values.top_k,
+
+        reranking_enabled:
+          values.reranking_enabled,
       };
 
     await createMutation
@@ -141,6 +144,9 @@ export default function KnowledgeBaseGrid() {
 
         top_k:
           values.top_k,
+
+        reranking_enabled:
+          values.reranking_enabled,
       };
 
     await updateMutation
