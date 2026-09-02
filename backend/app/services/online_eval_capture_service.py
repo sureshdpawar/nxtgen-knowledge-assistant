@@ -196,6 +196,6 @@ class OnlineEvalCaptureService:
         return (
             self.repository.create(
                 db=db,
-                obj=result,
+                entity=result,
             )
         )

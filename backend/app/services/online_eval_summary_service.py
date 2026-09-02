@@ -103,7 +103,7 @@ class OnlineEvalSummaryService:
             )
 
             total = judge_cost.get(
-                "total"
+                "total_cost"
             )
 
             currency = judge_cost.get(

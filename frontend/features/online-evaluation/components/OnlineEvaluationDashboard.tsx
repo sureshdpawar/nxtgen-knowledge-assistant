@@ -4,6 +4,9 @@ import {
   useMemo,
   useState,
 } from "react";
+import type {
+  ReactNode,
+} from "react";
 
 import {
   Activity,
@@ -24,6 +27,9 @@ import {
   useOnlineEvalSummary,
   useProcessPendingOnlineEvals,
 } from "@/features/online-evaluation/hooks";
+
+import OnlineEvaluationResults from "@/features/online-evaluation/components/OnlineEvaluationResults";
+import OnlineEvaluationDetails from "@/features/online-evaluation/components/OnlineEvaluationDetails";
 
 import type {
   OnlineEvalSummaryFilters,
@@ -97,7 +103,7 @@ function MetricCard({
   subtitle: string;
 
   icon:
-    React.ReactNode;
+    ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -166,6 +172,13 @@ export default function OnlineEvaluationDashboard() {
     setProcessLimit,
   ] = useState(
     10,
+  );
+
+  const [
+    selectedResultId,
+    setSelectedResultId,
+  ] = useState<string | null>(
+    null,
   );
 
 
@@ -762,15 +775,29 @@ export default function OnlineEvaluationDashboard() {
       </div>
 
 
-      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
-        <p className="text-sm font-semibold text-slate-700">
-          Online evaluation results
-        </p>
+      <OnlineEvaluationResults
+        baseFilters={
+          summaryFilters
+        }
+        onSelectResult={(
+          result,
+        ) =>
+          setSelectedResultId(
+            result.id,
+          )
+        }
+      />
 
-        <p className="mt-1 text-sm text-slate-500">
-          The results table and evaluation detail view will be added here next.
-        </p>
-      </div>
+      <OnlineEvaluationDetails
+        resultId={
+          selectedResultId
+        }
+        onClose={() =>
+          setSelectedResultId(
+            null,
+          )
+        }
+      />
     </div>
   );
 }

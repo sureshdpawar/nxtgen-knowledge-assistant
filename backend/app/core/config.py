@@ -207,7 +207,7 @@ class Settings(BaseSettings):
     ONLINE_EVAL_ENABLED: bool = True
 
     ONLINE_EVAL_SAMPLE_RATE: float = 0.05
-    
+
     #
     # OpenTelemetry
     #
@@ -220,6 +220,7 @@ class Settings(BaseSettings):
     OTEL_TRACE_EXPORTER: Literal[
         "none",
         "console",
+        "memory",
         "otlp",
     ] = "console"
 
