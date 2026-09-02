@@ -4,7 +4,9 @@ import {
   CheckCircle2,
   Copy,
   ExternalLink,
+  Info,
   Loader2,
+  ShieldCheck,
   X,
   XCircle,
 } from "lucide-react";
@@ -28,6 +30,36 @@ type OnlineEvaluationDetailsProps = {
     | null;
 
   onClose: () => void;
+};
+
+
+type EvaluationMetricMetadata = {
+  score?: number;
+  passed?: boolean;
+  reason?: string;
+};
+
+
+type EvaluationMetadataView = {
+  evaluationPath:
+    | string
+    | null;
+
+  evaluationOutcome:
+    | string
+    | null;
+
+  contextAnswerable:
+    | boolean
+    | null;
+
+  safeAbstention:
+    | EvaluationMetricMetadata
+    | null;
+
+  contextAnswerability:
+    | EvaluationMetricMetadata
+    | null;
 };
 
 
@@ -110,9 +142,112 @@ function formatMetadata(
 }
 
 
+function asRecord(
+  value: unknown,
+): Record<
+  string,
+  unknown
+> | null {
+  if (
+    typeof value !== "object"
+    || value === null
+    || Array.isArray(
+      value,
+    )
+  ) {
+    return null;
+  }
+
+  return value as Record<
+    string,
+    unknown
+  >;
+}
+
+
+function asMetricMetadata(
+  value: unknown,
+): EvaluationMetricMetadata | null {
+  const record =
+    asRecord(
+      value,
+    );
+
+  if (
+    !record
+  ) {
+    return null;
+  }
+
+  return {
+    score:
+      typeof record.score === "number"
+        ? record.score
+        : undefined,
+
+    passed:
+      typeof record.passed === "boolean"
+        ? record.passed
+        : undefined,
+
+    reason:
+      typeof record.reason === "string"
+        ? record.reason
+        : undefined,
+  };
+}
+
+
+function readEvaluationMetadata(
+  metadata:
+    Record<
+      string,
+      unknown
+    >,
+): EvaluationMetadataView {
+  const metrics =
+    asRecord(
+      metadata.metrics,
+    );
+
+  return {
+    evaluationPath:
+      typeof metadata.evaluation_path
+        === "string"
+        ? metadata.evaluation_path
+        : null,
+
+    evaluationOutcome:
+      typeof metadata.evaluation_outcome
+        === "string"
+        ? metadata.evaluation_outcome
+        : null,
+
+    contextAnswerable:
+      typeof metadata.context_answerable
+        === "boolean"
+        ? metadata.context_answerable
+        : null,
+
+    safeAbstention:
+      asMetricMetadata(
+        metrics
+          ?.safe_abstention,
+      ),
+
+    contextAnswerability:
+      asMetricMetadata(
+        metrics
+          ?.context_answerability,
+      ),
+  };
+}
+
+
 function MetricCard({
   label,
   value,
+  note,
 }: {
   label: string;
 
@@ -120,6 +255,8 @@ function MetricCard({
     | number
     | null
     | undefined;
+
+  note?: string;
 }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
@@ -132,6 +269,12 @@ function MetricCard({
           value,
         )}
       </p>
+
+      {note ? (
+        <p className="mt-1 text-xs leading-5 text-slate-500">
+          {note}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -213,6 +356,24 @@ export default function OnlineEvaluationDetails({
   }
 
 
+  const evaluationView =
+    result
+      ? readEvaluationMetadata(
+          result.evaluation_metadata,
+        )
+      : null;
+
+  const isSafeAbstention =
+    evaluationView
+      ?.evaluationOutcome
+      === "safe_abstention";
+
+  const isContextNotAnswerable =
+    evaluationView
+      ?.contextAnswerable
+      === false;
+
+
   return (
     <>
       <div className="fixed inset-0 z-50">
@@ -278,7 +439,13 @@ export default function OnlineEvaluationDetails({
 
                       {result.status === "completed"
                         && result.passed !== null ? (
-                        result.passed ? (
+                        isSafeAbstention ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                            <ShieldCheck className="h-3.5 w-3.5" />
+
+                            Safe abstention
+                          </span>
+                        ) : result.passed ? (
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
                             <CheckCircle2 className="h-3.5 w-3.5" />
 
@@ -307,7 +474,28 @@ export default function OnlineEvaluationDetails({
                 </div>
 
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                {isContextNotAnswerable ? (
+                  <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                    <div className="flex gap-2">
+                      <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" />
+
+                      <div>
+                        <p className="text-sm font-semibold text-blue-900">
+                          Retrieved evidence was not sufficient to answer this question.
+                        </p>
+
+                        <p className="mt-1 text-xs leading-5 text-blue-700">
+                          This does not prove the full knowledge base lacks the answer.
+                          It means the retrieved context supplied to the generator was
+                          not answerable.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <MetricCard
                     label="Faithfulness"
                     value={
@@ -322,6 +510,11 @@ export default function OnlineEvaluationDetails({
                       result
                         .answer_relevancy_score
                     }
+                    note={
+                      isContextNotAnswerable
+                        ? "Not scored on the safe-abstention path."
+                        : undefined
+                    }
                   />
 
                   <MetricCard
@@ -330,9 +523,75 @@ export default function OnlineEvaluationDetails({
                       result
                         .contextual_relevancy_score
                     }
+                    note={
+                      isContextNotAnswerable
+                        ? "Diagnostic only for this evaluation path."
+                        : undefined
+                    }
                   />
+
+                  {evaluationView
+                    ?.contextAnswerability ? (
+                    <MetricCard
+                      label="Context answerability"
+                      value={
+                        evaluationView
+                          .contextAnswerability
+                          .score
+                      }
+                    />
+                  ) : null}
+
+                  {evaluationView
+                    ?.safeAbstention ? (
+                    <MetricCard
+                      label="Safe abstention"
+                      value={
+                        evaluationView
+                          .safeAbstention
+                          .score
+                      }
+                    />
+                  ) : null}
                 </div>
               </section>
+
+
+              {evaluationView
+                ?.contextAnswerability
+                ?.reason ? (
+                <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Answerability assessment
+                  </h3>
+
+                  <p className="mt-2 text-sm leading-6 text-slate-700">
+                    {
+                      evaluationView
+                        .contextAnswerability
+                        .reason
+                    }
+                  </p>
+
+                  {evaluationView
+                    ?.safeAbstention
+                    ?.reason ? (
+                    <div className="mt-4 border-t border-slate-200 pt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Safe abstention assessment
+                      </p>
+
+                      <p className="mt-2 text-sm leading-6 text-slate-700">
+                        {
+                          evaluationView
+                            .safeAbstention
+                            .reason
+                        }
+                      </p>
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
 
 
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

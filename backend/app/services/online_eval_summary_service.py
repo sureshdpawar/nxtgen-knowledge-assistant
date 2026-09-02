@@ -4,9 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.models.online_eval_result import (
-    OnlineEvalResult,
-)
+from app.models.online_eval_result import OnlineEvalResult
 from app.repositories.online_eval_result_repository import (
     OnlineEvalResultRepository,
 )
@@ -14,8 +12,7 @@ from app.repositories.online_eval_result_repository import (
 
 class OnlineEvalSummaryService:
     """
-    Read-only aggregation service for production
-    online evaluation.
+    Read-only aggregation service for production online evaluation.
 
     Cost data is derived from each row's persisted
     evaluation_metadata["judge_cost"] snapshot.
@@ -23,36 +20,21 @@ class OnlineEvalSummaryService:
     """
 
     def __init__(self):
-        self.repository = (
-            OnlineEvalResultRepository()
-        )
+        self.repository = OnlineEvalResultRepository()
 
     @staticmethod
-    def _average(
-        values: list[
-            float
-        ],
-    ) -> float | None:
+    def _average(values: list[float]) -> float | None:
         if not values:
             return None
 
-        return (
-            sum(values)
-            / len(values)
-        )
+        return sum(values) / len(values)
 
     @staticmethod
     def _score_values(
-        rows: list[
-            OnlineEvalResult
-        ],
+        rows: list[OnlineEvalResult],
         attribute_name: str,
-    ) -> list[
-        float
-    ]:
-        values: list[
-            float
-        ] = []
+    ) -> list[float]:
+        values: list[float] = []
 
         for row in rows:
             value = getattr(
@@ -64,25 +46,15 @@ class OnlineEvalSummaryService:
             if value is None:
                 continue
 
-            values.append(
-                float(value)
-            )
+            values.append(float(value))
 
         return values
 
     @staticmethod
     def _cost_summary(
-        rows: list[
-            OnlineEvalResult
-        ],
+        rows: list[OnlineEvalResult],
     ) -> dict:
-        priced_totals: list[
-            tuple[
-                float,
-                str,
-            ]
-        ] = []
-
+        priced_totals: list[tuple[float, str]] = []
         priced_evaluations = 0
         unpriced_evaluations = 0
 
@@ -90,26 +62,11 @@ class OnlineEvalSummaryService:
             if row.status != "completed":
                 continue
 
-            metadata = (
-                row.evaluation_metadata
-                or {}
-            )
+            metadata = row.evaluation_metadata or {}
+            judge_cost = metadata.get("judge_cost") or {}
 
-            judge_cost = (
-                metadata.get(
-                    "judge_cost"
-                )
-                or {}
-            )
-
-            total = judge_cost.get(
-                "total_cost"
-            )
-
-            currency = judge_cost.get(
-                "currency"
-            )
-
+            total = judge_cost.get("total_cost")
+            currency = judge_cost.get("currency")
             pricing_complete = bool(
                 judge_cost.get(
                     "pricing_complete",
@@ -117,21 +74,13 @@ class OnlineEvalSummaryService:
                 )
             )
 
-            if (
-                total is None
-                or currency is None
-            ):
+            if total is None or currency is None:
                 unpriced_evaluations += 1
                 continue
 
             try:
-                numeric_total = float(
-                    total
-                )
-            except (
-                TypeError,
-                ValueError,
-            ):
+                numeric_total = float(total)
+            except (TypeError, ValueError):
                 unpriced_evaluations += 1
                 continue
 
@@ -149,19 +98,11 @@ class OnlineEvalSummaryService:
 
         if not priced_totals:
             return {
-                "total":
-                    None,
-                "currency":
-                    None,
-                "priced_evaluations":
-                    priced_evaluations,
-                "unpriced_evaluations":
-                    unpriced_evaluations,
-                "pricing_complete":
-                    (
-                        unpriced_evaluations
-                        == 0
-                    ),
+                "total": None,
+                "currency": None,
+                "priced_evaluations": priced_evaluations,
+                "unpriced_evaluations": unpriced_evaluations,
+                "pricing_complete": unpriced_evaluations == 0,
             }
 
         currencies = {
@@ -172,42 +113,53 @@ class OnlineEvalSummaryService:
 
         if len(currencies) != 1:
             return {
-                "total":
-                    None,
-                "currency":
-                    None,
-                "priced_evaluations":
-                    priced_evaluations,
-                "unpriced_evaluations":
-                    unpriced_evaluations,
-                "pricing_complete":
-                    False,
+                "total": None,
+                "currency": None,
+                "priced_evaluations": priced_evaluations,
+                "unpriced_evaluations": unpriced_evaluations,
+                "pricing_complete": False,
             }
 
-        currency = next(
-            iter(
-                currencies
-            )
-        )
+        currency = next(iter(currencies))
 
         return {
-            "total":
-                sum(
-                    value
-                    for value, _
-                    in priced_totals
-                ),
-            "currency":
-                currency,
-            "priced_evaluations":
-                priced_evaluations,
-            "unpriced_evaluations":
-                unpriced_evaluations,
-            "pricing_complete":
-                (
-                    unpriced_evaluations
-                    == 0
-                ),
+            "total": sum(
+                value
+                for value, _
+                in priced_totals
+            ),
+            "currency": currency,
+            "priced_evaluations": priced_evaluations,
+            "unpriced_evaluations": unpriced_evaluations,
+            "pricing_complete": unpriced_evaluations == 0,
+        }
+
+    @staticmethod
+    def _outcome_counts(
+        completed_rows: list[OnlineEvalResult],
+    ) -> dict:
+        answered_successfully = 0
+        safe_abstentions = 0
+        failed = 0
+        unclassified = 0
+
+        for row in completed_rows:
+            outcome = row.evaluation_outcome
+
+            if outcome == "pass":
+                answered_successfully += 1
+            elif outcome == "safe_abstention":
+                safe_abstentions += 1
+            elif outcome == "fail":
+                failed += 1
+            else:
+                unclassified += 1
+
+        return {
+            "answered_successfully": answered_successfully,
+            "safe_abstentions": safe_abstentions,
+            "failed": failed,
+            "unclassified": unclassified,
         }
 
     def get_summary(
@@ -215,39 +167,20 @@ class OnlineEvalSummaryService:
         db: Session,
         *,
         tenant_id: UUID,
-        knowledge_base_id: (
-            UUID | None
-        ) = None,
-        generator_provider: (
-            str | None
-        ) = None,
-        generator_model: (
-            str | None
-        ) = None,
-        created_from: (
-            datetime | None
-        ) = None,
-        created_to: (
-            datetime | None
-        ) = None,
+        knowledge_base_id: UUID | None = None,
+        generator_provider: str | None = None,
+        generator_model: str | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
     ) -> dict:
-        rows = (
-            self.repository
-            .list_for_summary(
-                db=db,
-                tenant_id=
-                    tenant_id,
-                knowledge_base_id=
-                    knowledge_base_id,
-                generator_provider=
-                    generator_provider,
-                generator_model=
-                    generator_model,
-                created_from=
-                    created_from,
-                created_to=
-                    created_to,
-            )
+        rows = self.repository.list_for_summary(
+            db=db,
+            tenant_id=tenant_id,
+            knowledge_base_id=knowledge_base_id,
+            generator_provider=generator_provider,
+            generator_model=generator_model,
+            created_from=created_from,
+            created_to=created_to,
         )
 
         counts = Counter(
@@ -260,8 +193,7 @@ class OnlineEvalSummaryService:
             row
             for row
             in rows
-            if row.status
-            == "completed"
+            if row.status == "completed"
         ]
 
         passed_count = sum(
@@ -284,77 +216,73 @@ class OnlineEvalSummaryService:
         )
 
         pass_rate = (
-            passed_count
-            / pass_denominator
+            passed_count / pass_denominator
             if pass_denominator
             else None
         )
 
+        outcomes = self._outcome_counts(
+            completed_rows
+        )
+
+        completed_count = len(completed_rows)
+
+        answer_success_rate = (
+            outcomes["answered_successfully"]
+            / completed_count
+            if completed_count
+            else None
+        )
+
+        safely_handled = (
+            outcomes["answered_successfully"]
+            + outcomes["safe_abstentions"]
+        )
+
+        safe_handling_rate = (
+            safely_handled
+            / completed_count
+            if completed_count
+            else None
+        )
+
         return {
-            "total":
-                len(rows),
+            "total": len(rows),
+            "pending": counts.get("pending", 0),
+            "running": counts.get("running", 0),
+            "completed": counts.get("completed", 0),
+            "failed": counts.get("failed", 0),
 
-            "pending":
-                counts.get(
-                    "pending",
-                    0,
-                ),
+            "passed": passed_count,
+            "not_passed": not_passed_count,
+            "pass_rate": pass_rate,
 
-            "running":
-                counts.get(
-                    "running",
-                    0,
-                ),
-
-            "completed":
-                counts.get(
-                    "completed",
-                    0,
-                ),
-
-            "failed":
-                counts.get(
-                    "failed",
-                    0,
-                ),
-
-            "passed":
-                passed_count,
-
-            "not_passed":
-                not_passed_count,
-
-            "pass_rate":
-                pass_rate,
+            "outcomes": outcomes,
+            "answer_success_rate": answer_success_rate,
+            "safe_handling_rate": safe_handling_rate,
 
             "average_scores": {
-                "faithfulness":
-                    self._average(
-                        self._score_values(
-                            completed_rows,
-                            "faithfulness_score",
-                        )
-                    ),
-
-                "answer_relevancy":
-                    self._average(
-                        self._score_values(
-                            completed_rows,
-                            "answer_relevancy_score",
-                        )
-                    ),
-
-                "contextual_relevancy":
-                    self._average(
-                        self._score_values(
-                            completed_rows,
-                            "contextual_relevancy_score",
-                        )
-                    ),
+                "faithfulness": self._average(
+                    self._score_values(
+                        completed_rows,
+                        "faithfulness_score",
+                    )
+                ),
+                "answer_relevancy": self._average(
+                    self._score_values(
+                        completed_rows,
+                        "answer_relevancy_score",
+                    )
+                ),
+                "contextual_relevancy": self._average(
+                    self._score_values(
+                        completed_rows,
+                        "contextual_relevancy_score",
+                    )
+                ),
             },
 
-            "evaluation_cost":
-                self._cost_summary(
-                    completed_rows
-                ),
+            "evaluation_cost": self._cost_summary(
+                completed_rows
+            ),
         }
