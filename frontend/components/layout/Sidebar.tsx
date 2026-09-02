@@ -32,6 +32,15 @@ type SidebarProps = {
 };
 
 
+type MenuSection =
+  | "main"
+  | "knowledge"
+  | "studio"
+  | "evaluation"
+  | "governance"
+  | "administration";
+
+
 type MenuItem = {
   label: string;
 
@@ -43,11 +52,7 @@ type MenuItem = {
 
   roles: UserRole[];
 
-  section:
-    | "main"
-    | "knowledge"
-    | "studio"
-    | "administration";
+  section: MenuSection;
 };
 
 
@@ -67,26 +72,6 @@ const menu: MenuItem[] = [
     label: "Knowledge Bases",
     href: "/knowledge-bases",
     icon: Database,
-    roles: [
-      "ADMIN",
-    ],
-    section: "knowledge",
-  },
-
-  {
-    label: "Evaluation",
-    href: "/evaluation",
-    icon: ClipboardCheck,
-    roles: [
-      "ADMIN",
-    ],
-    section: "knowledge",
-  },
-
-  {
-    label: "Online Evaluation",
-    href: "/online-evaluation",
-    icon: Activity,
     roles: [
       "ADMIN",
     ],
@@ -126,6 +111,16 @@ const menu: MenuItem[] = [
   },
 
   {
+    label: "Tools",
+    href: "/tools",
+    icon: Wrench,
+    roles: [
+      "ADMIN",
+    ],
+    section: "studio",
+  },
+
+  {
     label: "Integrations",
     href: "/integrations",
     icon: Cable,
@@ -136,13 +131,43 @@ const menu: MenuItem[] = [
   },
 
   {
-    label: "Tools",
-    href: "/tools",
-    icon: Wrench,
+    label: "Test & Benchmark",
+    href: "/evaluation",
+    icon: ClipboardCheck,
     roles: [
       "ADMIN",
     ],
-    section: "studio",
+    section: "evaluation",
+  },
+
+  {
+    label: "Production Quality",
+    href: "/online-evaluation",
+    icon: Activity,
+    roles: [
+      "ADMIN",
+    ],
+    section: "evaluation",
+  },
+
+  {
+    label: "LLM Profiles",
+    href: "/settings",
+    icon: BrainCircuit,
+    roles: [
+      "ADMIN",
+    ],
+    section: "governance",
+  },
+
+  {
+    label: "Usage & Limits",
+    href: "/usage",
+    icon: Gauge,
+    roles: [
+      "ADMIN",
+    ],
+    section: "governance",
   },
 
   {
@@ -164,44 +189,30 @@ const menu: MenuItem[] = [
     ],
     section: "administration",
   },
-
-  {
-    label: "Usage & Limits",
-    href: "/usage",
-    icon: Gauge,
-    roles: [
-      "ADMIN",
-    ],
-    section: "administration",
-  },
-
-  {
-    label: "LLM Profiles",
-    href: "/settings",
-    icon: BrainCircuit,
-    roles: [
-      "ADMIN",
-    ],
-    section: "administration",
-  },
 ];
 
 
-const sectionLabels = {
+const sectionLabels: Record<
+  MenuSection,
+  string
+> = {
   main: "",
   knowledge: "Knowledge",
   studio: "Agent Studio",
-  administration: "Administration",
-} as const;
+  evaluation: "Evaluation",
+  governance: "Governance",
+  administration: "Admin",
+};
 
 
-const sectionOrder:
-  MenuItem["section"][] = [
-    "main",
-    "knowledge",
-    "studio",
-    "administration",
-  ];
+const sectionOrder: MenuSection[] = [
+  "main",
+  "knowledge",
+  "studio",
+  "evaluation",
+  "governance",
+  "administration",
+];
 
 
 export default function Sidebar({
