@@ -263,3 +263,54 @@ export type ProcessPendingOnlineEvalResponse = {
 
   failed: number;
 };
+
+
+export type TraceDebugSpan = {
+  trace_id: string;
+
+  span_id: string;
+
+  parent_span_id:
+    | string
+    | null;
+
+  name: string;
+
+  kind: string;
+
+  status: string;
+
+  start_time_unix_nano:
+    | number
+    | null;
+
+  end_time_unix_nano:
+    | number
+    | null;
+
+  duration_ms:
+    | number
+    | null;
+
+  attributes:
+    Record<
+      string,
+      unknown
+    >;
+
+  resource:
+    Record<
+      string,
+      unknown
+    >;
+};
+
+
+export type TraceDebugTrace = {
+  trace_id: string;
+
+  span_count: number;
+
+  spans:
+    TraceDebugSpan[];
+};

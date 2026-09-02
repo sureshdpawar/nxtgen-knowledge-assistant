@@ -8,6 +8,7 @@ import type {
   OnlineEvalSummaryFilters,
   ProcessPendingOnlineEvalRequest,
   ProcessPendingOnlineEvalResponse,
+  TraceDebugTrace,
 } from "./types";
 
 
@@ -95,6 +96,22 @@ export async function getOnlineEvalResultsByTrace(
     >(
       `/online-eval/traces/${encodeURIComponent(
         sourceTraceId,
+      )}`,
+    );
+
+  return response.data;
+}
+
+
+export async function getTraceDebugTrace(
+  traceId: string,
+) {
+  const response =
+    await api.get<
+      TraceDebugTrace
+    >(
+      `/trace-debug/traces/${encodeURIComponent(
+        traceId,
       )}`,
     );
 

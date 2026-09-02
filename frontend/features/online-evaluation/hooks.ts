@@ -9,6 +9,7 @@ import {
   getOnlineEvalResults,
   getOnlineEvalResultsByTrace,
   getOnlineEvalSummary,
+  getTraceDebugTrace,
   processPendingOnlineEvals,
 } from "./api";
 
@@ -59,6 +60,16 @@ export const onlineEvalQueryKeys = {
     ...onlineEvalQueryKeys.all,
     "trace",
     sourceTraceId,
+  ] as const,
+
+  traceDebug: (
+    traceId:
+      | string
+      | null,
+  ) => [
+    ...onlineEvalQueryKeys.all,
+    "trace-debug",
+    traceId,
   ] as const,
 };
 
@@ -147,6 +158,33 @@ export function useOnlineEvalResultsByTrace(
       Boolean(
         sourceTraceId,
       ),
+  });
+}
+
+
+export function useTraceDebugTrace(
+  traceId:
+    | string
+    | null,
+) {
+  return useQuery({
+    queryKey:
+      onlineEvalQueryKeys
+        .traceDebug(
+          traceId,
+        ),
+
+    queryFn: () =>
+      getTraceDebugTrace(
+        traceId!,
+      ),
+
+    enabled:
+      Boolean(
+        traceId,
+      ),
+
+    retry: false,
   });
 }
 
