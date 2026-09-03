@@ -23,11 +23,76 @@ import {
 
 type Props = {
   runId: string | null;
+
   open: boolean;
+
   onOpenChange: (
     open: boolean,
   ) => void;
 };
+
+
+function formatDuration(
+  durationMs:
+    | number
+    | null,
+) {
+  if (durationMs === null) {
+    return "-";
+  }
+
+  if (durationMs < 1000) {
+    return `${durationMs.toFixed(
+      0,
+    )} ms`;
+  }
+
+  return `${(
+    durationMs / 1000
+  ).toFixed(2)} s`;
+}
+
+
+function formatDate(
+  value:
+    | string
+    | null,
+) {
+  if (!value) {
+    return "-";
+  }
+
+  const parsed = new Date(
+    value,
+  );
+
+  if (
+    Number.isNaN(
+      parsed.getTime(),
+    )
+  ) {
+    return value;
+  }
+
+  return parsed.toLocaleString();
+}
+
+
+function JsonBlock({
+  value,
+}: {
+  value: unknown;
+}) {
+  return (
+    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-slate-950 p-3 text-xs leading-5 text-slate-100">
+      {JSON.stringify(
+        value,
+        null,
+        2,
+      )}
+    </pre>
+  );
+}
 
 
 export default function AgentRunDetailsDialog({
@@ -48,7 +113,7 @@ export default function AgentRunDetailsDialog({
         onOpenChange
       }
     >
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
 
         <DialogHeader>
 
@@ -58,7 +123,7 @@ export default function AgentRunDetailsDialog({
 
           <DialogDescription>
             Inspect the persisted
-            execution trace for this
+            execution audit for this
             agent run.
           </DialogDescription>
 
@@ -81,7 +146,9 @@ export default function AgentRunDetailsDialog({
 
 
         {runQuery.data && (
-          <div className="space-y-6">
+          <div className="space-y-7">
+
+            {/* Summary */}
 
             <div className="grid gap-3 sm:grid-cols-4">
 
@@ -118,12 +185,14 @@ export default function AgentRunDetailsDialog({
               <div className="rounded-lg border p-3">
 
                 <p className="text-xs uppercase tracking-wide text-slate-400">
-                  Tools
+                  Executed Tools
                 </p>
 
                 <p className="mt-1 text-sm font-semibold text-slate-900">
                   {
-                    runQuery.data.tools_used.length
+                    runQuery.data
+                      .tools_used
+                      .length
                   }
                 </p>
 
@@ -138,14 +207,10 @@ export default function AgentRunDetailsDialog({
 
                 <p className="mt-1 text-sm font-semibold text-slate-900">
                   {
-                    runQuery.data.duration_ms
-                      ? `${(
-                          runQuery.data.duration_ms
-                          / 1000
-                        ).toFixed(
-                          2,
-                        )}s`
-                      : "-"
+                    formatDuration(
+                      runQuery.data
+                        .duration_ms,
+                    )
                   }
                 </p>
 
@@ -153,6 +218,206 @@ export default function AgentRunDetailsDialog({
 
             </div>
 
+
+            {/* Execution identity */}
+
+            <div>
+
+              <h3 className="font-semibold text-slate-900">
+                Execution Context
+              </h3>
+
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+
+                <div className="rounded-lg border bg-slate-50 p-3">
+
+                  <p className="text-xs uppercase tracking-wide text-slate-400">
+                    Actor Type
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium text-slate-800">
+                    {
+                      runQuery.data
+                        .actor_type
+                    }
+                  </p>
+
+                </div>
+
+
+                <div className="rounded-lg border bg-slate-50 p-3">
+
+                  <p className="text-xs uppercase tracking-wide text-slate-400">
+                    Actor ID
+                  </p>
+
+                  <p className="mt-1 break-all font-mono text-xs text-slate-700">
+                    {
+                      runQuery.data
+                        .actor_id
+                    }
+                  </p>
+
+                </div>
+
+
+                <div className="rounded-lg border bg-slate-50 p-3">
+
+                  <p className="text-xs uppercase tracking-wide text-slate-400">
+                    Thread ID
+                  </p>
+
+                  <p className="mt-1 break-all font-mono text-xs text-slate-700">
+                    {
+                      runQuery.data
+                        .thread_id
+                      ?? "-"
+                    }
+                  </p>
+
+                </div>
+
+
+                <div className="rounded-lg border bg-slate-50 p-3">
+
+                  <p className="text-xs uppercase tracking-wide text-slate-400">
+                    Checkpoint ID
+                  </p>
+
+                  <p className="mt-1 break-all font-mono text-xs text-slate-700">
+                    {
+                      runQuery.data
+                        .checkpoint_id
+                      ?? "-"
+                    }
+                  </p>
+
+                </div>
+
+
+                <div className="rounded-lg border bg-slate-50 p-3">
+
+                  <p className="text-xs uppercase tracking-wide text-slate-400">
+                    Started
+                  </p>
+
+                  <p className="mt-1 text-sm text-slate-700">
+                    {
+                      formatDate(
+                        runQuery.data
+                          .started_at,
+                      )
+                    }
+                  </p>
+
+                </div>
+
+
+                <div className="rounded-lg border bg-slate-50 p-3">
+
+                  <p className="text-xs uppercase tracking-wide text-slate-400">
+                    Completed
+                  </p>
+
+                  <p className="mt-1 text-sm text-slate-700">
+                    {
+                      formatDate(
+                        runQuery.data
+                          .completed_at,
+                      )
+                    }
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+
+            {/* Business correlation */}
+
+            {runQuery.data
+              .context_metadata &&
+              Object.keys(
+                runQuery.data
+                  .context_metadata,
+              ).length > 0 && (
+
+              <div>
+
+                <h3 className="font-semibold text-slate-900">
+                  Correlation Context
+                </h3>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Platform and business
+                  identifiers attached to
+                  this run.
+                </p>
+
+                <JsonBlock
+                  value={
+                    runQuery.data
+                      .context_metadata
+                  }
+                />
+
+              </div>
+            )}
+
+
+            {/* Executed tools */}
+
+            <div>
+
+              <h3 className="font-semibold text-slate-900">
+                Executed Tools
+              </h3>
+
+              {runQuery.data
+                .tools_used
+                .length === 0 ? (
+
+                <div className="mt-3 rounded-lg border border-dashed p-4 text-sm text-slate-500">
+                  No tools executed
+                  during this run.
+                </div>
+
+              ) : (
+
+                <div className="mt-3 flex flex-wrap gap-2">
+
+                  {runQuery.data
+                    .tools_used
+                    .map(
+                      (
+                        toolName,
+                      ) => (
+
+                        <span
+                          key={
+                            toolName
+                          }
+                          className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700"
+                        >
+                          {
+                            toolName
+                          }
+                        </span>
+
+                      ),
+                    )}
+
+                </div>
+
+              )}
+
+            </div>
+
+
+            {/* Query */}
 
             <div>
 
@@ -162,7 +427,7 @@ export default function AgentRunDetailsDialog({
 
               <div className="mt-2 rounded-lg bg-slate-50 p-4">
 
-                <p className="whitespace-pre-wrap text-sm text-slate-700">
+                <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
                   {
                     runQuery.data.query
                   }
@@ -172,6 +437,8 @@ export default function AgentRunDetailsDialog({
 
             </div>
 
+
+            {/* Answer */}
 
             <div>
 
@@ -193,16 +460,21 @@ export default function AgentRunDetailsDialog({
             </div>
 
 
-            {runQuery.data.error_message && (
+            {/* Error */}
+
+            {runQuery.data
+              .error_message && (
+
               <div className="rounded-lg border border-red-200 bg-red-50 p-4">
 
                 <p className="text-xs font-medium uppercase tracking-wide text-red-500">
                   Error
                 </p>
 
-                <p className="mt-2 text-sm text-red-700">
+                <p className="mt-2 whitespace-pre-wrap text-sm text-red-700">
                   {
-                    runQuery.data.error_message
+                    runQuery.data
+                      .error_message
                   }
                 </p>
 
@@ -210,28 +482,59 @@ export default function AgentRunDetailsDialog({
             )}
 
 
+            {/* Trace */}
+
             <div>
 
-              <h3 className="font-semibold text-slate-900">
-                Execution Trace
-              </h3>
+              <div className="flex items-center justify-between gap-3">
+
+                <div>
+
+                  <h3 className="font-semibold text-slate-900">
+                    Execution Trace
+                  </h3>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Persisted Knowgentiq
+                    execution steps for
+                    this run.
+                  </p>
+
+                </div>
+
+
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                  {
+                    runQuery.data.steps
+                      .length
+                  }{" "}
+                  steps
+                </span>
+
+              </div>
 
 
               <div className="mt-4 space-y-3">
 
-                {runQuery.data.steps.length ===
-                  0 && (
+                {runQuery.data
+                  .steps
+                  .length === 0 && (
+
                   <div className="rounded-lg border border-dashed p-5 text-sm text-slate-500">
                     No execution steps
                     recorded.
                   </div>
+
                 )}
 
 
-                {runQuery.data.steps.map(
-                  (
-                    step,
-                  ) => (
+                {runQuery.data
+                  .steps
+                  .map(
+                    (
+                      step,
+                    ) => (
+
                     <div
                       key={
                         step.id
@@ -251,12 +554,18 @@ export default function AgentRunDetailsDialog({
                                 : "rounded-lg bg-blue-50 p-2"
                             }
                           >
+
                             {step.step_type ===
                             "TOOL" ? (
+
                               <Wrench className="h-4 w-4 text-violet-600" />
+
                             ) : (
+
                               <Bot className="h-4 w-4 text-blue-600" />
+
                             )}
+
                           </div>
 
 
@@ -291,9 +600,13 @@ export default function AgentRunDetailsDialog({
 
                                 {step.status ===
                                 "COMPLETED" ? (
+
                                   <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+
                                 ) : (
+
                                   <XCircle className="h-3.5 w-3.5 text-red-600" />
+
                                 )}
 
                                 {
@@ -305,18 +618,19 @@ export default function AgentRunDetailsDialog({
 
                               {step.duration_ms !==
                                 null && (
+
                                 <span className="flex items-center gap-1">
 
                                   <Clock3 className="h-3.5 w-3.5" />
 
                                   {
-                                    step.duration_ms.toFixed(
-                                      2,
+                                    formatDuration(
+                                      step.duration_ms,
                                     )
-                                  }{" "}
-                                  ms
+                                  }
 
                                 </span>
+
                               )}
 
                             </div>
@@ -328,48 +642,45 @@ export default function AgentRunDetailsDialog({
                       </div>
 
 
-                      {step.step_type ===
-                        "TOOL" &&
-                        step.input_data && (
+                      {step.input_data && (
+
                         <div className="mt-4">
 
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
                             Input
                           </p>
 
-                          <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
-                            {JSON.stringify(
-                              step.input_data,
-                              null,
-                              2,
-                            )}
-                          </pre>
+                          <JsonBlock
+                            value={
+                              step.input_data
+                            }
+                          />
 
                         </div>
+
                       )}
 
 
-                      {step.step_type ===
-                        "TOOL" &&
-                        step.output_data && (
+                      {step.output_data && (
+
                         <div className="mt-4">
 
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
                             Output
                           </p>
 
-                          <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
-                            {JSON.stringify(
-                              step.output_data,
-                              null,
-                              2,
-                            )}
-                          </pre>
+                          <JsonBlock
+                            value={
+                              step.output_data
+                            }
+                          />
 
                         </div>
+
                       )}
 
                     </div>
+
                   ),
                 )}
 
@@ -378,17 +689,43 @@ export default function AgentRunDetailsDialog({
             </div>
 
 
-            <div>
+            {/* IDs */}
 
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                Run ID
-              </p>
+            <div className="rounded-lg border bg-slate-50 p-4">
 
-              <p className="mt-1 break-all font-mono text-xs text-slate-500">
-                {
-                  runQuery.data.id
-                }
-              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+
+                <div>
+
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                    Run ID
+                  </p>
+
+                  <p className="mt-1 break-all font-mono text-xs text-slate-600">
+                    {
+                      runQuery.data.id
+                    }
+                  </p>
+
+                </div>
+
+
+                <div>
+
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                    Agent ID
+                  </p>
+
+                  <p className="mt-1 break-all font-mono text-xs text-slate-600">
+                    {
+                      runQuery.data
+                        .agent_id
+                    }
+                  </p>
+
+                </div>
+
+              </div>
 
             </div>
 
@@ -399,3 +736,4 @@ export default function AgentRunDetailsDialog({
     </Dialog>
   );
 }
+

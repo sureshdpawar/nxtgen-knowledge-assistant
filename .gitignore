@@ -77,4 +77,4 @@ backend/secrets/*
 
 # Local PostgreSQL backups
 backups/
-*.dump
+*.dump.knowgentiq_widget_agent_mvp_backup/

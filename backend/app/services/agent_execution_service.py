@@ -555,26 +555,75 @@ class AgentExecutionService:
 
         return recorded
 
-    def _tools_used(
+    def _executed_tools(
         self,
-        messages: list,
+        trace: list[dict],
     ) -> list[str]:
-        names: list[
-            str
-        ] = []
+        """
+        Return tools that actually executed.
 
-        for message in messages:
-            for call in (
-                getattr(
-                    message,
+        AgentRun.tools_used is an execution-audit field.
+        Therefore, it is derived from TOOL execution trace
+        entries rather than AIMessage.tool_calls, which only
+        represent tool proposals from the LLM.
+        """
+        names: list[str] = []
+
+        for item in trace:
+            step_type = str(
+                item.get(
+                    "step_type",
+                    "",
+                )
+            ).upper()
+
+            if (
+                step_type
+                != AgentRunStepType.TOOL.value
+            ):
+                continue
+
+            # A human rejection is an audit step,
+            # not an executed business tool.
+            if (
+                item.get("name")
+                == "human_rejected_tools"
+            ):
+                continue
+
+            input_data = (
+                item.get("input")
+                or {}
+            )
+
+            if not isinstance(
+                input_data,
+                dict,
+            ):
+                input_data = {}
+
+            tool_calls = (
+                input_data.get(
                     "tool_calls",
-                    None,
+                    [],
                 )
                 or []
-            ):
-                name = call.get(
-                    "name"
-                )
+            )
+
+            for call in tool_calls:
+                if not isinstance(
+                    call,
+                    dict,
+                ):
+                    continue
+
+                name = str(
+                    call.get(
+                        "name",
+                        "",
+                    )
+                    or ""
+                ).strip()
 
                 if (
                     name
@@ -583,6 +632,31 @@ class AgentExecutionService:
                 ):
                     names.append(
                         name
+                    )
+
+            # Defensive fallback for older TOOL traces
+            # where only the step name was stored.
+            if not tool_calls:
+                step_name = str(
+                    item.get(
+                        "name",
+                        "",
+                    )
+                    or ""
+                ).strip()
+
+                if (
+                    step_name
+                    and step_name
+                    not in {
+                        "tools",
+                        "human_rejected_tools",
+                    }
+                    and step_name
+                    not in names
+                ):
+                    names.append(
+                        step_name
                     )
 
         return names
@@ -738,9 +812,9 @@ class AgentExecutionService:
             )
 
             tools_used = (
-                self._tools_used(
+                self._executed_tools(
                     result[
-                        "new_messages"
+                        "trace"
                     ]
                 )
             )
@@ -1124,9 +1198,9 @@ class AgentExecutionService:
             )
 
             tools_used = (
-                self._tools_used(
+                self._executed_tools(
                     result[
-                        "new_messages"
+                        "trace"
                     ]
                 )
             )
@@ -1394,9 +1468,9 @@ class AgentExecutionService:
             )
 
             resumed_tools = (
-                self._tools_used(
+                self._executed_tools(
                     result[
-                        "new_messages"
+                        "trace"
                     ]
                 )
             )
@@ -1540,20 +1614,31 @@ class AgentExecutionService:
         thread_id: UUID,
     ) -> None:
         existing = db.scalar(
-            select(AgentRun.id)
+            select(
+                AgentRun.id
+            )
             .where(
-                AgentRun.tenant_id == current_user.tenant_id,
-                AgentRun.agent_id == agent.id,
-                AgentRun.user_id == current_user.id,
-                AgentRun.thread_id == thread_id,
+                AgentRun.tenant_id
+                == current_user.tenant_id,
+
+                AgentRun.agent_id
+                == agent.id,
+
+                AgentRun.user_id
+                == current_user.id,
+
+                AgentRun.thread_id
+                == thread_id,
             )
             .limit(1)
         )
 
         if existing is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Agent thread not found.",
+                status_code=
+                    status.HTTP_404_NOT_FOUND,
+                detail=
+                    "Agent thread not found.",
             )
 
     async def get_graph_state(
@@ -1565,37 +1650,63 @@ class AgentExecutionService:
     ) -> dict:
         agent = self._get_agent(
             db,
-            current_user=current_user,
-            agent_id=agent_id,
+            current_user=
+                current_user,
+            agent_id=
+                agent_id,
         )
 
         self._assert_thread_access(
             db,
-            current_user=current_user,
-            agent=agent,
-            thread_id=thread_id,
+            current_user=
+                current_user,
+            agent=
+                agent,
+            thread_id=
+                thread_id,
         )
 
-        _, model, tools = await self._runtime_dependencies(
+        (
+            _,
+            model,
+            tools,
+        ) = await self._runtime_dependencies(
             db,
             agent,
         )
 
-        scoped_thread = self._scoped_thread_id(
-            tenant_id=agent.tenant_id,
-            agent_id=agent.id,
-            user_id=current_user.id,
-            thread_id=thread_id,
+        scoped_thread = (
+            self._scoped_thread_id(
+                tenant_id=
+                    agent.tenant_id,
+                agent_id=
+                    agent.id,
+                user_id=
+                    current_user.id,
+                thread_id=
+                    thread_id,
+            )
         )
 
-        async with agent_checkpointer() as checkpointer:
-            return await self.runtime.inspect_state(
-                model=model,
-                tools=tools,
-                system_prompt=agent.system_prompt,
-                max_iterations=agent.max_iterations,
-                checkpointer=checkpointer,
-                thread_id=scoped_thread,
+        async with (
+            agent_checkpointer()
+        ) as checkpointer:
+            return (
+                await
+                self.runtime.inspect_state(
+                    model=
+                        model,
+                    tools=
+                        tools,
+                    system_prompt=
+                        agent.system_prompt,
+                    max_iterations=
+                        agent.max_iterations,
+                    checkpointer=
+                        checkpointer,
+                    thread_id=
+                        scoped_thread,
+                )
             )
 
     async def get_checkpoint_history(
@@ -1608,37 +1719,70 @@ class AgentExecutionService:
     ) -> list[dict]:
         agent = self._get_agent(
             db,
-            current_user=current_user,
-            agent_id=agent_id,
+            current_user=
+                current_user,
+            agent_id=
+                agent_id,
         )
 
         self._assert_thread_access(
             db,
-            current_user=current_user,
-            agent=agent,
-            thread_id=thread_id,
+            current_user=
+                current_user,
+            agent=
+                agent,
+            thread_id=
+                thread_id,
         )
 
-        _, model, tools = await self._runtime_dependencies(
+        (
+            _,
+            model,
+            tools,
+        ) = await self._runtime_dependencies(
             db,
             agent,
         )
 
-        scoped_thread = self._scoped_thread_id(
-            tenant_id=agent.tenant_id,
-            agent_id=agent.id,
-            user_id=current_user.id,
-            thread_id=thread_id,
+        scoped_thread = (
+            self._scoped_thread_id(
+                tenant_id=
+                    agent.tenant_id,
+                agent_id=
+                    agent.id,
+                user_id=
+                    current_user.id,
+                thread_id=
+                    thread_id,
+            )
         )
 
-        async with agent_checkpointer() as checkpointer:
-            return await self.runtime.checkpoint_history(
-                model=model,
-                tools=tools,
-                system_prompt=agent.system_prompt,
-                max_iterations=agent.max_iterations,
-                checkpointer=checkpointer,
-                thread_id=scoped_thread,
-                limit=max(1, min(limit, 100)),
+        async with (
+            agent_checkpointer()
+        ) as checkpointer:
+            return (
+                await
+                self.runtime.checkpoint_history(
+                    model=
+                        model,
+                    tools=
+                        tools,
+                    system_prompt=
+                        agent.system_prompt,
+                    max_iterations=
+                        agent.max_iterations,
+                    checkpointer=
+                        checkpointer,
+                    thread_id=
+                        scoped_thread,
+                    limit=
+                        max(
+                            1,
+                            min(
+                                limit,
+                                100,
+                            ),
+                        ),
+                )
             )
 
