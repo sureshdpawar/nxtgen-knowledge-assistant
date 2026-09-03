@@ -99,15 +99,31 @@ class AgentRunListResponse(BaseModel):
     created_at: datetime
 
 
+class AgentRunUsageResponse(
+    BaseModel,
+):
+    request_count: int
+
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+
+    estimated_cost: float | None
+    currency: str | None
+
+    pricing_complete: bool
+
+
 class AgentRunDetailResponse(
     AgentRunListResponse,
 ):
     error_message: str | None
 
+    usage: AgentRunUsageResponse
+
     steps: list[
         AgentRunStepResponse
     ]
-
 
 
 class AgentGraphStateResponse(BaseModel):

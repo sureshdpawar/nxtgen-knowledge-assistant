@@ -1,3 +1,4 @@
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -200,3 +201,151 @@ class LLMUsageService:
         # chat/agent/evaluation transaction.
         #
         return event
+
+    def get_agent_run_usage(
+        self,
+        db: Session,
+        *,
+        tenant_id: UUID,
+        run_id: UUID,
+    ) -> dict:
+        """
+        Aggregate historical usage for one agent run.
+
+        Cost is read from the persisted cost snapshot.
+        It is never recalculated using today's prices.
+        """
+
+        events = (
+            self.repository
+            .list_for_agent_run(
+                db=db,
+                tenant_id=tenant_id,
+                run_id=run_id,
+            )
+        )
+
+        input_tokens = sum(
+            event.input_tokens
+            for event in events
+        )
+
+        output_tokens = sum(
+            event.output_tokens
+            for event in events
+        )
+
+        total_tokens = sum(
+            event.total_tokens
+            for event in events
+        )
+
+        total_cost = Decimal(
+            "0"
+        )
+
+        currencies: set[str] = set()
+
+        pricing_complete = (
+            len(events) > 0
+        )
+
+        for event in events:
+            metadata = (
+                event.usage_metadata
+                or {}
+            )
+
+            cost = metadata.get(
+                "cost"
+            )
+
+            if not isinstance(
+                cost,
+                dict,
+            ):
+                pricing_complete = False
+                continue
+
+            if not cost.get(
+                "pricing_found",
+                False,
+            ):
+                pricing_complete = False
+                continue
+
+            event_cost = cost.get(
+                "total_cost"
+            )
+
+            currency = cost.get(
+                "currency"
+            )
+
+            if (
+                event_cost is None
+                or not currency
+            ):
+                pricing_complete = False
+                continue
+
+            try:
+                total_cost += Decimal(
+                    str(
+                        event_cost
+                    )
+                )
+            except (
+                ValueError,
+                TypeError,
+            ):
+                pricing_complete = False
+                continue
+
+            currencies.add(
+                str(currency)
+            )
+
+        if len(
+            currencies
+        ) != 1:
+            pricing_complete = False
+
+        estimated_cost = (
+            float(total_cost)
+            if pricing_complete
+            else None
+        )
+
+        currency = (
+            next(
+                iter(
+                    currencies
+                )
+            )
+            if pricing_complete
+            else None
+        )
+
+        return {
+            "request_count":
+                len(events),
+
+            "input_tokens":
+                input_tokens,
+
+            "output_tokens":
+                output_tokens,
+
+            "total_tokens":
+                total_tokens,
+
+            "estimated_cost":
+                estimated_cost,
+
+            "currency":
+                currency,
+
+            "pricing_complete":
+                pricing_complete,
+        }

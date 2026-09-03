@@ -13,6 +13,9 @@ from app.models.user import User
 from app.repositories.agent_run_repository import (
     AgentRunRepository,
 )
+from app.services.llm_usage_service import (
+    LLMUsageService,
+)
 
 
 class AgentRunService:
@@ -20,6 +23,10 @@ class AgentRunService:
     def __init__(self):
         self.repository = (
             AgentRunRepository()
+        )
+
+        self.llm_usage_service = (
+            LLMUsageService()
         )
 
     def list_for_agent(
@@ -66,5 +73,25 @@ class AgentRunService:
                     "Agent run not found."
                 ),
             )
+
+        usage = (
+            self.llm_usage_service
+            .get_agent_run_usage(
+                db=db,
+                tenant_id=
+                    current_user.tenant_id,
+                run_id=
+                    run.id,
+            )
+        )
+
+        #
+        # Read-model enrichment only.
+        #
+        # Token/cost data remains owned by
+        # LLMUsageEvent rather than being
+        # duplicated into AgentRun.
+        #
+        run.usage = usage
 
         return run

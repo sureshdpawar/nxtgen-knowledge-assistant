@@ -183,11 +183,6 @@ export interface AgentRun {
   /*
    * Correlation/business metadata.
    *
-   * Website runs may contain values such as:
-   * channel_id
-   * visitor_id
-   * enquiry_id
-   *
    * Keep this generic at the platform layer.
    */
   context_metadata:
@@ -214,9 +209,25 @@ export interface AgentRun {
 }
 
 
+export interface AgentRunUsage {
+  request_count: number;
+
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+
+  estimated_cost: number | null;
+  currency: string | null;
+
+  pricing_complete: boolean;
+}
+
+
 export interface AgentRunDetail
   extends AgentRun {
   error_message: string | null;
+
+  usage: AgentRunUsage;
 
   steps: AgentRunStep[];
 }
