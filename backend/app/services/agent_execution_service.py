@@ -60,6 +60,9 @@ from app.repositories.agent_repository import (
 from app.services.llm_usage_service import (
     LLMUsageService,
 )
+from app.services.agent_online_eval_capture_service import (
+    AgentOnlineEvalCaptureService,
+)
 
 
 logger = logging.getLogger(
@@ -90,6 +93,9 @@ class AgentExecutionService:
         )
         self.llm_usage_service = (
             LLMUsageService()
+        )
+        self.agent_online_eval_capture_service = (
+            AgentOnlineEvalCaptureService()
         )
 
     async def _emit_progress(
@@ -883,6 +889,16 @@ class AgentExecutionService:
                 )
             )
 
+            self.agent_online_eval_capture_service.capture_if_sampled(
+                db=db,
+                agent=agent,
+                run=run,
+                configuration=configuration,
+                trace=result[
+                    "trace"
+                ],
+            )
+
             db.commit()
 
             return {
@@ -1267,6 +1283,16 @@ class AgentExecutionService:
                 datetime.now(
                     timezone.utc,
                 )
+            )
+
+            self.agent_online_eval_capture_service.capture_if_sampled(
+                db=db,
+                agent=agent,
+                run=run,
+                configuration=configuration,
+                trace=result[
+                    "trace"
+                ],
             )
 
             db.commit()
@@ -1785,4 +1811,3 @@ class AgentExecutionService:
                         ),
                 )
             )
-
