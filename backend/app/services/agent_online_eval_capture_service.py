@@ -3,6 +3,9 @@ import logging
 
 from uuid import UUID
 
+from langchain_core.messages import (
+    ToolMessage,
+)
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -23,10 +26,12 @@ logger = logging.getLogger(
 
 class AgentOnlineEvalCaptureService:
     """
-    Capture eligible Agent RAG runs into the
-    centralized Online Evaluation pipeline.
+    Capture eligible Agent RAG interactions into
+    the centralized Online Evaluation pipeline.
 
-    This service does not run judges.
+    AgentRun trace remains audit evidence.
+    Raw ToolMessage content is evaluation evidence.
+    LLM usage trace_id is production trace correlation.
     """
 
     def __init__(self):
@@ -34,156 +39,166 @@ class AgentOnlineEvalCaptureService:
             OnlineEvalCaptureService()
         )
 
+    def _parse_tool_content(
+        self,
+        content,
+    ) -> dict | None:
+        if isinstance(
+            content,
+            dict,
+        ):
+            return content
+
+        if not isinstance(
+            content,
+            str,
+        ):
+            return None
+
+        clean_content = (
+            content.strip()
+        )
+
+        if not clean_content:
+            return None
+
+        try:
+            parsed = json.loads(
+                clean_content
+            )
+        except (
+            json.JSONDecodeError,
+            TypeError,
+        ):
+            return None
+
+        if not isinstance(
+            parsed,
+            dict,
+        ):
+            return None
+
+        return parsed
+
     def _extract_rag_evidence(
         self,
-        trace: list[dict],
+        messages: list,
     ) -> tuple[
         UUID | None,
         list[str],
     ]:
+        """
+        Extract retrieval evidence from the raw
+        search_knowledge ToolMessage.
+
+        Do not use AgentRun trace output because
+        trace content is intentionally truncated
+        for audit readability.
+        """
+
         knowledge_base_id: (
             UUID | None
         ) = None
 
         contexts: list[str] = []
 
-        for item in trace:
-            if str(
-                item.get(
-                    "step_type",
-                    "",
-                )
-            ).upper() != "TOOL":
+        for message in messages:
+            if not isinstance(
+                message,
+                ToolMessage,
+            ):
                 continue
 
-            if (
-                str(
-                    item.get(
-                        "name",
-                        "",
-                    )
+            tool_name = str(
+                getattr(
+                    message,
+                    "name",
+                    "",
                 )
+                or ""
+            ).strip()
+
+            if (
+                tool_name
                 != "search_knowledge"
             ):
                 continue
 
-            output = (
-                item.get(
-                    "output"
+            payload = (
+                self._parse_tool_content(
+                    getattr(
+                        message,
+                        "content",
+                        None,
+                    )
                 )
-                or {}
             )
 
-            if not isinstance(
-                output,
-                dict,
-            ):
+            if not payload:
                 continue
 
-            tool_results = (
-                output.get(
+            results = (
+                payload.get(
                     "results",
-                    []
+                    [],
                 )
                 or []
             )
 
-            for tool_result in tool_results:
+            for result in results:
                 if not isinstance(
-                    tool_result,
+                    result,
                     dict,
                 ):
                     continue
 
-                content = (
-                    tool_result.get(
-                        "content"
+                raw_kb_id = (
+                    result.get(
+                        "knowledge_base_id"
                     )
                 )
 
-                payload = None
+                result_kb_id = None
 
-                if isinstance(
-                    content,
-                    str,
-                ):
+                if raw_kb_id:
                     try:
-                        payload = (
-                            json.loads(
-                                content
+                        result_kb_id = UUID(
+                            str(
+                                raw_kb_id
                             )
                         )
                     except (
-                        json.JSONDecodeError,
+                        ValueError,
                         TypeError,
                     ):
-                        payload = None
+                        result_kb_id = None
 
-                elif isinstance(
-                    content,
-                    dict,
+                if (
+                    knowledge_base_id
+                    is None
+                    and result_kb_id
+                    is not None
                 ):
-                    payload = content
-
-                if not isinstance(
-                    payload,
-                    dict,
-                ):
-                    continue
-
-                results = (
-                    payload.get(
-                        "results",
-                        []
+                    knowledge_base_id = (
+                        result_kb_id
                     )
-                    or []
-                )
 
-                for result in results:
-                    if not isinstance(
-                        result,
-                        dict,
-                    ):
-                        continue
+                text = str(
+                    result.get(
+                        "text",
+                        "",
+                    )
+                    or ""
+                ).strip()
 
-                    if (
-                        knowledge_base_id
-                        is None
-                    ):
-                        raw_kb_id = (
-                            result.get(
-                                "knowledge_base_id"
-                            )
-                        )
-
-                        if raw_kb_id:
-                            try:
-                                knowledge_base_id = (
-                                    UUID(
-                                        str(
-                                            raw_kb_id
-                                        )
-                                    )
-                                )
-                            except ValueError:
-                                pass
-
-                    text = str(
-                        result.get(
-                            "text",
-                            "",
-                        )
-                        or ""
-                    ).strip()
-
-                    if (
+                if (
+                    text
+                    and text
+                    not in contexts
+                ):
+                    contexts.append(
                         text
-                        and text
-                        not in contexts
-                    ):
-                        contexts.append(
-                            text
-                        )
+                    )
 
         return (
             knowledge_base_id,
@@ -198,25 +213,54 @@ class AgentOnlineEvalCaptureService:
         run: AgentRun,
         configuration:
             TenantLLMConfiguration,
-        trace: list[dict],
+        messages: list,
+        source_trace_id:
+            str | None,
     ) -> None:
+        """
+        Capture a completed Agent RAG interaction.
+
+        This is optional observability.
+        Capture failure must never fail the
+        successful Agent run.
+        """
+
         if not settings.ONLINE_EVAL_ENABLED:
             return
 
         if not run.answer:
             return
 
+        if not source_trace_id:
+            logger.warning(
+                "Agent online evaluation skipped: "
+                "source trace unavailable "
+                "tenant=%s agent=%s run=%s",
+                agent.tenant_id,
+                agent.id,
+                run.id,
+            )
+            return
+
         (
             knowledge_base_id,
             contexts,
         ) = self._extract_rag_evidence(
-            trace
+            messages
         )
 
         if (
             knowledge_base_id is None
             or not contexts
         ):
+            logger.debug(
+                "Agent online evaluation skipped: "
+                "no RAG evidence "
+                "tenant=%s agent=%s run=%s",
+                agent.tenant_id,
+                agent.id,
+                run.id,
+            )
             return
 
         try:
@@ -232,7 +276,8 @@ class AgentOnlineEvalCaptureService:
         except Exception:
             logger.exception(
                 "Agent online evaluation sampling "
-                "decision failed tenant=%s agent=%s run=%s",
+                "decision failed "
+                "tenant=%s agent=%s run=%s",
                 agent.tenant_id,
                 agent.id,
                 run.id,
@@ -271,6 +316,8 @@ class AgentOnlineEvalCaptureService:
                             .model_name,
                         sample_reason=
                             "random",
+                        source_trace_id=
+                            source_trace_id,
                         evaluation_metadata={
                             "capture_source":
                                 "agent",
@@ -305,23 +352,39 @@ class AgentOnlineEvalCaptureService:
                     )
                 )
 
-            if captured is not None:
-                logger.info(
-                    "Agent online evaluation candidate "
-                    "captured tenant=%s agent=%s run=%s "
-                    "kb=%s eval=%s",
+            if captured is None:
+                logger.warning(
+                    "Agent online evaluation capture "
+                    "returned no result "
+                    "tenant=%s agent=%s run=%s "
+                    "trace=%s",
                     agent.tenant_id,
                     agent.id,
                     run.id,
-                    knowledge_base_id,
-                    captured.id,
+                    source_trace_id,
                 )
+                return
+
+            logger.info(
+                "Agent online evaluation candidate "
+                "captured "
+                "tenant=%s agent=%s run=%s "
+                "kb=%s eval=%s trace=%s",
+                agent.tenant_id,
+                agent.id,
+                run.id,
+                knowledge_base_id,
+                captured.id,
+                source_trace_id,
+            )
 
         except Exception:
             logger.exception(
                 "Agent online evaluation capture failed "
-                "tenant=%s agent=%s run=%s",
+                "tenant=%s agent=%s run=%s "
+                "trace=%s",
                 agent.tenant_id,
                 agent.id,
                 run.id,
+                source_trace_id,
             )

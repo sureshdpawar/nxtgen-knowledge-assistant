@@ -494,8 +494,15 @@ class AgentExecutionService:
         configuration:
             TenantLLMConfiguration,
         messages: list,
-    ) -> int:
+    ) -> tuple[
+        int,
+        str | None,
+    ]:
         recorded = 0
+
+        source_trace_id: (
+            str | None
+        ) = None
 
         for message in messages:
             usage = (
@@ -514,52 +521,78 @@ class AgentExecutionService:
 
             recorded += 1
 
-            self.llm_usage_service.record(
-                db=db,
-                tenant_id=
-                    agent.tenant_id,
-                provider=
-                    configuration
-                    .provider
-                    .value,
-                model=
-                    configuration
-                    .model_name,
-                input_tokens=
-                    input_tokens,
-                output_tokens=
-                    output_tokens,
-                knowledge_base_id=
-                    None,
-                request_type=
-                    "agent",
-                usage_metadata={
-                    "estimated":
-                        False,
-                    "agent_id":
-                        str(
-                            agent.id
-                        ),
-                    "agent_name":
-                        agent.name,
-                    "agent_run_id":
-                        str(
-                            run.id
-                        ),
-                    "agent_thread_id":
-                        (
+            usage_event = (
+                self.llm_usage_service
+                .record(
+                    db=db,
+                    tenant_id=
+                        agent.tenant_id,
+                    provider=
+                        configuration
+                        .provider
+                        .value,
+                    model=
+                        configuration
+                        .model_name,
+                    input_tokens=
+                        input_tokens,
+                    output_tokens=
+                        output_tokens,
+                    knowledge_base_id=
+                        None,
+                    request_type=
+                        "agent",
+                    usage_metadata={
+                        "estimated":
+                            False,
+                        "agent_id":
                             str(
-                                run.thread_id
-                            )
-                            if run.thread_id
-                            else None
-                        ),
-                    "agent_llm_call":
-                        recorded,
-                },
+                                agent.id
+                            ),
+                        "agent_name":
+                            agent.name,
+                        "agent_run_id":
+                            str(
+                                run.id
+                            ),
+                        "agent_thread_id":
+                            (
+                                str(
+                                    run.thread_id
+                                )
+                                if run.thread_id
+                                else None
+                            ),
+                        "agent_llm_call":
+                            recorded,
+                    },
+                )
             )
 
-        return recorded
+            metadata = (
+                usage_event
+                .usage_metadata
+                or {}
+            )
+
+            event_trace_id = (
+                metadata.get(
+                    "trace_id"
+                )
+            )
+
+            if (
+                source_trace_id is None
+                and event_trace_id
+            ):
+                source_trace_id = str(
+                    event_trace_id
+                )
+
+        return (
+            recorded,
+            source_trace_id,
+        )
 
     def _executed_tools(
         self,
@@ -805,7 +838,10 @@ class AgentExecutionService:
                 ],
             )
 
-            self._record_agent_llm_usage(
+            (
+                _,
+                source_trace_id,
+            ) = self._record_agent_llm_usage(
                 db,
                 agent=agent,
                 run=run,
@@ -893,10 +929,14 @@ class AgentExecutionService:
                 db=db,
                 agent=agent,
                 run=run,
-                configuration=configuration,
-                trace=result[
-                    "trace"
-                ],
+                configuration=
+                    configuration,
+                messages=
+                    result[
+                        "new_messages"
+                    ],
+                source_trace_id=
+                    source_trace_id,
             )
 
             db.commit()
@@ -1199,7 +1239,10 @@ class AgentExecutionService:
                 ],
             )
 
-            self._record_agent_llm_usage(
+            (
+                _,
+                source_trace_id,
+            ) = self._record_agent_llm_usage(
                 db,
                 agent=
                     agent,
@@ -1289,10 +1332,14 @@ class AgentExecutionService:
                 db=db,
                 agent=agent,
                 run=run,
-                configuration=configuration,
-                trace=result[
-                    "trace"
-                ],
+                configuration=
+                    configuration,
+                messages=
+                    result[
+                        "new_messages"
+                    ],
+                source_trace_id=
+                    source_trace_id,
             )
 
             db.commit()
