@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import (
@@ -20,14 +21,35 @@ class AgentRunRequest(BaseModel):
         max_length=10000,
     )
 
+    # Omit to start a new LangGraph thread.
+    # Reuse to continue a conversation.
+    thread_id: UUID | None = None
+
+
+class AgentResumeRequest(BaseModel):
+    decision: Literal[
+        "approve",
+        "reject",
+    ]
+
+    reason: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
 
 class AgentRunResponse(BaseModel):
     run_id: UUID
-    answer: str
+    thread_id: UUID
+    checkpoint_id: str | None
+    answer: str | None
     status: AgentRunStatus
     llm_calls: int
     tools_used: list[str]
     duration_ms: float
+    interrupts: list[dict] = Field(
+        default_factory=list,
+    )
 
 
 class AgentRunStepResponse(BaseModel):
@@ -55,6 +77,8 @@ class AgentRunListResponse(BaseModel):
     tenant_id: UUID
     agent_id: UUID
     user_id: UUID
+    thread_id: UUID | None
+    checkpoint_id: str | None
 
     query: str
     answer: str | None
@@ -80,3 +104,20 @@ class AgentRunDetailResponse(
     steps: list[
         AgentRunStepResponse
     ]
+
+
+
+class AgentGraphStateResponse(BaseModel):
+    checkpoint_id: str | None
+    next: list[str] = Field(default_factory=list)
+    created_at: str | None = None
+    metadata: dict = Field(default_factory=dict)
+    interrupts: list[dict] = Field(default_factory=list)
+    state: dict = Field(default_factory=dict)
+
+
+class AgentCheckpointHistoryResponse(BaseModel):
+    thread_id: UUID
+    checkpoints: list[AgentGraphStateResponse] = Field(
+        default_factory=list,
+    )

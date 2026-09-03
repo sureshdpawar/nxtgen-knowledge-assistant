@@ -95,6 +95,7 @@ class AgentStatus(str, Enum):
 
 class AgentRunStatus(str, Enum):
     RUNNING = "RUNNING"
+    WAITING_FOR_APPROVAL = "WAITING_FOR_APPROVAL"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
 
@@ -129,7 +130,8 @@ class ToolType(str, Enum):
 class ToolRiskLevel(str, Enum):
     READ = "READ"
     WRITE = "WRITE"
-    
+
+
 class ChatChannelType(str, Enum):
     PUBLIC_API = "PUBLIC_API"
     WEBSITE = "WEBSITE"

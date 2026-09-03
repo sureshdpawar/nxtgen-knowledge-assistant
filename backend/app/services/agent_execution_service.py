@@ -10,17 +10,24 @@ from datetime import (
     timezone,
 )
 from typing import Any
-from uuid import UUID
+from uuid import (
+    UUID,
+    uuid4,
+)
 
 from fastapi import (
     HTTPException,
     status,
 )
 from sqlalchemy import (
+    func,
     select,
 )
 from sqlalchemy.orm import Session
 
+from app.agents.checkpointing import (
+    agent_checkpointer,
+)
 from app.agents.model_factory import (
     AgentModelFactory,
 )
@@ -72,19 +79,15 @@ class AgentExecutionService:
         self.agent_repository = (
             AgentRepository()
         )
-
         self.model_factory = (
             AgentModelFactory()
         )
-
         self.tool_registry = (
             AgentToolRegistry()
         )
-
         self.runtime = (
             AgentRuntime()
         )
-
         self.llm_usage_service = (
             LLMUsageService()
         )
@@ -111,12 +114,67 @@ class AgentExecutionService:
         ):
             await result
 
+    def _scoped_thread_id(
+        self,
+        *,
+        tenant_id: UUID,
+        agent_id: UUID,
+        user_id: UUID,
+        thread_id: UUID,
+    ) -> str:
+        return (
+            f"{tenant_id}:"
+            f"{agent_id}:"
+            f"{user_id}:"
+            f"{thread_id}"
+        )
+
+    def _get_agent(
+        self,
+        db: Session,
+        *,
+        current_user: User,
+        agent_id: UUID,
+    ) -> Agent:
+        agent = (
+            self.agent_repository
+            .get_by_id_and_tenant(
+                db=db,
+                tenant_id=
+                    current_user.tenant_id,
+                agent_id=
+                    agent_id,
+            )
+        )
+
+        if agent is None:
+            raise HTTPException(
+                status_code=
+                    status.HTTP_404_NOT_FOUND,
+                detail=
+                    "Agent not found.",
+            )
+
+        if (
+            agent.status
+            != AgentStatus.ACTIVE
+        ):
+            raise HTTPException(
+                status_code=
+                    status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Agent must be active "
+                    "before it can run."
+                ),
+            )
+
+        return agent
+
     def _resolve_llm_configuration(
         self,
         db: Session,
         agent: Agent,
     ) -> TenantLLMConfiguration:
-
         if (
             agent.llm_configuration_id
             is not None
@@ -130,18 +188,7 @@ class AgentExecutionService:
                 configuration is None
                 or configuration.tenant_id
                 != agent.tenant_id
-            ):
-                raise HTTPException(
-                    status_code=
-                        status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        "Agent LLM configuration "
-                        "is invalid."
-                    ),
-                )
-
-            if (
-                not
+                or not
                 configuration.is_active
             ):
                 raise HTTPException(
@@ -149,7 +196,7 @@ class AgentExecutionService:
                         status.HTTP_400_BAD_REQUEST,
                     detail=(
                         "Agent LLM configuration "
-                        "is inactive."
+                        "is invalid or inactive."
                     ),
                 )
 
@@ -194,93 +241,136 @@ class AgentExecutionService:
 
         return configuration
 
+    async def _runtime_dependencies(
+        self,
+        db: Session,
+        agent: Agent,
+    ):
+        configuration = (
+            self._resolve_llm_configuration(
+                db=db,
+                agent=agent,
+            )
+        )
+
+        model = (
+            self.model_factory.create(
+                configuration,
+            )
+        )
+
+        knowledge_base_ids = [
+            link.knowledge_base_id
+            for link
+            in agent.knowledge_base_links
+        ]
+
+        tool_ids = [
+            link.tool_id
+            for link
+            in agent.tool_links
+        ]
+
+        tools = (
+            await
+            self.tool_registry
+            .get_tools(
+                db=db,
+                tenant_id=
+                    agent.tenant_id,
+                knowledge_base_ids=
+                    knowledge_base_ids,
+                tool_ids=
+                    tool_ids,
+            )
+        )
+
+        return (
+            configuration,
+            model,
+            tools,
+        )
+
     def _persist_trace(
         self,
         db: Session,
         run: AgentRun,
         trace: list[dict],
     ) -> None:
+        if not trace:
+            return
 
-        for (
-            index,
-            trace_step,
-        ) in enumerate(
+        last_step = (
+            db.scalar(
+                select(
+                    func.max(
+                        AgentRunStep
+                        .step_number
+                    )
+                )
+                .where(
+                    AgentRunStep.run_id
+                    == run.id
+                )
+            )
+            or 0
+        )
+
+        for offset, item in enumerate(
             trace,
             start=1,
         ):
             step_type = (
                 AgentRunStepType(
-                    trace_step[
+                    item[
                         "step_type"
                     ]
                 )
             )
 
-            step_status = (
-                AgentRunStepStatus(
-                    trace_step.get(
-                        "status",
-                        "COMPLETED",
-                    )
-                )
-            )
-
-            step = AgentRunStep(
-                run_id=
-                    run.id,
-
-                step_number=
-                    index,
-
-                step_type=
-                    step_type,
-
-                status=
-                    step_status,
-
-                name=
-                    trace_step.get(
-                        "name",
-                        step_type.value,
-                    ),
-
-                input_data=
-                    trace_step.get(
-                        "input",
-                    ),
-
-                output_data=
-                    trace_step.get(
-                        "output",
-                    ),
-
-                duration_ms=
-                    trace_step.get(
-                        "duration_ms",
-                    ),
-            )
-
             db.add(
-                step,
+                AgentRunStep(
+                    run_id=
+                        run.id,
+                    step_number=
+                        last_step
+                        + offset,
+                    step_type=
+                        step_type,
+                    status=
+                        AgentRunStepStatus(
+                            item.get(
+                                "status",
+                                "COMPLETED",
+                            )
+                        ),
+                    name=
+                        item.get(
+                            "name",
+                            step_type.value,
+                        ),
+                    input_data=
+                        item.get(
+                            "input"
+                        ),
+                    output_data=
+                        item.get(
+                            "output"
+                        ),
+                    duration_ms=
+                        item.get(
+                            "duration_ms"
+                        ),
+                )
             )
 
     def _extract_llm_usage(
         self,
         message,
-    ) -> tuple[int, int] | None:
-        """
-        Extract provider-reported token usage from
-        LangChain AIMessage objects.
-
-        ChatOpenAI normally exposes normalized
-        usage_metadata. response_metadata.token_usage
-        is retained as a compatibility fallback.
-
-        If token usage is unavailable, do not invent
-        zero-token usage because that would create
-        misleading cost records.
-        """
-
+    ) -> tuple[
+        int,
+        int,
+    ] | None:
         usage_metadata = (
             getattr(
                 message,
@@ -295,7 +385,6 @@ class AgentExecutionService:
                 "input_tokens"
             )
         )
-
         output_tokens = (
             usage_metadata.get(
                 "output_tokens"
@@ -339,7 +428,6 @@ class AgentExecutionService:
                 "prompt_tokens"
             )
         )
-
         output_tokens = (
             token_usage.get(
                 "completion_tokens"
@@ -371,20 +459,6 @@ class AgentExecutionService:
             TenantLLMConfiguration,
         messages: list,
     ) -> int:
-        """
-        Meter every actual agent LLM invocation.
-
-        Agent usage enters the same centralized
-        pricing/cost path as chat and evaluation,
-        but is attributed with:
-
-            request_type = "agent"
-
-        agent_id and agent_run_id are stored in
-        usage_metadata so no schema migration is
-        required for workload-level Cost Analytics.
-        """
-
         recorded = 0
 
         for message in messages:
@@ -406,48 +480,44 @@ class AgentExecutionService:
 
             self.llm_usage_service.record(
                 db=db,
-
                 tenant_id=
                     agent.tenant_id,
-
                 provider=
                     configuration
                     .provider
                     .value,
-
                 model=
                     configuration
                     .model_name,
-
                 input_tokens=
                     input_tokens,
-
                 output_tokens=
                     output_tokens,
-
                 knowledge_base_id=
                     None,
-
                 request_type=
                     "agent",
-
                 usage_metadata={
                     "estimated":
                         False,
-
                     "agent_id":
                         str(
                             agent.id
                         ),
-
                     "agent_name":
                         agent.name,
-
                     "agent_run_id":
                         str(
                             run.id
                         ),
-
+                    "agent_thread_id":
+                        (
+                            str(
+                                run.thread_id
+                            )
+                            if run.thread_id
+                            else None
+                        ),
                     "agent_llm_call":
                         recorded,
                 },
@@ -455,52 +525,57 @@ class AgentExecutionService:
 
         return recorded
 
+    def _tools_used(
+        self,
+        messages: list,
+    ) -> list[str]:
+        names: list[
+            str
+        ] = []
+
+        for message in messages:
+            for call in (
+                getattr(
+                    message,
+                    "tool_calls",
+                    None,
+                )
+                or []
+            ):
+                name = call.get(
+                    "name"
+                )
+
+                if (
+                    name
+                    and name
+                    not in names
+                ):
+                    names.append(
+                        name
+                    )
+
+        return names
+
     async def run(
         self,
         db: Session,
         current_user: User,
         agent_id: UUID,
         query: str,
+        thread_id: UUID | None = None,
         progress_callback:
             ProgressCallback | None = None,
     ) -> dict:
-
-        agent = (
-            self.agent_repository
-            .get_by_id_and_tenant(
-                db=db,
-                tenant_id=
-                    current_user.tenant_id,
-                agent_id=
-                    agent_id,
-            )
+        agent = self._get_agent(
+            db,
+            current_user=
+                current_user,
+            agent_id=
+                agent_id,
         )
 
-        if agent is None:
-            raise HTTPException(
-                status_code=
-                    status.HTTP_404_NOT_FOUND,
-                detail=(
-                    "Agent not found."
-                ),
-            )
-
-        if (
-            agent.status
-            != AgentStatus.ACTIVE
-        ):
-            raise HTTPException(
-                status_code=
-                    status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "Agent must be active "
-                    "before it can run."
-                ),
-            )
-
-        clean_query = (
-            query.strip()
-        )
+        clean_query = query.strip()
 
         if not clean_query:
             raise HTTPException(
@@ -512,234 +587,88 @@ class AgentExecutionService:
                 ),
             )
 
-        configuration = (
-            self._resolve_llm_configuration(
-                db=db,
-                agent=agent,
-            )
+        public_thread_id = (
+            thread_id
+            or uuid4()
         )
 
-        model = (
-            self.model_factory.create(
-                configuration,
-            )
-        )
-
-        knowledge_base_ids = [
-            link.knowledge_base_id
-            for link
-            in agent.knowledge_base_links
-        ]
-
-        tool_ids = [
-            link.tool_id
-            for link
-            in agent.tool_links
-        ]
-
-        tools = (
-            await
-            self.tool_registry
-            .get_tools(
-                db=db,
-                tenant_id=
-                    agent.tenant_id,
-                knowledge_base_ids=
-                    knowledge_base_ids,
-                tool_ids=
-                    tool_ids,
-            )
+        (
+            configuration,
+            model,
+            tools,
+        ) = await self._runtime_dependencies(
+            db,
+            agent,
         )
 
         run = AgentRun(
             tenant_id=
                 agent.tenant_id,
-
             agent_id=
                 agent.id,
-
             user_id=
                 current_user.id,
-
+            thread_id=
+                public_thread_id,
             query=
                 clean_query,
-
             status=
                 AgentRunStatus.RUNNING,
-
             tools_used=[],
-
             llm_calls=0,
         )
 
         db.add(
-            run,
+            run
         )
-
         db.commit()
-
         db.refresh(
-            run,
-        )
-
-        run_id = (
-            run.id
+            run
         )
 
         started_at = (
             time.perf_counter()
         )
 
-        await self._emit_progress(
-            progress_callback,
-            {
-                "type":
-                    "run_started",
-
-                "run_id":
-                    str(
-                        run_id
-                    ),
-
-                "agent_id":
-                    str(
-                        agent.id
-                    ),
-
-                "agent_name":
-                    agent.name,
-
-                "tools":
-                    [
-                        tool.name
-                        for tool
-                        in tools
-                    ],
-            },
-        )
-
-        logger.info(
-            "Agent execution started "
-            "run=%s "
-            "agent=%s "
-            "tenant=%s "
-            "user=%s "
-            "model=%s "
-            "knowledge_bases=%s "
-            "assigned_tools=%s "
-            "runtime_tools=%s",
-            run_id,
-            agent.id,
-            agent.tenant_id,
-            current_user.id,
-            configuration.model_name,
-            len(
-                knowledge_base_ids
-            ),
-            len(
-                tool_ids
-            ),
-            [
-                tool.name
-                for tool in tools
-            ],
+        scoped_thread = (
+            self._scoped_thread_id(
+                tenant_id=
+                    agent.tenant_id,
+                agent_id=
+                    agent.id,
+                user_id=
+                    current_user.id,
+                thread_id=
+                    public_thread_id,
+            )
         )
 
         try:
-            result = (
-                await
-                self.runtime.run(
-                    model=model,
-                    tools=tools,
-                    system_prompt=
-                        agent.system_prompt,
-                    query=
-                        clean_query,
-                    max_iterations=
-                        agent.max_iterations,
-                    progress_callback=
-                        progress_callback,
-                )
-            )
-
-            tools_used: list[
-                str
-            ] = []
-
-            for message in (
-                result[
-                    "messages"
-                ]
-            ):
-                tool_calls = (
-                    getattr(
-                        message,
-                        "tool_calls",
-                        None,
+            async with (
+                agent_checkpointer()
+            ) as checkpointer:
+                result = (
+                    await
+                    self.runtime.run_turn(
+                        model=model,
+                        tools=tools,
+                        system_prompt=
+                            agent.system_prompt,
+                        query=
+                            clean_query,
+                        max_iterations=
+                            agent.max_iterations,
+                        checkpointer=
+                            checkpointer,
+                        thread_id=
+                            scoped_thread,
+                        run_id=
+                            str(
+                                run.id
+                            ),
+                        progress_callback=
+                            progress_callback,
                     )
-                )
-
-                if not tool_calls:
-                    continue
-
-                for tool_call in (
-                    tool_calls
-                ):
-                    tool_name = (
-                        tool_call.get(
-                            "name",
-                        )
-                    )
-
-                    if (
-                        tool_name
-                        and tool_name
-                        not in tools_used
-                    ):
-                        tools_used.append(
-                            tool_name,
-                        )
-
-            self._persist_trace(
-                db=db,
-                run=run,
-                trace=
-                    result.get(
-                        "trace",
-                        [],
-                    ),
-            )
-
-            metered_llm_calls = (
-                self._record_agent_llm_usage(
-                    db=db,
-                    agent=agent,
-                    run=run,
-                    configuration=
-                        configuration,
-                    messages=
-                        result.get(
-                            "messages",
-                            [],
-                        ),
-                )
-            )
-
-            if (
-                metered_llm_calls
-                != result[
-                    "llm_calls"
-                ]
-            ):
-                logger.warning(
-                    "Agent LLM metering count "
-                    "differs from runtime count "
-                    "run=%s runtime=%s metered=%s",
-                    run_id,
-                    result[
-                        "llm_calls"
-                    ],
-                    metered_llm_calls,
                 )
 
             duration_ms = (
@@ -750,30 +679,92 @@ class AgentExecutionService:
                 * 1000
             )
 
-            run.answer = (
+            self._persist_trace(
+                db,
+                run,
                 result[
-                    "answer"
+                    "trace"
+                ],
+            )
+
+            self._record_agent_llm_usage(
+                db,
+                agent=agent,
+                run=run,
+                configuration=
+                    configuration,
+                messages=
+                    result[
+                        "new_messages"
+                    ],
+            )
+
+            tools_used = (
+                self._tools_used(
+                    result[
+                        "new_messages"
+                    ]
+                )
+            )
+
+            run.checkpoint_id = (
+                result[
+                    "checkpoint_id"
                 ]
             )
-
-            run.status = (
-                AgentRunStatus.COMPLETED
-            )
-
             run.llm_calls = (
                 result[
                     "llm_calls"
                 ]
             )
-
             run.tools_used = (
                 tools_used
             )
-
             run.duration_ms = (
                 duration_ms
             )
 
+            if result[
+                "interrupted"
+            ]:
+                run.status = (
+                    AgentRunStatus
+                    .WAITING_FOR_APPROVAL
+                )
+
+                db.commit()
+
+                return {
+                    "run_id":
+                        run.id,
+                    "thread_id":
+                        public_thread_id,
+                    "checkpoint_id":
+                        run.checkpoint_id,
+                    "answer":
+                        None,
+                    "status":
+                        run.status,
+                    "llm_calls":
+                        run.llm_calls,
+                    "tools_used":
+                        tools_used,
+                    "duration_ms":
+                        duration_ms,
+                    "interrupts":
+                        result[
+                            "interrupts"
+                        ],
+                }
+
+            run.answer = (
+                result[
+                    "answer"
+                ]
+            )
+            run.status = (
+                AgentRunStatus.COMPLETED
+            )
             run.completed_at = (
                 datetime.now(
                     timezone.utc,
@@ -782,87 +773,173 @@ class AgentExecutionService:
 
             db.commit()
 
-            logger.info(
-                "Agent execution completed "
-                "run=%s "
-                "agent=%s "
-                "llm_calls=%s "
-                "metered_llm_calls=%s "
-                "tools_used=%s "
-                "duration_ms=%.2f",
-                run_id,
-                agent.id,
-                result[
-                    "llm_calls"
-                ],
-                metered_llm_calls,
-                tools_used,
-                duration_ms,
-            )
-
-            response = {
+            return {
                 "run_id":
-                    run_id,
-
+                    run.id,
+                "thread_id":
+                    public_thread_id,
+                "checkpoint_id":
+                    run.checkpoint_id,
                 "answer":
-                    result[
-                        "answer"
-                    ],
-
+                    run.answer,
                 "status":
-                    AgentRunStatus.COMPLETED,
-
+                    run.status,
                 "llm_calls":
-                    result[
-                        "llm_calls"
-                    ],
-
+                    run.llm_calls,
                 "tools_used":
                     tools_used,
-
                 "duration_ms":
                     duration_ms,
+                "interrupts":
+                    [],
             }
-
-            await self._emit_progress(
-                progress_callback,
-                {
-                    "type":
-                        "completed",
-
-                    "result":
-                        {
-                            "run_id":
-                                str(
-                                    run_id
-                                ),
-
-                            "answer":
-                                result[
-                                    "answer"
-                                ],
-
-                            "status":
-                                "COMPLETED",
-
-                            "llm_calls":
-                                result[
-                                    "llm_calls"
-                                ],
-
-                            "tools_used":
-                                tools_used,
-
-                            "duration_ms":
-                                duration_ms,
-                        },
-                },
-            )
-
-            return response
 
         except Exception as exc:
             db.rollback()
+
+            failed_run = db.get(
+                AgentRun,
+                run.id,
+            )
+
+            if failed_run is not None:
+                failed_run.status = (
+                    AgentRunStatus.FAILED
+                )
+                failed_run.error_message = (
+                    str(
+                        exc
+                    )[
+                        :2000
+                    ]
+                )
+                failed_run.completed_at = (
+                    datetime.now(
+                        timezone.utc,
+                    )
+                )
+                db.commit()
+
+            raise
+
+    async def resume(
+        self,
+        db: Session,
+        current_user: User,
+        agent_id: UUID,
+        run_id: UUID,
+        *,
+        decision: str,
+        reason: str | None = None,
+        progress_callback:
+            ProgressCallback | None = None,
+    ) -> dict:
+        agent = self._get_agent(
+            db,
+            current_user=
+                current_user,
+            agent_id=
+                agent_id,
+        )
+
+        run = db.get(
+            AgentRun,
+            run_id,
+        )
+
+        if (
+            run is None
+            or run.tenant_id
+            != current_user.tenant_id
+            or run.agent_id
+            != agent.id
+            or run.user_id
+            != current_user.id
+        ):
+            raise HTTPException(
+                status_code=
+                    status.HTTP_404_NOT_FOUND,
+                detail=
+                    "Agent run not found.",
+            )
+
+        if (
+            run.status
+            != AgentRunStatus
+            .WAITING_FOR_APPROVAL
+        ):
+            raise HTTPException(
+                status_code=
+                    status.HTTP_409_CONFLICT,
+                detail=(
+                    "Agent run is not waiting "
+                    "for human approval."
+                ),
+            )
+
+        if run.thread_id is None:
+            raise HTTPException(
+                status_code=
+                    status.HTTP_409_CONFLICT,
+                detail=(
+                    "Agent run has no "
+                    "LangGraph thread."
+                ),
+            )
+
+        (
+            configuration,
+            model,
+            tools,
+        ) = await self._runtime_dependencies(
+            db,
+            agent,
+        )
+
+        scoped_thread = (
+            self._scoped_thread_id(
+                tenant_id=
+                    agent.tenant_id,
+                agent_id=
+                    agent.id,
+                user_id=
+                    current_user.id,
+                thread_id=
+                    run.thread_id,
+            )
+        )
+
+        started_at = (
+            time.perf_counter()
+        )
+
+        try:
+            async with (
+                agent_checkpointer()
+            ) as checkpointer:
+                result = (
+                    await
+                    self.runtime.resume(
+                        model=model,
+                        tools=tools,
+                        system_prompt=
+                            agent.system_prompt,
+                        max_iterations=
+                            agent.max_iterations,
+                        checkpointer=
+                            checkpointer,
+                        thread_id=
+                            scoped_thread,
+                        decision={
+                            "decision":
+                                decision,
+                            "reason":
+                                reason,
+                        },
+                        progress_callback=
+                            progress_callback,
+                    )
+                )
 
             duration_ms = (
                 (
@@ -872,65 +949,272 @@ class AgentExecutionService:
                 * 1000
             )
 
-            failed_run = db.get(
+            self._persist_trace(
+                db,
+                run,
+                result[
+                    "trace"
+                ],
+            )
+
+            self._record_agent_llm_usage(
+                db,
+                agent=agent,
+                run=run,
+                configuration=
+                    configuration,
+                messages=
+                    result[
+                        "new_messages"
+                    ],
+            )
+
+            resumed_tools = (
+                self._tools_used(
+                    result[
+                        "new_messages"
+                    ]
+                )
+            )
+
+            merged_tools = list(
+                run.tools_used
+                or []
+            )
+
+            for name in resumed_tools:
+                if name not in merged_tools:
+                    merged_tools.append(
+                        name
+                    )
+
+            run.checkpoint_id = (
+                result[
+                    "checkpoint_id"
+                ]
+            )
+            run.llm_calls = (
+                result[
+                    "llm_calls"
+                ]
+            )
+            run.tools_used = (
+                merged_tools
+            )
+            run.duration_ms = (
+                (
+                    run.duration_ms
+                    or 0
+                )
+                + duration_ms
+            )
+
+            if result[
+                "interrupted"
+            ]:
+                run.status = (
+                    AgentRunStatus
+                    .WAITING_FOR_APPROVAL
+                )
+
+                db.commit()
+
+                return {
+                    "run_id":
+                        run.id,
+                    "thread_id":
+                        run.thread_id,
+                    "checkpoint_id":
+                        run.checkpoint_id,
+                    "answer":
+                        None,
+                    "status":
+                        run.status,
+                    "llm_calls":
+                        run.llm_calls,
+                    "tools_used":
+                        merged_tools,
+                    "duration_ms":
+                        run.duration_ms,
+                    "interrupts":
+                        result[
+                            "interrupts"
+                        ],
+                }
+
+            run.answer = (
+                result[
+                    "answer"
+                ]
+            )
+            run.status = (
+                AgentRunStatus.COMPLETED
+            )
+            run.completed_at = (
+                datetime.now(
+                    timezone.utc,
+                )
+            )
+
+            db.commit()
+
+            return {
+                "run_id":
+                    run.id,
+                "thread_id":
+                    run.thread_id,
+                "checkpoint_id":
+                    run.checkpoint_id,
+                "answer":
+                    run.answer,
+                "status":
+                    run.status,
+                "llm_calls":
+                    run.llm_calls,
+                "tools_used":
+                    merged_tools,
+                "duration_ms":
+                    run.duration_ms,
+                "interrupts":
+                    [],
+            }
+
+        except Exception as exc:
+            db.rollback()
+
+            run = db.get(
                 AgentRun,
                 run_id,
             )
 
-            if failed_run is not None:
-                failed_run.status = (
+            if run is not None:
+                run.status = (
                     AgentRunStatus.FAILED
                 )
-
-                failed_run.duration_ms = (
-                    duration_ms
-                )
-
-                failed_run.error_message = (
+                run.error_message = (
                     str(
                         exc
                     )[
                         :2000
                     ]
                 )
-
-                failed_run.completed_at = (
+                run.completed_at = (
                     datetime.now(
                         timezone.utc,
                     )
                 )
-
                 db.commit()
 
-            logger.exception(
-                "Agent execution failed "
-                "run=%s "
-                "agent=%s "
-                "error_type=%s",
-                run_id,
-                agent.id,
-                type(
-                    exc
-                ).__name__,
-            )
-
-            await self._emit_progress(
-                progress_callback,
-                {
-                    "type":
-                        "failed",
-
-                    "run_id":
-                        str(
-                            run_id
-                        ),
-
-                    "message":
-                        (
-                            "Agent execution "
-                            "failed."
-                        ),
-                },
-            )
-
             raise
+
+    def _assert_thread_access(
+        self,
+        db: Session,
+        *,
+        current_user: User,
+        agent: Agent,
+        thread_id: UUID,
+    ) -> None:
+        existing = db.scalar(
+            select(AgentRun.id)
+            .where(
+                AgentRun.tenant_id == current_user.tenant_id,
+                AgentRun.agent_id == agent.id,
+                AgentRun.user_id == current_user.id,
+                AgentRun.thread_id == thread_id,
+            )
+            .limit(1)
+        )
+
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Agent thread not found.",
+            )
+
+    async def get_graph_state(
+        self,
+        db: Session,
+        current_user: User,
+        agent_id: UUID,
+        thread_id: UUID,
+    ) -> dict:
+        agent = self._get_agent(
+            db,
+            current_user=current_user,
+            agent_id=agent_id,
+        )
+
+        self._assert_thread_access(
+            db,
+            current_user=current_user,
+            agent=agent,
+            thread_id=thread_id,
+        )
+
+        _, model, tools = await self._runtime_dependencies(
+            db,
+            agent,
+        )
+
+        scoped_thread = self._scoped_thread_id(
+            tenant_id=agent.tenant_id,
+            agent_id=agent.id,
+            user_id=current_user.id,
+            thread_id=thread_id,
+        )
+
+        async with agent_checkpointer() as checkpointer:
+            return await self.runtime.inspect_state(
+                model=model,
+                tools=tools,
+                system_prompt=agent.system_prompt,
+                max_iterations=agent.max_iterations,
+                checkpointer=checkpointer,
+                thread_id=scoped_thread,
+            )
+
+    async def get_checkpoint_history(
+        self,
+        db: Session,
+        current_user: User,
+        agent_id: UUID,
+        thread_id: UUID,
+        limit: int = 20,
+    ) -> list[dict]:
+        agent = self._get_agent(
+            db,
+            current_user=current_user,
+            agent_id=agent_id,
+        )
+
+        self._assert_thread_access(
+            db,
+            current_user=current_user,
+            agent=agent,
+            thread_id=thread_id,
+        )
+
+        _, model, tools = await self._runtime_dependencies(
+            db,
+            agent,
+        )
+
+        scoped_thread = self._scoped_thread_id(
+            tenant_id=agent.tenant_id,
+            agent_id=agent.id,
+            user_id=current_user.id,
+            thread_id=thread_id,
+        )
+
+        async with agent_checkpointer() as checkpointer:
+            return await self.runtime.checkpoint_history(
+                model=model,
+                tools=tools,
+                system_prompt=agent.system_prompt,
+                max_iterations=agent.max_iterations,
+                checkpointer=checkpointer,
+                thread_id=scoped_thread,
+                limit=max(1, min(limit, 100)),
+            )
+

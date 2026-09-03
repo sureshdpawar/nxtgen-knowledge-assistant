@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import (
     APIRouter,
     Depends,
+    Query,
     Response,
     status,
 )
@@ -25,6 +26,9 @@ from app.schemas.agent import (
     AgentUpdate,
 )
 from app.schemas.agent_run import (
+    AgentCheckpointHistoryResponse,
+    AgentGraphStateResponse,
+    AgentResumeRequest,
     AgentRunRequest,
     AgentRunResponse,
 )
@@ -43,7 +47,6 @@ router = APIRouter(
 
 
 service = AgentService()
-
 execution_service = (
     AgentExecutionService()
 )
@@ -182,6 +185,36 @@ async def run_agent(
         current_user=current_user,
         agent_id=agent_id,
         query=payload.query,
+        thread_id=
+            payload.thread_id,
+    )
+
+
+@router.post(
+    "/{agent_id}/runs/{run_id}/resume",
+    response_model=
+        AgentRunResponse,
+)
+async def resume_agent(
+    agent_id: UUID,
+    run_id: UUID,
+    payload: AgentResumeRequest,
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    return await execution_service.resume(
+        db=db,
+        current_user=current_user,
+        agent_id=agent_id,
+        run_id=run_id,
+        decision=
+            payload.decision,
+        reason=
+            payload.reason,
     )
 
 
@@ -211,24 +244,45 @@ async def stream_agent(
 
     async def execute():
         try:
-            await execution_service.run(
-                db=db,
-                current_user=
-                    current_user,
-                agent_id=
-                    agent_id,
-                query=
-                    payload.query,
-                progress_callback=
-                    progress_callback,
+            result = (
+                await
+                execution_service.run(
+                    db=db,
+                    current_user=
+                        current_user,
+                    agent_id=
+                        agent_id,
+                    query=
+                        payload.query,
+                    thread_id=
+                        payload.thread_id,
+                    progress_callback=
+                        progress_callback,
+                )
+            )
+
+            await queue.put(
+                {
+                    "type":
+                        (
+                            "approval_required"
+                            if (
+                                result[
+                                    "status"
+                                ].value
+                                ==
+                                "WAITING_FOR_APPROVAL"
+                            )
+                            else
+                            "completed"
+                        ),
+
+                    "result":
+                        result,
+                }
             )
 
         except Exception:
-            #
-            # AgentExecutionService already
-            # emitted a safe failed event
-            # and persisted the failed run.
-            #
             pass
 
         finally:
@@ -250,24 +304,16 @@ async def stream_agent(
                 if event is None:
                     break
 
-                payload_json = (
-                    json.dumps(
+                yield (
+                    "event: progress\n"
+                    "data: "
+                    + json.dumps(
                         event,
                         default=str,
                     )
+                    + "\n\n"
                 )
-
-                yield (
-                    "event: progress\n"
-                    f"data: {payload_json}\n\n"
-                )
-
         finally:
-            #
-            # We intentionally do not cancel
-            # an already-running agent if the
-            # browser disconnects.
-            #
             if task.done():
                 try:
                     task.result()
@@ -281,8 +327,51 @@ async def stream_agent(
         headers={
             "Cache-Control":
                 "no-cache",
-
             "X-Accel-Buffering":
                 "no",
         },
     )
+
+
+
+@router.get(
+    "/{agent_id}/threads/{thread_id}/state",
+    response_model=AgentGraphStateResponse,
+)
+async def get_agent_graph_state(
+    agent_id: UUID,
+    thread_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    return await execution_service.get_graph_state(
+        db=db,
+        current_user=current_user,
+        agent_id=agent_id,
+        thread_id=thread_id,
+    )
+
+
+@router.get(
+    "/{agent_id}/threads/{thread_id}/checkpoints",
+    response_model=AgentCheckpointHistoryResponse,
+)
+async def get_agent_checkpoint_history(
+    agent_id: UUID,
+    thread_id: UUID,
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    checkpoints = await execution_service.get_checkpoint_history(
+        db=db,
+        current_user=current_user,
+        agent_id=agent_id,
+        thread_id=thread_id,
+        limit=limit,
+    )
+
+    return {
+        "thread_id": thread_id,
+        "checkpoints": checkpoints,
+    }

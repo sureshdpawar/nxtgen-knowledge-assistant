@@ -1,10 +1,17 @@
 import app.models
 
+from contextlib import (
+    asynccontextmanager,
+)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import (
     CORSMiddleware,
 )
 
+from app.agents.checkpointing import (
+    setup_agent_checkpointing,
+)
 from app.api.router import router
 from app.core.config import settings
 from app.core.logging import setup_logging
@@ -29,9 +36,18 @@ from app.middleware.widget_cors import (
 
 
 setup_logging()
-
-
 validate_startup_configuration()
+
+
+@asynccontextmanager
+async def lifespan(
+    app: FastAPI,
+):
+    # Official LangGraph setup creates/migrates its own
+    # checkpoint tables in the existing PostgreSQL database.
+    await setup_agent_checkpointing()
+
+    yield
 
 
 app = FastAPI(
@@ -39,41 +55,15 @@ app = FastAPI(
         "NXTGEN Knowledge Assistant API"
     ),
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
-#
-# ---------------------------------------------------------
-# OpenTelemetry
-# ---------------------------------------------------------
-#
-# Instrument the FastAPI application once at startup.
-#
-# OpenTelemetry remains independent of the eventual
-# observability backend. Today spans can be written to the
-# console. Later the same instrumentation can export over
-# OTLP to a Collector, Datadog, Elastic, Grafana, or another
-# compatible backend.
-#
 configure_telemetry(
     app
 )
 
 
-#
-# ---------------------------------------------------------
-# Internal application CORS
-# ---------------------------------------------------------
-#
-# This remains intentionally static.
-#
-# It controls browser access to the authenticated NXTGEN
-# application API, such as:
-#
-# /api/v1/*
-#
-# Customer Website widget domains should NOT be added here.
-#
 cors_origins = [
     origin.strip()
     for origin
@@ -95,18 +85,6 @@ app.add_middleware(
 )
 
 
-#
-# ---------------------------------------------------------
-# Website Widget CORS
-# ---------------------------------------------------------
-#
-# Handles browser CORS mechanics only for:
-#
-# /public/v1/widget/*
-#
-# Actual origin authorization is performed against the
-# Website ChatChannel's allowed_origins configuration.
-#
 app.add_middleware(
     WidgetCORSMiddleware
 )
