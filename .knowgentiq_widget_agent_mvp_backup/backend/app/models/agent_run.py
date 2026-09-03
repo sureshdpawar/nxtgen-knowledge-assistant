@@ -64,36 +64,12 @@ class AgentRun(
         index=True,
     )
 
-    user_id: Mapped[
-        UUID | None
-    ] = mapped_column(
+    user_id: Mapped[UUID] = mapped_column(
         ForeignKey(
             "app_user.id",
         ),
-        nullable=True,
-        index=True,
-    )
-
-    actor_type: Mapped[str] = mapped_column(
-        String(50),
         nullable=False,
         index=True,
-        default="USER",
-        server_default="USER",
-    )
-
-    actor_id: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-        index=True,
-    )
-
-    context_metadata: Mapped[
-        dict | None
-    ] = mapped_column(
-        JSON,
-        nullable=True,
-        default=dict,
     )
 
     # Public conversation/thread identifier. LangGraph receives
@@ -196,7 +172,7 @@ class AgentRun(
     )
 
     user: Mapped[
-        "User | None"
+        "User"
     ] = relationship(
         "User",
     )

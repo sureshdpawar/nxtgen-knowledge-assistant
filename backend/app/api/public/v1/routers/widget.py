@@ -1,5 +1,6 @@
 import json
 
+from collections.abc import AsyncGenerator
 from uuid import UUID
 
 from fastapi import (
@@ -37,73 +38,23 @@ chat_service = ChannelChatService()
 website_agent_service = WebsiteAgentService()
 
 
-def _sse_event(
-    event_type: str,
-    data: str,
-) -> str:
-    """
-    Build a valid Server-Sent Events block.
-
-    Each logical line is emitted as its own `data:` line so multiline
-    agent answers render correctly in the existing website widget.
-    """
-    normalized = str(data).replace("\r\n", "\n").replace("\r", "\n")
-
-    lines = normalized.split("\n")
-    if not lines:
-        lines = [""]
-
-    payload = [f"event: {event_type}"]
-    payload.extend(f"data: {line}" for line in lines)
-
-    return "\n".join(payload) + "\n\n"
-
-
-def _agent_result_stream(
-    result: dict,
-):
-    """
-    Adapt a completed AgentExecutionService result to the SSE contract
-    already consumed by frontend/public/nxtgen-widget.js.
-
-    The current website agent execution is non-token-streaming, but it uses
-    the same public SSE envelope as the Knowledge channel so the widget does
-    not need a second transport implementation.
-    """
-    answer = str(
-        result.get("answer")
-        or ""
+def _sse_text(value: str) -> str:
+    return (
+        "".join(
+            f"data: {line}\n"
+            for line in value.split("\n")
+        )
+        + "\n"
     )
 
-    if answer:
-        yield _sse_event(
-            "message",
-            answer,
-        )
 
-    metadata = {
-        "session_id": str(
-            result.get("thread_id")
-            or ""
-        ),
-        "run_id": str(
-            result.get("run_id")
-            or ""
-        ),
-        "checkpoint_id": (
-            str(result["checkpoint_id"])
-            if result.get("checkpoint_id")
-            else None
-        ),
-        "sources": [],
-    }
-
-    yield _sse_event(
-        "metadata",
-        json.dumps(
-            metadata,
-            separators=(",", ":"),
-        ),
+def _sse_event(
+    event: str,
+    data: dict,
+) -> str:
+    return (
+        f"event: {event}\n"
+        f"data: {json.dumps(data)}\n\n"
     )
 
 
@@ -130,10 +81,7 @@ def get_widget_config(
             origin=origin,
         )
 
-        configuration = (
-            channel.configuration
-            or {}
-        )
+        configuration = channel.configuration or {}
 
         execution_mode = (
             website_agent_service
@@ -141,12 +89,12 @@ def get_widget_config(
         )
 
         if execution_mode == "AGENT":
-            pre_chat_data = (
+            pre_chat = (
                 website_agent_service
                 .public_pre_chat_config(channel)
             )
         else:
-            pre_chat_data = {
+            pre_chat = {
                 "enabled": False,
                 "title": "Before we start",
                 "submit_label": "Start chat",
@@ -176,7 +124,7 @@ def get_widget_config(
             ),
             execution_mode=execution_mode,
             pre_chat=WebsitePreChatConfig(
-                **pre_chat_data
+                **pre_chat
             ),
         )
 
@@ -212,16 +160,15 @@ async def create_widget_session(
             )
         )
 
-        execution_mode = (
+        runtime_context = {}
+
+        if (
             website_agent_service
             .execution_mode(channel)
-        )
-
-        runtime_context: dict = {}
-
-        if execution_mode == "AGENT":
-            runtime_context = (
-                await website_agent_service
+            == "AGENT"
+        ):
+            runtime_context = await (
+                website_agent_service
                 .start_session(
                     db=db,
                     channel=channel,
@@ -249,14 +196,12 @@ async def create_widget_session(
 
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
 
 
-@router.post(
-    "/chat/stream",
-)
+@router.post("/chat/stream")
 async def widget_chat_stream(
     payload: WebsiteChatRequest,
     authorization: str | None = Header(
@@ -273,15 +218,14 @@ async def widget_chat_stream(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=(
-                "Widget authorization token is required."
+                "Widget authorization token "
+                "is required."
             ),
         )
 
-    (
-        scheme,
-        separator,
-        token,
-    ) = authorization.partition(" ")
+    scheme, separator, token = (
+        authorization.partition(" ")
+    )
 
     if (
         separator != " "
@@ -297,7 +241,7 @@ async def widget_chat_stream(
         (
             channel,
             visitor_id,
-            token_thread_id,
+            thread_id,
             runtime_context,
         ) = session_service.verify_token(
             db=db,
@@ -305,29 +249,11 @@ async def widget_chat_stream(
             origin=origin,
         )
 
-        execution_mode = (
+        if (
             website_agent_service
             .execution_mode(channel)
-        )
-
-        if execution_mode == "AGENT":
-            result = (
-                await website_agent_service
-                .chat(
-                    db=db,
-                    channel=channel,
-                    visitor_id=visitor_id,
-                    thread_id=token_thread_id,
-                    runtime_context=runtime_context,
-                    query=payload.message,
-                )
-            )
-
-            generator = _agent_result_stream(
-                result
-            )
-
-        else:
+            == "KNOWLEDGE"
+        ):
             generator = chat_service.chat_stream(
                 db=db,
                 tenant_id=channel.tenant_id,
@@ -339,19 +265,86 @@ async def widget_chat_stream(
                 query=payload.message,
             )
 
+            return StreamingResponse(
+                generator,
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                    "X-NXTGEN-Visitor-ID":
+                        visitor_id,
+                },
+            )
+
+        async def agent_generator(
+        ) -> AsyncGenerator[str, None]:
+            try:
+                result = await (
+                    website_agent_service
+                    .chat(
+                        db=db,
+                        channel=channel,
+                        visitor_id=visitor_id,
+                        thread_id=thread_id,
+                        runtime_context=runtime_context,
+                        query=payload.message,
+                    )
+                )
+
+                answer = (
+                    result.get("answer")
+                    or ""
+                )
+
+                if answer:
+                    yield _sse_text(answer)
+
+                yield _sse_event(
+                    "metadata",
+                    {
+                        "session_id":
+                            str(thread_id),
+                        "thread_id":
+                            str(thread_id),
+                        "run_id":
+                            str(result["run_id"]),
+                        "sources":
+                            [],
+                    },
+                )
+
+            except Exception:
+                yield _sse_event(
+                    "error",
+                    {
+                        "code":
+                            "AGENT_EXECUTION_FAILED",
+                        "message":
+                            (
+                                "I couldn't complete "
+                                "that request right now. "
+                                "Please try again."
+                            ),
+                    },
+                )
+            finally:
+                yield _sse_event("done", {})
+
+        return StreamingResponse(
+            agent_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+                "X-NXTGEN-Visitor-ID":
+                    visitor_id,
+            },
+        )
+
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         ) from exc
-
-    return StreamingResponse(
-        generator,
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-            "X-NXTGEN-Visitor-ID": visitor_id,
-        },
-    )

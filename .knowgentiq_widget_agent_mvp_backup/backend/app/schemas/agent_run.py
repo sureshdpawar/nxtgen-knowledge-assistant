@@ -76,10 +76,7 @@ class AgentRunListResponse(BaseModel):
     id: UUID
     tenant_id: UUID
     agent_id: UUID
-    user_id: UUID | None
-    actor_type: str
-    actor_id: str
-    context_metadata: dict | None
+    user_id: UUID
     thread_id: UUID | None
     checkpoint_id: str | None
 

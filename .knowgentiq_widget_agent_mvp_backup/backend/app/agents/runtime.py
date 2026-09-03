@@ -220,8 +220,6 @@ class AgentRuntime:
         checkpointer,
         progress_callback:
             ProgressCallback | None,
-        auto_execute_tool_names:
-            set[str] | None = None,
     ):
         if tools:
             model_with_tools = (
@@ -245,16 +243,6 @@ class AgentRuntime:
                     tool
                 )
             for tool in tools
-        }
-
-        auto_execute_tool_names = {
-            str(name).strip()
-            for name
-            in (
-                auto_execute_tool_names
-                or set()
-            )
-            if str(name).strip()
         }
 
         async def call_model(
@@ -487,12 +475,6 @@ class AgentRuntime:
                         "READ",
                     )
                     == "WRITE"
-                    and tool_call.get(
-                        "name",
-                        "",
-                    )
-                    not in
-                    auto_execute_tool_names
                 )
             ]
 
@@ -1053,8 +1035,6 @@ class AgentRuntime:
         checkpointer,
         thread_id: str,
         run_id: str,
-        auto_execute_tool_names:
-            set[str] | None = None,
         progress_callback:
             ProgressCallback | None = None,
     ) -> dict:
@@ -1070,8 +1050,6 @@ class AgentRuntime:
                 checkpointer,
             progress_callback=
                 progress_callback,
-            auto_execute_tool_names=
-                auto_execute_tool_names,
         )
 
         config = {
