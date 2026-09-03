@@ -1,3 +1,5 @@
+import json
+
 from uuid import UUID
 
 from fastapi import (
@@ -7,21 +9,19 @@ from fastapi import (
     HTTPException,
     status,
 )
-from fastapi.responses import (
-    StreamingResponse,
-)
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.schemas.website_channel import (
     WebsiteChatRequest,
+    WebsitePreChatConfig,
     WebsiteSessionRequest,
     WebsiteSessionResponse,
     WebsiteWidgetConfigResponse,
 )
-from app.services.channel_chat_service import (
-    ChannelChatService,
-)
+from app.services.channel_chat_service import ChannelChatService
+from app.services.website_agent_service import WebsiteAgentService
 from app.services.website_channel_session_service import (
     WebsiteChannelSessionService,
 )
@@ -29,46 +29,100 @@ from app.services.website_channel_session_service import (
 
 router = APIRouter(
     prefix="/widget",
-    tags=[
-        "Website Widget"
-    ],
+    tags=["Website Widget"],
 )
 
+session_service = WebsiteChannelSessionService()
+chat_service = ChannelChatService()
+website_agent_service = WebsiteAgentService()
 
-session_service = (
-    WebsiteChannelSessionService()
-)
 
-chat_service = (
-    ChannelChatService()
-)
+def _sse_event(
+    event_type: str,
+    data: str,
+) -> str:
+    """
+    Build a valid Server-Sent Events block.
+
+    Each logical line is emitted as its own `data:` line so multiline
+    agent answers render correctly in the existing website widget.
+    """
+    normalized = str(data).replace("\r\n", "\n").replace("\r", "\n")
+
+    lines = normalized.split("\n")
+    if not lines:
+        lines = [""]
+
+    payload = [f"event: {event_type}"]
+    payload.extend(f"data: {line}" for line in lines)
+
+    return "\n".join(payload) + "\n\n"
+
+
+def _agent_result_stream(
+    result: dict,
+):
+    """
+    Adapt a completed AgentExecutionService result to the SSE contract
+    already consumed by frontend/public/nxtgen-widget.js.
+
+    The current website agent execution is non-token-streaming, but it uses
+    the same public SSE envelope as the Knowledge channel so the widget does
+    not need a second transport implementation.
+    """
+    answer = str(
+        result.get("answer")
+        or ""
+    )
+
+    if answer:
+        yield _sse_event(
+            "message",
+            answer,
+        )
+
+    metadata = {
+        "session_id": str(
+            result.get("thread_id")
+            or ""
+        ),
+        "run_id": str(
+            result.get("run_id")
+            or ""
+        ),
+        "checkpoint_id": (
+            str(result["checkpoint_id"])
+            if result.get("checkpoint_id")
+            else None
+        ),
+        "sources": [],
+    }
+
+    yield _sse_event(
+        "metadata",
+        json.dumps(
+            metadata,
+            separators=(",", ":"),
+        ),
+    )
 
 
 @router.get(
     "/config/{channel_id}",
-    response_model=(
-        WebsiteWidgetConfigResponse
-    ),
+    response_model=WebsiteWidgetConfigResponse,
 )
 def get_widget_config(
     channel_id: UUID,
-
     origin: str | None = Header(
         default=None,
         alias="Origin",
     ),
-
-    db: Session = Depends(
-        get_db
-    ),
+    db: Session = Depends(get_db),
 ):
     try:
-        channel = (
-            session_service
-            .get_channel(
-                db=db,
-                channel_id=channel_id,
-            )
+        channel = session_service.get_channel(
+            db=db,
+            channel_id=channel_id,
         )
 
         session_service.validate_origin(
@@ -81,161 +135,145 @@ def get_widget_config(
             or {}
         )
 
-        return (
-            WebsiteWidgetConfigResponse(
-                channel_id=(
-                    channel.id
-                ),
-                name=(
-                    channel.name
-                ),
-                widget_title=(
-                    configuration.get(
-                        "widget_title"
-                    )
-                    or channel.name
-                ),
-                welcome_message=(
-                    configuration.get(
-                        "welcome_message"
-                    )
-                    or (
-                        "Hi! How can I help?"
-                    )
-                ),
-                placeholder=(
-                    configuration.get(
-                        "placeholder"
-                    )
-                    or (
-                        "Ask a question..."
-                    )
-                ),
-                show_sources=bool(
-                    configuration.get(
-                        "show_sources",
-                        True,
-                    )
-                ),
+        execution_mode = (
+            website_agent_service
+            .execution_mode(channel)
+        )
+
+        if execution_mode == "AGENT":
+            pre_chat_data = (
+                website_agent_service
+                .public_pre_chat_config(channel)
             )
+        else:
+            pre_chat_data = {
+                "enabled": False,
+                "title": "Before we start",
+                "submit_label": "Start chat",
+                "fields": [],
+            }
+
+        return WebsiteWidgetConfigResponse(
+            channel_id=channel.id,
+            name=channel.name,
+            widget_title=(
+                configuration.get("widget_title")
+                or channel.name
+            ),
+            welcome_message=(
+                configuration.get("welcome_message")
+                or "Hi! How can I help?"
+            ),
+            placeholder=(
+                configuration.get("placeholder")
+                or "Ask a question..."
+            ),
+            show_sources=bool(
+                configuration.get(
+                    "show_sources",
+                    True,
+                )
+            ),
+            execution_mode=execution_mode,
+            pre_chat=WebsitePreChatConfig(
+                **pre_chat_data
+            ),
         )
 
     except ValueError as exc:
         raise HTTPException(
-            status_code=(
-                status.HTTP_403_FORBIDDEN
-            ),
-            detail=str(
-                exc
-            ),
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
         ) from exc
 
 
 @router.post(
     "/session",
-    response_model=(
-        WebsiteSessionResponse
-    ),
+    response_model=WebsiteSessionResponse,
 )
-def create_widget_session(
-    payload:
-        WebsiteSessionRequest,
-
+async def create_widget_session(
+    payload: WebsiteSessionRequest,
     origin: str | None = Header(
         default=None,
         alias="Origin",
     ),
-
-    db: Session = Depends(
-        get_db
-    ),
+    db: Session = Depends(get_db),
 ):
     try:
-        channel = (
-            session_service
-            .get_channel(
-                db=db,
-                channel_id=(
-                    payload.channel_id
-                ),
-            )
+        channel = session_service.get_channel(
+            db=db,
+            channel_id=payload.channel_id,
         )
 
         normalized_origin = (
-            session_service
-            .validate_origin(
+            session_service.validate_origin(
                 channel=channel,
                 origin=origin,
             )
         )
 
+        execution_mode = (
+            website_agent_service
+            .execution_mode(channel)
+        )
+
+        runtime_context: dict = {}
+
+        if execution_mode == "AGENT":
+            runtime_context = (
+                await website_agent_service
+                .start_session(
+                    db=db,
+                    channel=channel,
+                    visitor=payload.visitor,
+                )
+            )
+
         (
             token,
             expires_in,
             visitor_id,
-        ) = (
-            session_service
-            .create_token(
-                channel=channel,
-                origin=(
-                    normalized_origin
-                ),
-            )
+            thread_id,
+        ) = session_service.create_token(
+            channel=channel,
+            origin=normalized_origin,
+            runtime_context=runtime_context,
         )
 
-        return (
-            WebsiteSessionResponse(
-                token=token,
-                expires_in=(
-                    expires_in
-                ),
-                visitor_id=(
-                    visitor_id
-                ),
-            )
+        return WebsiteSessionResponse(
+            token=token,
+            expires_in=expires_in,
+            visitor_id=visitor_id,
+            thread_id=thread_id,
         )
 
     except ValueError as exc:
         raise HTTPException(
-            status_code=(
-                status.HTTP_403_FORBIDDEN
-            ),
-            detail=str(
-                exc
-            ),
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
         ) from exc
 
 
 @router.post(
     "/chat/stream",
 )
-def widget_chat_stream(
-    payload:
-        WebsiteChatRequest,
-
-    authorization:
-        str | None = Header(
-            default=None,
-            alias="Authorization",
-        ),
-
+async def widget_chat_stream(
+    payload: WebsiteChatRequest,
+    authorization: str | None = Header(
+        default=None,
+        alias="Authorization",
+    ),
     origin: str | None = Header(
         default=None,
         alias="Origin",
     ),
-
-    db: Session = Depends(
-        get_db
-    ),
+    db: Session = Depends(get_db),
 ):
     if not authorization:
         raise HTTPException(
-            status_code=(
-                status.HTTP_401_UNAUTHORIZED
-            ),
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail=(
-                "Widget authorization "
-                "token is required."
+                "Widget authorization token is required."
             ),
         )
 
@@ -243,90 +281,77 @@ def widget_chat_stream(
         scheme,
         separator,
         token,
-    ) = authorization.partition(
-        " "
-    )
+    ) = authorization.partition(" ")
 
     if (
         separator != " "
-        or scheme.lower()
-        != "bearer"
+        or scheme.lower() != "bearer"
         or not token.strip()
     ):
         raise HTTPException(
-            status_code=(
-                status.HTTP_401_UNAUTHORIZED
-            ),
-            detail=(
-                "Invalid widget "
-                "authorization."
-            ),
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid widget authorization.",
         )
 
     try:
         (
             channel,
             visitor_id,
-        ) = (
-            session_service
-            .verify_token(
-                db=db,
-                token=(
-                    token.strip()
-                ),
-                origin=origin,
-            )
+            token_thread_id,
+            runtime_context,
+        ) = session_service.verify_token(
+            db=db,
+            token=token.strip(),
+            origin=origin,
         )
 
-        generator = (
-            chat_service
-            .chat_stream(
-                db=db,
-                tenant_id=(
-                    channel.tenant_id
-                ),
-                chat_channel_id=(
-                    channel.id
-                ),
-                knowledge_base_id=(
-                    channel
-                    .knowledge_base_id
-                ),
-                session_id=(
-                    payload.session_id
-                ),
-                query=(
-                    payload.message
-                ),
-            )
+        execution_mode = (
+            website_agent_service
+            .execution_mode(channel)
         )
+
+        if execution_mode == "AGENT":
+            result = (
+                await website_agent_service
+                .chat(
+                    db=db,
+                    channel=channel,
+                    visitor_id=visitor_id,
+                    thread_id=token_thread_id,
+                    runtime_context=runtime_context,
+                    query=payload.message,
+                )
+            )
+
+            generator = _agent_result_stream(
+                result
+            )
+
+        else:
+            generator = chat_service.chat_stream(
+                db=db,
+                tenant_id=channel.tenant_id,
+                chat_channel_id=channel.id,
+                knowledge_base_id=(
+                    channel.knowledge_base_id
+                ),
+                session_id=payload.session_id,
+                query=payload.message,
+            )
 
     except ValueError as exc:
         raise HTTPException(
-            status_code=(
-                status.HTTP_403_FORBIDDEN
-            ),
-            detail=str(
-                exc
-            ),
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
         ) from exc
 
     return StreamingResponse(
         generator,
-        media_type=(
-            "text/event-stream"
-        ),
+        media_type="text/event-stream",
         headers={
-            "Cache-Control":
-                "no-cache",
-
-            "Connection":
-                "keep-alive",
-
-            "X-Accel-Buffering":
-                "no",
-
-            "X-NXTGEN-Visitor-ID":
-                visitor_id,
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "X-NXTGEN-Visitor-ID": visitor_id,
         },
     )
