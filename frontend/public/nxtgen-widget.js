@@ -1,7 +1,8 @@
 (function () {
   "use strict";
 
-  const script = document.currentScript;
+  const script =
+    document.currentScript;
 
   if (!script) {
     return;
@@ -11,60 +12,70 @@
     script.dataset.channelId;
 
   const apiBase =
-    script.dataset.apiBase ||
-    "http://localhost:8000";
+    script.dataset.apiBase
+    || "http://localhost:8000";
 
   if (!channelId) {
     return;
   }
 
-  /*
-   * Storage is scoped by ChatChannel.
-   *
-   * sessionStorage gives us:
-   *
-   * - navigation in same tab -> retained
-   * - refresh -> retained
-   * - new tab -> new conversation
-   * - closing tab -> conversation removed
-   */
-  const storagePrefix =
+  const prefix =
     `nxtgen-widget:${channelId}`;
 
   const sessionKey =
-    `${storagePrefix}:session`;
+    `${prefix}:session`;
 
   const messagesKey =
-    `${storagePrefix}:messages`;
+    `${prefix}:messages`;
+
+  const tokenKey =
+    `${prefix}:token`;
+
+  const expiryKey =
+    `${prefix}:token-expiry`;
 
   let widgetConfig = null;
-  let visitorToken = null;
-  let tokenExpiresAt = 0;
+
+  let visitorToken =
+    sessionStorage.getItem(
+      tokenKey,
+    );
+
+  let tokenExpiresAt =
+    Number(
+      sessionStorage.getItem(
+        expiryKey,
+      )
+      || 0,
+    );
 
   let sessionId =
     sessionStorage.getItem(
-      sessionKey
+      sessionKey,
     );
 
   let isOpen = false;
   let isSending = false;
   let isInitializing = false;
+  let isStartingSession = false;
+
 
   const root =
     document.createElement(
-      "div"
+      "div",
     );
 
   root.id =
     "nxtgen-chat-widget";
 
   document.body.appendChild(
-    root
+    root,
   );
+
 
   const style =
     document.createElement(
-      "style"
+      "style",
     );
 
   style.textContent = `
@@ -73,7 +84,6 @@
       right: 24px;
       bottom: 24px;
       z-index: 2147483000;
-
       font-family:
         Inter,
         -apple-system,
@@ -86,102 +96,37 @@
       box-sizing: border-box;
     }
 
-
-    /*
-     * ======================================================
-     * Launcher
-     * ======================================================
-     */
-
     .nxtgen-launcher {
       min-width: 108px;
       height: 48px;
-
       border: none;
       border-radius: 999px;
-
       background: #475569;
-      color: #ffffff;
-
-      cursor: pointer;
-
+      color: #fff;
       padding: 0 18px;
-
-      display: flex;
-      align-items: center;
-      justify-content: center;
-
-      gap: 8px;
-
+      cursor: pointer;
       font-size: 14px;
       font-weight: 600;
-
-      letter-spacing: 0.01em;
-
       box-shadow:
         0 10px 28px
-        rgba(15, 23, 42, 0.18);
-
-      transition:
-        background 0.2s ease,
-        transform 0.2s ease,
-        box-shadow 0.2s ease;
+        rgba(15, 23, 42, .18);
     }
-
-    .nxtgen-launcher:hover {
-      background: #334155;
-
-      transform:
-        translateY(-1px);
-
-      box-shadow:
-        0 14px 32px
-        rgba(15, 23, 42, 0.22);
-    }
-
-    .nxtgen-launcher:active {
-      transform:
-        translateY(0);
-    }
-
-    .nxtgen-launcher-icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-
-      font-size: 16px;
-      line-height: 1;
-    }
-
-
-    /*
-     * ======================================================
-     * Main Panel
-     * ======================================================
-     */
 
     .nxtgen-panel {
       position: absolute;
-
       right: 0;
       bottom: 62px;
-
       width: 380px;
-      height: 560px;
-
-      background: #ffffff;
-
+      height: 580px;
+      background: #fff;
       border:
-        1px solid #e2e8f0;
-
+        1px solid
+        #e2e8f0;
       border-radius: 18px;
-
       overflow: hidden;
-
       box-shadow:
         0 20px 60px
-        rgba(15, 23, 42, 0.18);
-
+        rgba(15, 23, 42, .18);
       display: none;
       flex-direction: column;
     }
@@ -190,810 +135,683 @@
       display: flex;
     }
 
-
-    /*
-     * ======================================================
-     * Header
-     * ======================================================
-     */
-
     .nxtgen-header {
       padding:
         15px
         18px;
-
-      background: #475569;
-      color: #ffffff;
-
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-
-      gap: 12px;
-
-      flex-shrink: 0;
+      background:
+        #475569;
+      color:
+        #fff;
+      display:
+        flex;
+      align-items:
+        center;
+      justify-content:
+        space-between;
+      gap:
+        12px;
     }
 
     .nxtgen-header-left {
-      display: flex;
-      align-items: center;
-
-      gap: 10px;
-
-      min-width: 0;
+      display:
+        flex;
+      align-items:
+        center;
+      gap:
+        10px;
+      min-width:
+        0;
     }
 
     .nxtgen-header-icon {
-      width: 32px;
-      height: 32px;
-
-      border-radius: 10px;
-
+      width:
+        32px;
+      height:
+        32px;
+      border-radius:
+        10px;
       background:
         rgba(
           255,
           255,
           255,
-          0.12
+          .12
         );
-
-      display: flex;
-      align-items: center;
-      justify-content: center;
-
-      flex-shrink: 0;
-
-      font-size: 15px;
-    }
-
-    .nxtgen-header-text {
-      min-width: 0;
+      display:
+        grid;
+      place-items:
+        center;
     }
 
     .nxtgen-header-title {
-      font-size: 15px;
-      font-weight: 600;
-
-      line-height: 1.25;
-
-      min-width: 0;
-
-      overflow-wrap: anywhere;
-      word-break: break-word;
+      font-size:
+        15px;
+      font-weight:
+        600;
     }
 
     .nxtgen-header-status {
-      margin-top: 2px;
-
-      font-size: 11px;
-
-      color: #e2e8f0;
+      margin-top:
+        2px;
+      font-size:
+        11px;
+      color:
+        #e2e8f0;
     }
 
     .nxtgen-close {
-      width: 32px;
-      height: 32px;
-
-      border: none;
-      border-radius: 8px;
-
-      background: transparent;
-      color: #ffffff;
-
-      cursor: pointer;
-
-      font-size: 21px;
-      line-height: 1;
-
-      display: flex;
-      align-items: center;
-      justify-content: center;
-
-      flex-shrink: 0;
-
-      transition:
-        background 0.2s ease;
-    }
-
-    .nxtgen-close:hover {
+      width:
+        32px;
+      height:
+        32px;
+      border:
+        none;
       background:
-        rgba(
-          255,
-          255,
-          255,
-          0.12
-        );
+        transparent;
+      color:
+        #fff;
+      font-size:
+        21px;
+      cursor:
+        pointer;
     }
 
+    .nxtgen-prechat {
+      flex:
+        1;
+      min-height:
+        0;
+      overflow:
+        auto;
+      padding:
+        22px
+        18px;
+      background:
+        #f8fafc;
+      display:
+        none;
+    }
 
-    /*
-     * ======================================================
-     * Messages
-     * ======================================================
-     */
+    .nxtgen-prechat.visible {
+      display:
+        block;
+    }
+
+    .nxtgen-prechat-card {
+      border:
+        1px solid
+        #e2e8f0;
+      background:
+        #fff;
+      border-radius:
+        16px;
+      padding:
+        18px;
+    }
+
+    .nxtgen-prechat-title {
+      margin:
+        0;
+      font-size:
+        18px;
+      color:
+        #0f172a;
+    }
+
+    .nxtgen-prechat-copy {
+      margin:
+        6px
+        0
+        16px;
+      font-size:
+        13px;
+      color:
+        #64748b;
+      line-height:
+        1.5;
+    }
+
+    .nxtgen-field {
+      margin-top:
+        12px;
+    }
+
+    .nxtgen-field label {
+      display:
+        block;
+      margin-bottom:
+        6px;
+      font-size:
+        12px;
+      font-weight:
+        600;
+      color:
+        #334155;
+    }
+
+    .nxtgen-field input {
+      width:
+        100%;
+      height:
+        42px;
+      border:
+        1px solid
+        #cbd5e1;
+      border-radius:
+        10px;
+      padding:
+        0
+        11px;
+      font:
+        inherit;
+      font-size:
+        14px;
+    }
+
+    .nxtgen-prechat-error {
+      display:
+        none;
+      margin-top:
+        12px;
+      border:
+        1px solid
+        #fecaca;
+      background:
+        #fef2f2;
+      color:
+        #991b1b;
+      border-radius:
+        10px;
+      padding:
+        9px
+        10px;
+      font-size:
+        12px;
+    }
+
+    .nxtgen-prechat-error.visible {
+      display:
+        block;
+    }
+
+    .nxtgen-prechat-submit {
+      width:
+        100%;
+      height:
+        42px;
+      margin-top:
+        16px;
+      border:
+        none;
+      border-radius:
+        10px;
+      background:
+        #475569;
+      color:
+        #fff;
+      cursor:
+        pointer;
+      font-weight:
+        600;
+    }
+
+    .nxtgen-prechat-submit:disabled {
+      opacity:
+        .5;
+    }
+
+    .nxtgen-chat {
+      flex:
+        1;
+      min-height:
+        0;
+      display:
+        none;
+      flex-direction:
+        column;
+    }
+
+    .nxtgen-chat.visible {
+      display:
+        flex;
+    }
 
     .nxtgen-messages {
-      flex: 1;
-
-      min-width: 0;
-      min-height: 0;
-
-      overflow-y: auto;
-      overflow-x: hidden;
-
+      flex:
+        1;
+      min-height:
+        0;
+      overflow:
+        auto;
       padding:
         18px
         16px;
-
-      background: #f8fafc;
-
-      scroll-behavior: smooth;
+      background:
+        #f8fafc;
     }
 
     .nxtgen-message {
-      max-width: 84%;
-      min-width: 0;
-
+      max-width:
+        84%;
       padding:
         10px
         12px;
-
-      margin-bottom: 12px;
-
-      border-radius: 14px;
-
-      white-space: pre-wrap;
-
-      overflow-wrap: anywhere;
-      word-break: break-word;
-
-      line-height: 1.5;
-
-      font-size: 14px;
+      margin-bottom:
+        12px;
+      border-radius:
+        14px;
+      white-space:
+        pre-wrap;
+      overflow-wrap:
+        anywhere;
+      line-height:
+        1.5;
+      font-size:
+        14px;
     }
 
     .nxtgen-message.user {
-      margin-left: auto;
-
-      background: #64748b;
-      color: #ffffff;
-
-      border-bottom-right-radius: 4px;
-
-      box-shadow:
-        0 2px 6px
-        rgba(15, 23, 42, 0.08);
+      margin-left:
+        auto;
+      background:
+        #64748b;
+      color:
+        #fff;
+      border-bottom-right-radius:
+        4px;
     }
 
     .nxtgen-message.assistant {
-      margin-right: auto;
-
-      background: #ffffff;
-      color: #0f172a;
-
+      margin-right:
+        auto;
+      background:
+        #fff;
+      color:
+        #0f172a;
       border:
-        1px solid #e2e8f0;
-
-      border-bottom-left-radius: 4px;
-
-      box-shadow:
-        0 1px 3px
-        rgba(15, 23, 42, 0.04);
+        1px solid
+        #e2e8f0;
+      border-bottom-left-radius:
+        4px;
     }
 
     .nxtgen-message.error {
-      margin-right: auto;
-
-      background: #fef2f2;
-      color: #991b1b;
-
+      margin-right:
+        auto;
+      background:
+        #fef2f2;
+      color:
+        #991b1b;
       border:
-        1px solid #fecaca;
-
-      border-bottom-left-radius: 4px;
+        1px solid
+        #fecaca;
     }
-
-
-    /*
-     * ======================================================
-     * Sources
-     * ======================================================
-     */
 
     .nxtgen-sources {
-      width: 100%;
-      max-width: 100%;
-      min-width: 0;
-
-      margin-top: 10px;
-      padding-top: 10px;
-
+      margin-top:
+        10px;
+      padding-top:
+        10px;
       border-top:
-        1px solid #e2e8f0;
-
-      font-size: 12px;
-      line-height: 1.4;
-
-      color: #64748b;
-
-      overflow: hidden;
+        1px solid
+        #e2e8f0;
+      font-size:
+        12px;
+      color:
+        #64748b;
     }
-
-    .nxtgen-sources-title {
-      font-weight: 600;
-
-      color: #475569;
-
-      margin-bottom: 4px;
-    }
-
-    .nxtgen-source {
-      width: 100%;
-      max-width: 100%;
-      min-width: 0;
-
-      margin-top: 6px;
-
-      overflow-wrap: anywhere;
-      word-break: break-word;
-
-      white-space: normal;
-    }
-
-
-    /*
-     * ======================================================
-     * Composer
-     * ======================================================
-     */
 
     .nxtgen-composer {
-      flex-shrink: 0;
-
-      background: #ffffff;
-
       border-top:
-        1px solid #e2e8f0;
+        1px solid
+        #e2e8f0;
+      background:
+        #fff;
     }
 
     .nxtgen-input-row {
-      display: flex;
-
-      gap: 8px;
-
+      display:
+        flex;
+      gap:
+        8px;
       padding:
         12px
         12px
         6px;
-
-      background: #ffffff;
-
-      align-items: flex-end;
+      align-items:
+        flex-end;
     }
 
     .nxtgen-input {
-      flex: 1;
-
-      min-width: 0;
-
-      resize: none;
-
-      min-height: 42px;
-      max-height: 100px;
-
+      flex:
+        1;
+      min-height:
+        42px;
+      max-height:
+        100px;
+      resize:
+        none;
       border:
-        1px solid #cbd5e1;
-
-      border-radius: 12px;
-
+        1px solid
+        #cbd5e1;
+      border-radius:
+        12px;
       padding:
         10px
         12px;
-
-      font: inherit;
-      font-size: 14px;
-
-      line-height: 1.4;
-
-      color: #0f172a;
-
-      background: #ffffff;
-
-      outline: none;
-
-      transition:
-        border-color 0.2s ease,
-        box-shadow 0.2s ease;
-    }
-
-    .nxtgen-input::placeholder {
-      color: #94a3b8;
-    }
-
-    .nxtgen-input:focus {
-      border-color: #64748b;
-
-      box-shadow:
-        0 0 0 2px
-        rgba(
-          100,
-          116,
-          139,
-          0.12
-        );
-    }
-
-    .nxtgen-input:disabled {
-      background: #f8fafc;
-
-      cursor: not-allowed;
+      font:
+        inherit;
+      font-size:
+        14px;
     }
 
     .nxtgen-send {
-      min-width: 64px;
-      height: 42px;
-
-      border: none;
-      border-radius: 10px;
-
-      background: #475569;
-      color: #ffffff;
-
-      padding:
-        0
-        14px;
-
-      cursor: pointer;
-
-      font-weight: 600;
-      font-size: 13px;
-
-      flex-shrink: 0;
-
-      transition:
-        background 0.2s ease;
-    }
-
-    .nxtgen-send:hover:not(:disabled) {
-      background: #334155;
+      min-width:
+        64px;
+      height:
+        42px;
+      border:
+        none;
+      border-radius:
+        10px;
+      background:
+        #475569;
+      color:
+        #fff;
+      cursor:
+        pointer;
+      font-weight:
+        600;
     }
 
     .nxtgen-send:disabled {
-      opacity: 0.45;
-
-      cursor: default;
+      opacity:
+        .45;
     }
 
-
-    /*
-     * ======================================================
-     * Knowgentiq Product Footer
-     * ======================================================
-     */
-
     .nxtgen-powered-by {
-      display: flex;
-
-      align-items: center;
-      justify-content: center;
-
-      gap: 7px;
-
-      min-height: 31px;
-
+      display:
+        flex;
+      align-items:
+        center;
+      justify-content:
+        center;
+      gap:
+        5px;
+      min-height:
+        31px;
       padding:
         4px
         10px
         8px;
-
-      background: #ffffff;
-
-      color: #94a3b8;
-
-      font-size: 9px;
-      font-weight: 500;
-
-      letter-spacing: 0.01em;
-
-      white-space: nowrap;
+      color:
+        #94a3b8;
+      font-size:
+        9px;
     }
 
-    .nxtgen-footer-brand {
-      display: inline-flex;
-
-      align-items: center;
-
-      gap: 5px;
-
-      color: #334155;
-
-      font-size: 10px;
-      font-weight: 700;
-
-      letter-spacing: -0.01em;
-
-      line-height: 1;
+    .nxtgen-powered-by strong {
+      color:
+        #64748b;
     }
 
-    .nxtgen-footer-brand-mark {
-      display: block;
-
-      width: 19px;
-      height: 19px;
-
-      flex:
-        0
-        0
-        19px;
-    }
-
-    .nxtgen-footer-divider {
-      display: block;
-
-      width: 1px;
-      height: 14px;
-
-      flex:
-        0
-        0
-        1px;
-
-      background: #e2e8f0;
-    }
-
-    .nxtgen-footer-product {
-      display: inline-flex;
-
-      align-items: baseline;
-
-      gap: 3px;
-
-      color: #94a3b8;
-
-      font-size: 9px;
-      font-weight: 500;
-    }
-
-    .nxtgen-footer-product strong {
-      color: #64748b;
-
-      font-weight: 600;
-    }
-
-
-    /*
-     * ======================================================
-     * Mobile
-     * ======================================================
-     */
-
-    @media (max-width: 480px) {
-
+    @media (
+      max-width: 480px
+    ) {
       #nxtgen-chat-widget {
-        right: 12px;
-        bottom: 12px;
-      }
-
-      .nxtgen-launcher {
-        min-width: 100px;
-        height: 46px;
-
-        padding:
-          0
-          15px;
+        right:
+          12px;
+        bottom:
+          12px;
       }
 
       .nxtgen-panel {
-        position: fixed;
-
-        left: 12px;
-        right: 12px;
-
-        top: 12px;
-        bottom: 70px;
-
-        width: auto;
-        height: auto;
-      }
-
-      .nxtgen-powered-by {
-        gap: 5px;
-
-        padding-left: 6px;
-        padding-right: 6px;
-
-        font-size: 8px;
-      }
-
-      .nxtgen-footer-brand {
-        gap: 4px;
-
-        font-size: 9px;
-      }
-
-      .nxtgen-footer-brand-mark {
-        width: 17px;
-        height: 17px;
-
-        flex-basis: 17px;
-      }
-
-      .nxtgen-footer-product {
-        gap: 2px;
-
-        font-size: 8px;
-      }
-    }
-
-
-    @media (max-width: 360px) {
-
-      .nxtgen-footer-brand {
-        font-size: 8px;
-      }
-
-      .nxtgen-footer-product {
-        font-size: 7px;
-      }
-
-      .nxtgen-footer-brand-mark {
-        width: 15px;
-        height: 15px;
-
-        flex-basis: 15px;
+        position:
+          fixed;
+        left:
+          12px;
+        right:
+          12px;
+        top:
+          12px;
+        bottom:
+          70px;
+        width:
+          auto;
+        height:
+          auto;
       }
     }
   `;
 
-
   document.head.appendChild(
-    style
+    style,
   );
 
 
-  /*
-   * ========================================================
-   * Widget HTML
-   * ========================================================
-   */
-
   root.innerHTML = `
     <div class="nxtgen-panel">
-
       <div class="nxtgen-header">
-
         <div class="nxtgen-header-left">
-
-          <div class="nxtgen-header-icon">
-            ✦
+          <div class="nxtgen-header-icon">✦</div>
+          <div>
+            <div class="nxtgen-header-title">Assistant</div>
+            <div class="nxtgen-header-status">AI-powered assistant</div>
           </div>
-
-          <div class="nxtgen-header-text">
-
-            <div class="nxtgen-header-title">
-              Assistant
-            </div>
-
-            <div class="nxtgen-header-status">
-              AI-powered assistant
-            </div>
-
-          </div>
-
         </div>
-
-
         <button
           type="button"
           class="nxtgen-close"
-          aria-label="Close chat"
-        >
-          ×
-        </button>
-
+        >×</button>
       </div>
 
+      <div class="nxtgen-prechat">
+        <div class="nxtgen-prechat-card">
+          <h3 class="nxtgen-prechat-title">Before we start</h3>
 
-      <div class="nxtgen-messages">
-      </div>
+          <p class="nxtgen-prechat-copy">
+            Share your contact details to start the conversation.
+          </p>
 
+          <form class="nxtgen-prechat-form">
+            <div class="nxtgen-prechat-fields"></div>
+            <div class="nxtgen-prechat-error"></div>
 
-      <div class="nxtgen-composer">
-
-        <div class="nxtgen-input-row">
-
-          <textarea
-            class="nxtgen-input"
-            rows="1"
-            placeholder="Ask a question..."
-          ></textarea>
-
-          <button
-            type="button"
-            class="nxtgen-send"
-          >
-            Send
-          </button>
-
-        </div>
-
-
-        <!--
-          ====================================================
-          Knowgentiq Product Branding
-
-          Logo is INLINE SVG.
-
-          No external image request.
-          No data-logo-url required.
-          No dependency on client website assets.
-          ====================================================
-        -->
-
-        <div
-          class="nxtgen-powered-by"
-          aria-label="Knowgentiq, a product of NXTGEN Innovate Technologies"
-        >
-
-          <span class="nxtgen-footer-brand">
-
-            <svg
-              class="nxtgen-footer-brand-mark"
-              viewBox="0 0 48 48"
-              role="img"
-              aria-label="Knowgentiq"
+            <button
+              type="submit"
+              class="nxtgen-prechat-submit"
             >
-
-              <defs>
-
-                <linearGradient
-                  id="nxtgen-footer-logo-gradient"
-                  x1="5"
-                  y1="5"
-                  x2="43"
-                  y2="43"
-                  gradientUnits="userSpaceOnUse"
-                >
-
-                  <stop
-                    offset="0"
-                    stop-color="#22d3ee"
-                  />
-
-                  <stop
-                    offset="0.52"
-                    stop-color="#3b82f6"
-                  />
-
-                  <stop
-                    offset="1"
-                    stop-color="#7c3aed"
-                  />
-
-                </linearGradient>
-
-              </defs>
-
-
-              <rect
-                x="3"
-                y="3"
-                width="42"
-                height="42"
-                rx="12"
-                fill="url(#nxtgen-footer-logo-gradient)"
-              />
-
-
-              <path
-                d="
-                  M16 12
-                  v24
-
-                  M17 25
-                  l14-13
-
-                  M19 23
-                  l13 13
-                "
-                fill="none"
-                stroke="#ffffff"
-                stroke-width="5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-
-            </svg>
-
-
-            <span>
-              Knowgentiq
-            </span>
-
-          </span>
-
-
-          <span
-            class="nxtgen-footer-divider"
-            aria-hidden="true"
-          ></span>
-
-
-          <span class="nxtgen-footer-product">
-
-            <span>
-              A Product Of
-            </span>
-
-            <strong>
-              NXTGEN Innovate Technologies
-            </strong>
-
-          </span>
-
+              Start chat
+            </button>
+          </form>
         </div>
-
       </div>
 
+      <div class="nxtgen-chat">
+        <div class="nxtgen-messages"></div>
+
+        <div class="nxtgen-composer">
+          <div class="nxtgen-input-row">
+            <textarea
+              class="nxtgen-input"
+              rows="1"
+              placeholder="Ask a question..."
+            ></textarea>
+
+            <button
+              type="button"
+              class="nxtgen-send"
+            >
+              Send
+            </button>
+          </div>
+
+          <div class="nxtgen-powered-by">
+            <strong>Knowgentiq</strong>
+            <span>•</span>
+            <span>
+              A Product Of NXTGEN Innovate Technologies
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
-
-
-    <!--
-      Launcher intentionally unchanged.
-    -->
 
     <button
       type="button"
       class="nxtgen-launcher"
-      aria-label="Ask AI"
     >
-
-      <span class="nxtgen-launcher-icon">
-        ✦
-      </span>
-
-      <span>
-        Ask AI
-      </span>
-
+      ✦ Ask AI
     </button>
   `;
 
 
   const panel =
     root.querySelector(
-      ".nxtgen-panel"
+      ".nxtgen-panel",
     );
 
   const launcher =
     root.querySelector(
-      ".nxtgen-launcher"
+      ".nxtgen-launcher",
     );
 
   const closeButton =
     root.querySelector(
-      ".nxtgen-close"
+      ".nxtgen-close",
     );
 
   const titleElement =
     root.querySelector(
-      ".nxtgen-header-title"
+      ".nxtgen-header-title",
+    );
+
+  const preChatElement =
+    root.querySelector(
+      ".nxtgen-prechat",
+    );
+
+  const preChatForm =
+    root.querySelector(
+      ".nxtgen-prechat-form",
+    );
+
+  const preChatFields =
+    root.querySelector(
+      ".nxtgen-prechat-fields",
+    );
+
+  const preChatTitle =
+    root.querySelector(
+      ".nxtgen-prechat-title",
+    );
+
+  const preChatError =
+    root.querySelector(
+      ".nxtgen-prechat-error",
+    );
+
+  const preChatSubmit =
+    root.querySelector(
+      ".nxtgen-prechat-submit",
+    );
+
+  const chatElement =
+    root.querySelector(
+      ".nxtgen-chat",
     );
 
   const messagesElement =
     root.querySelector(
-      ".nxtgen-messages"
+      ".nxtgen-messages",
     );
 
   const inputElement =
     root.querySelector(
-      ".nxtgen-input"
+      ".nxtgen-input",
     );
 
   const sendButton =
     root.querySelector(
-      ".nxtgen-send"
+      ".nxtgen-send",
     );
+
+
+  function tokenIsValid() {
+    return Boolean(
+      visitorToken
+      &&
+      Date.now()
+      <
+      tokenExpiresAt
+      - 30000,
+    );
+  }
+
+
+  function persistToken(
+    token,
+    expiresIn,
+  ) {
+    visitorToken =
+      token;
+
+    tokenExpiresAt =
+      Date.now()
+      + (
+        expiresIn
+        * 1000
+      );
+
+    sessionStorage.setItem(
+      tokenKey,
+      visitorToken,
+    );
+
+    sessionStorage.setItem(
+      expiryKey,
+      String(
+        tokenExpiresAt,
+      ),
+    );
+  }
+
+
+  function showChat() {
+    preChatElement
+      .classList
+      .remove(
+        "visible",
+      );
+
+    chatElement
+      .classList
+      .add(
+        "visible",
+      );
+
+    setTimeout(
+      () =>
+        inputElement.focus(),
+      0,
+    );
+  }
+
+
+  function showPreChat() {
+    chatElement
+      .classList
+      .remove(
+        "visible",
+      );
+
+    preChatElement
+      .classList
+      .add(
+        "visible",
+      );
+  }
 
 
   function scrollToBottom() {
@@ -1002,35 +820,23 @@
   }
 
 
-  /*
-   * Persist rendered conversation for
-   * the current browser tab.
-   */
   function persistMessages() {
     try {
-
       sessionStorage.setItem(
         messagesKey,
-        messagesElement.innerHTML
+        messagesElement.innerHTML,
       );
-
     } catch {
-
-      /*
-       * Chat should continue normally
-       * even if browser storage is blocked.
-       */
-
+      // storage may be blocked
     }
   }
 
 
   function restoreMessages() {
     try {
-
       const stored =
         sessionStorage.getItem(
-          messagesKey
+          messagesKey,
         );
 
       if (!stored) {
@@ -1045,35 +851,32 @@
       return true;
 
     } catch {
-
       return false;
-
     }
   }
 
 
   function addMessage(
     role,
-    text
+    text,
   ) {
-
     const message =
       document.createElement(
-        "div"
+        "div",
       );
 
     message.className =
       `nxtgen-message ${role}`;
 
     message.textContent =
-      text || "";
+      text
+      || "";
 
     messagesElement.appendChild(
-      message
+      message,
     );
 
     persistMessages();
-
     scrollToBottom();
 
     return message;
@@ -1082,220 +885,243 @@
 
   function addSources(
     messageElement,
-    sources
+    sources,
   ) {
-
     if (
-      !widgetConfig ||
-      !widgetConfig.show_sources ||
-      !sources ||
+      !widgetConfig
+      ||
+      !widgetConfig.show_sources
+      ||
+      !Array.isArray(
+        sources,
+      )
+      ||
       !sources.length
     ) {
       return;
     }
 
-
-    /*
-     * Prevent duplicated source blocks
-     * if metadata is emitted more than once.
-     */
-
-    const existingSources =
-      messageElement.querySelector(
-        ".nxtgen-sources"
-      );
-
-    if (existingSources) {
-      existingSources.remove();
-    }
-
-
     const wrapper =
       document.createElement(
-        "div"
+        "div",
       );
 
     wrapper.className =
       "nxtgen-sources";
 
-
-    const title =
-      document.createElement(
-        "div"
-      );
-
-    title.className =
-      "nxtgen-sources-title";
-
-    title.textContent =
+    wrapper.textContent =
       "Sources";
-
-    wrapper.appendChild(
-      title
-    );
-
 
     const seen =
       new Set();
-
 
     for (
       const source
       of sources
     ) {
-
       const key =
-        source.document_id ||
-        source.document_name ||
+        source.document_id
+        ||
+        source.document_name
+        ||
         source.knowledge_source_name;
 
-
       if (
-        !key ||
-        seen.has(key)
+        !key
+        ||
+        seen.has(
+          key,
+        )
       ) {
         continue;
       }
 
-
       seen.add(
-        key
+        key,
       );
-
 
       const item =
         document.createElement(
-          "div"
+          "div",
         );
 
-      item.className =
-        "nxtgen-source";
-
-
-      const sourceName =
-        source.document_name ||
-        source.knowledge_source_name ||
-        "Source";
-
-
       item.textContent =
-        `• ${sourceName}`;
-
+        `• ${
+          source.document_name
+          ||
+          source.knowledge_source_name
+          ||
+          "Source"
+        }`;
 
       wrapper.appendChild(
-        item
+        item,
       );
     }
 
-
     messageElement.appendChild(
-      wrapper
+      wrapper,
     );
 
     persistMessages();
-
-    scrollToBottom();
   }
 
 
-  function clearMessages() {
-    messagesElement.innerHTML =
+  function setPreChatError(
+    message,
+  ) {
+    preChatError.textContent =
+      message
+      || "";
+
+    preChatError
+      .classList
+      .toggle(
+        "visible",
+        Boolean(
+          message,
+        ),
+      );
+  }
+
+
+  function renderPreChat() {
+    const preChat =
+      widgetConfig
+      ?.pre_chat;
+
+    preChatFields.innerHTML =
       "";
+
+    preChatTitle.textContent =
+      preChat?.title
+      || "Before we start";
+
+    preChatSubmit.textContent =
+      preChat?.submit_label
+      || "Start chat";
+
+    for (
+      const field
+      of (
+        preChat?.fields
+        || []
+      )
+    ) {
+      const wrapper =
+        document.createElement(
+          "div",
+        );
+
+      wrapper.className =
+        "nxtgen-field";
+
+      const label =
+        document.createElement(
+          "label",
+        );
+
+      label.textContent =
+        field.required
+          ? `${field.label} *`
+          : field.label;
+
+      const input =
+        document.createElement(
+          "input",
+        );
+
+      input.name =
+        field.name;
+
+      input.type =
+        field.input_type
+        || "text";
+
+      input.required =
+        Boolean(
+          field.required,
+        );
+
+      input.placeholder =
+        field.placeholder
+        || "";
+
+      wrapper.appendChild(
+        label,
+      );
+
+      wrapper.appendChild(
+        input,
+      );
+
+      preChatFields.appendChild(
+        wrapper,
+      );
+    }
   }
 
-
-  /*
-   * ========================================================
-   * Load Widget Configuration
-   * ========================================================
-   */
 
   async function loadConfig() {
-
     const response =
       await fetch(
         `${apiBase}/public/v1/widget/config/${channelId}`,
         {
           method:
             "GET",
-        }
+        },
       );
-
 
     if (!response.ok) {
-
       throw new Error(
-        "Unable to load widget configuration."
+        "Unable to load widget configuration.",
       );
-
     }
-
 
     widgetConfig =
       await response.json();
 
-
     titleElement.textContent =
       widgetConfig.widget_title;
-
 
     inputElement.placeholder =
       widgetConfig.placeholder;
 
-
-    /*
-     * Restore an existing tab conversation
-     * before showing the welcome message.
-     */
-
-    const restored =
-      restoreMessages();
-
-
     if (
-      !restored &&
+      !restoreMessages()
+      &&
       widgetConfig.welcome_message
     ) {
-
-      clearMessages();
-
-
       addMessage(
         "assistant",
-        widgetConfig.welcome_message
+        widgetConfig.welcome_message,
       );
-
     }
-  }
 
-
-  /*
-   * ========================================================
-   * Visitor Token
-   * ========================================================
-   */
-
-  function tokenIsValid() {
-
-    return (
-      visitorToken &&
-      Date.now()
-        <
-      tokenExpiresAt - 30000
-    );
-
-  }
-
-
-  async function ensureToken() {
+    const requiresPreChat =
+      widgetConfig.execution_mode
+      === "AGENT"
+      &&
+      widgetConfig.pre_chat
+        ?.enabled;
 
     if (
-      tokenIsValid()
+      requiresPreChat
+      &&
+      !tokenIsValid()
     ) {
-      return visitorToken;
+      renderPreChat();
+      showPreChat();
+
+    } else {
+      showChat();
     }
+  }
 
 
+  async function createSession(
+    visitor,
+  ) {
     const response =
       await fetch(
         `${apiBase}/public/v1/widget/session`,
@@ -1312,241 +1138,224 @@
             JSON.stringify({
               channel_id:
                 channelId,
+              visitor:
+                visitor
+                || {},
             }),
-        }
+        },
       );
-
 
     if (!response.ok) {
+      let message =
+        "Unable to start chat session.";
+
+      try {
+        const data =
+          await response.json();
+
+        message =
+          data.detail
+          || message;
+
+      } catch {
+        // use default
+      }
 
       throw new Error(
-        "Unable to start chat session."
+        message,
       );
-
     }
-
 
     const data =
       await response.json();
 
+    persistToken(
+      data.token,
+      data.expires_in,
+    );
 
-    visitorToken =
-      data.token;
+    if (
+      widgetConfig
+        ?.execution_mode
+      === "AGENT"
+      &&
+      data.thread_id
+    ) {
+      sessionId =
+        data.thread_id;
 
-
-    tokenExpiresAt =
-      Date.now()
-      +
-      (
-        data.expires_in
-        * 1000
+      sessionStorage.setItem(
+        sessionKey,
+        sessionId,
       );
+    }
 
+    return data;
+  }
+
+
+  async function ensureToken() {
+    if (
+      tokenIsValid()
+    ) {
+      return visitorToken;
+    }
+
+    const requiresPreChat =
+      widgetConfig
+        ?.execution_mode
+      === "AGENT"
+      &&
+      widgetConfig
+        ?.pre_chat
+        ?.enabled;
+
+    if (
+      requiresPreChat
+    ) {
+      showPreChat();
+
+      throw new Error(
+        "Please complete your contact details before starting the chat.",
+      );
+    }
+
+    await createSession(
+      {},
+    );
 
     return visitorToken;
   }
 
 
-  /*
-   * ========================================================
-   * SSE Parser
-   * ========================================================
-   */
-
   function parseEventBlock(
-    block
+    block,
   ) {
-
     let eventType =
       "message";
-
 
     const dataLines =
       [];
 
-
     for (
       const line
       of block.split(
-        "\n"
+        "\n",
       )
     ) {
-
       if (
         line.startsWith(
-          "event:"
+          "event:",
         )
       ) {
-
-        let value =
-          line.slice(
-            6
-          );
-
-
-        if (
-          value.startsWith(
-            " "
-          )
-        ) {
-
-          value =
-            value.slice(
-              1
-            );
-
-        }
-
-
         eventType =
-          value.trim();
+          line.slice(
+            6,
+          ).trim();
 
-
-        continue;
-      }
-
-
-      if (
+      } else if (
         line.startsWith(
-          "data:"
+          "data:",
         )
       ) {
-
         let value =
           line.slice(
-            5
+            5,
           );
-
-
-        /*
-         * SSE permits one optional protocol
-         * space after the colon.
-         *
-         * Remove only that space because
-         * additional whitespace may belong
-         * to an LLM token.
-         */
 
         if (
           value.startsWith(
-            " "
+            " ",
           )
         ) {
-
           value =
             value.slice(
-              1
+              1,
             );
-
         }
-
 
         dataLines.push(
-          value
+          value,
         );
       }
     }
 
-
     return {
       eventType,
-
       data:
         dataLines.join(
-          "\n"
+          "\n",
         ),
     };
   }
 
 
-  /*
-   * ========================================================
-   * Send Message
-   * ========================================================
-   */
-
   async function sendMessage() {
-
     const text =
       inputElement
         .value
         .trim();
 
-
     if (
-      !text ||
+      !text
+      ||
       isSending
     ) {
       return;
     }
 
-
-    if (!widgetConfig) {
-
-      const ready =
-        await ensureInitialized();
-
-
-      if (!ready) {
-        return;
-      }
-
+    if (
+      !widgetConfig
+      &&
+      !(
+        await ensureInitialized()
+      )
+    ) {
+      return;
     }
-
 
     isSending =
       true;
 
-
     sendButton.disabled =
       true;
-
 
     inputElement.disabled =
       true;
 
-
     addMessage(
       "user",
-      text
+      text,
     );
-
 
     inputElement.value =
       "";
 
-
     const assistantMessage =
       addMessage(
         "assistant",
-        ""
+        "",
       );
 
-
     try {
-
       const token =
         await ensureToken();
-
 
       const body = {
         message:
           text,
       };
 
-
-      /*
-       * Continue the same backend
-       * conversation within this tab.
-       */
-
-      if (sessionId) {
-
+      if (
+        sessionId
+        &&
+        widgetConfig
+          ?.execution_mode
+        === "KNOWLEDGE"
+      ) {
         body.session_id =
           sessionId;
-
       }
-
 
       const response =
         await fetch(
@@ -1565,73 +1374,54 @@
 
             body:
               JSON.stringify(
-                body
+                body,
               ),
-          }
+          },
         );
-
 
       if (!response.ok) {
-
-        const errorBody =
-          await response.text();
-
-
         throw new Error(
-          errorBody ||
-          "Chat request failed."
+          await response.text(),
         );
-
       }
-
 
       if (!response.body) {
-
         throw new Error(
-          "Streaming is not supported."
+          "Streaming is not supported.",
         );
-
       }
-
 
       const reader =
         response.body
           .getReader();
 
-
       const decoder =
         new TextDecoder();
-
 
       let buffer =
         "";
 
-
       let answer =
         "";
-
 
       let finished =
         false;
 
-
-      while (!finished) {
-
+      while (
+        !finished
+      ) {
         const {
           value,
           done,
         } =
           await reader.read();
 
-
         if (done) {
-
           buffer +=
             decoder.decode();
 
           break;
         }
-
 
         buffer +=
           decoder.decode(
@@ -1639,175 +1429,116 @@
             {
               stream:
                 true,
-            }
+            },
           );
 
-
         let separatorIndex;
-
 
         while (
           (
             separatorIndex =
               buffer.indexOf(
-                "\n\n"
+                "\n\n",
               )
           )
           !== -1
         ) {
-
           const block =
             buffer.slice(
               0,
-              separatorIndex
+              separatorIndex,
             );
-
 
           buffer =
             buffer.slice(
               separatorIndex
-              + 2
+              + 2,
             );
 
-
-          if (!block.trim()) {
+          if (
+            !block.trim()
+          ) {
             continue;
           }
 
-
           const event =
             parseEventBlock(
-              block
+              block,
             );
-
-
-          /*
-           * LLM text token.
-           */
 
           if (
             event.eventType
             === "message"
           ) {
-
             answer +=
               event.data;
-
 
             assistantMessage
               .textContent =
                 answer;
 
-
             persistMessages();
-
             scrollToBottom();
 
-            continue;
-          }
-
-
-          /*
-           * Conversation metadata and
-           * citations.
-           */
-
-          if (
+          } else if (
             event.eventType
             === "metadata"
           ) {
-
             try {
-
               const metadata =
                 JSON.parse(
-                  event.data
+                  event.data,
                 );
-
 
               if (
                 metadata.session_id
               ) {
-
                 sessionId =
                   metadata.session_id;
 
-
-                sessionStorage
-                  .setItem(
-                    sessionKey,
-                    sessionId
-                  );
-
+                sessionStorage.setItem(
+                  sessionKey,
+                  sessionId,
+                );
               }
-
 
               addSources(
                 assistantMessage,
-                metadata.sources
+                metadata.sources,
               );
 
             } catch {
-
-              /*
-               * Ignore malformed metadata.
-               * The answer can still render.
-               */
-
+              // answer still renders
             }
 
-
-            continue;
-          }
-
-
-          /*
-           * Backend application errors can
-           * be delivered inside the SSE
-           * stream while HTTP remains 200.
-           */
-
-          if (
+          } else if (
             event.eventType
             === "error"
           ) {
-
             let message =
               "Something went wrong.";
 
-
             try {
-
-              const data =
-                JSON.parse(
-                  event.data
-                );
-
-
               message =
-                data.message
+                JSON.parse(
+                  event.data,
+                ).message
                 || message;
 
             } catch {
-
               message =
                 event.data
                 || message;
-
             }
 
-
             throw new Error(
-              message
+              message,
             );
-          }
 
-
-          if (
+          } else if (
             event.eventType
             === "done"
           ) {
-
             finished =
               true;
 
@@ -1816,24 +1547,20 @@
         }
       }
 
-
       if (!answer) {
-
         assistantMessage
           .textContent =
             "No response received.";
 
-
         persistMessages();
-
       }
 
-    } catch (error) {
-
+    } catch (
+      error
+    ) {
       assistantMessage
         .className =
           "nxtgen-message error";
-
 
       assistantMessage
         .textContent =
@@ -1841,200 +1568,228 @@
             ? error.message
             : "Something went wrong.";
 
-
       persistMessages();
 
     } finally {
-
       isSending =
         false;
-
 
       sendButton.disabled =
         false;
 
-
       inputElement.disabled =
         false;
 
-
       inputElement.focus();
-
-
       scrollToBottom();
-
     }
   }
 
 
-  /*
-   * ========================================================
-   * Initialization
-   * ========================================================
-   */
-
   async function initialize() {
-
-    if (widgetConfig) {
+    if (
+      widgetConfig
+    ) {
       return true;
     }
 
-
-    if (isInitializing) {
+    if (
+      isInitializing
+    ) {
       return false;
     }
-
 
     isInitializing =
       true;
 
-
     try {
-
       await loadConfig();
 
       return true;
 
     } catch {
-
       return false;
 
     } finally {
-
       isInitializing =
         false;
-
     }
   }
 
 
   async function ensureInitialized() {
-
-    if (widgetConfig) {
+    if (
+      widgetConfig
+    ) {
       return true;
     }
 
-
-    const initialized =
-      await initialize();
-
-
-    if (initialized) {
+    if (
+      await initialize()
+    ) {
       return true;
     }
 
-
-    clearMessages();
-
-
-    titleElement.textContent =
-      "Assistant";
-
+    chatElement
+      .classList
+      .add(
+        "visible",
+      );
 
     addMessage(
       "error",
-      "Chat is temporarily unavailable."
+      "Chat is temporarily unavailable.",
     );
-
 
     return false;
   }
 
 
-  /*
-   * ========================================================
-   * Event Handlers
-   * ========================================================
-   */
+  preChatForm.addEventListener(
+    "submit",
+    async (
+      event,
+    ) => {
+      event.preventDefault();
+
+      if (
+        isStartingSession
+      ) {
+        return;
+      }
+
+      isStartingSession =
+        true;
+
+      preChatSubmit.disabled =
+        true;
+
+      setPreChatError(
+        null,
+      );
+
+      try {
+        const formData =
+          new FormData(
+            preChatForm,
+          );
+
+        const visitor =
+          {};
+
+        for (
+          const field
+          of (
+            widgetConfig
+              ?.pre_chat
+              ?.fields
+            || []
+          )
+        ) {
+          visitor[
+            field.name
+          ] =
+            String(
+              formData.get(
+                field.name,
+              )
+              || "",
+            ).trim();
+        }
+
+        await createSession(
+          visitor,
+        );
+
+        showChat();
+
+      } catch (
+        error
+      ) {
+        setPreChatError(
+          error instanceof Error
+            ? error.message
+            : "Unable to start chat.",
+        );
+
+      } finally {
+        isStartingSession =
+          false;
+
+        preChatSubmit.disabled =
+          false;
+      }
+    },
+  );
+
 
   launcher.addEventListener(
     "click",
-    async function () {
-
+    async () => {
       isOpen =
         !isOpen;
 
-
-      panel.classList.toggle(
-        "open",
-        isOpen
-      );
-
+      panel
+        .classList
+        .toggle(
+          "open",
+          isOpen,
+        );
 
       if (!isOpen) {
         return;
       }
 
-
-      const ready =
-        await ensureInitialized();
-
-
-      if (ready) {
-
+      if (
+        await ensureInitialized()
+      ) {
         scrollToBottom();
-
-        inputElement.focus();
-
       }
-    }
+    },
   );
 
 
   closeButton.addEventListener(
     "click",
-    function () {
-
+    () => {
       isOpen =
         false;
 
-
-      panel.classList.remove(
-        "open"
-      );
-
-    }
+      panel
+        .classList
+        .remove(
+          "open",
+        );
+    },
   );
 
 
   sendButton.addEventListener(
     "click",
-    sendMessage
+    sendMessage,
   );
 
 
   inputElement.addEventListener(
     "keydown",
-    function (event) {
-
+    (
+      event,
+    ) => {
       if (
         event.key
-        === "Enter" &&
+        === "Enter"
+        &&
         !event.shiftKey
       ) {
-
         event.preventDefault();
 
         sendMessage();
-
       }
-    }
+    },
   );
 
-
-  /*
-   * Silent warm-up.
-   *
-   * If the API is temporarily unavailable,
-   * opening the widget will retry.
-   */
 
   initialize().catch(
-    function () {
-
-      // Intentionally silent.
-
-    }
+    () => {},
   );
-
 })();

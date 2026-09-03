@@ -5,7 +5,9 @@ from functools import lru_cache
 from mcp.server.fastmcp import FastMCP
 
 from mcp_servers.academy.config import AcademyMCPSettings
-from mcp_servers.academy.services.enquiry_service import AcademyEnquiryService
+from mcp_servers.academy.services.enquiry_service import (
+    AcademyEnquiryService,
+)
 
 
 mcp = FastMCP(
@@ -17,13 +19,23 @@ mcp = FastMCP(
 
 @lru_cache(maxsize=1)
 def _service() -> AcademyEnquiryService:
-    return AcademyEnquiryService(AcademyMCPSettings.from_env())
+    return AcademyEnquiryService(
+        AcademyMCPSettings.from_env()
+    )
 
 
 @mcp.tool()
-def create_enquiry(name: str, phone: str) -> dict:
+def create_enquiry(
+    name: str,
+    phone: str,
+    email: str | None = None,
+) -> dict:
     """Create an academy enquiry for a prospective learner."""
-    return _service().create_enquiry(name=name, phone=phone)
+    return _service().create_enquiry(
+        name=name,
+        phone=phone,
+        email=email,
+    )
 
 
 @mcp.tool()
