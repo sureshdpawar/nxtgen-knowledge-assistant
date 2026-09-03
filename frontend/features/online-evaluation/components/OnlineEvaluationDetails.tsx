@@ -63,6 +63,37 @@ type EvaluationMetadataView = {
 };
 
 
+type ProductionMetadataView = {
+  workload:
+    | string
+    | null;
+
+  agentId:
+    | string
+    | null;
+
+  agentName:
+    | string
+    | null;
+
+  agentRunId:
+    | string
+    | null;
+
+  agentThreadId:
+    | string
+    | null;
+
+  actorType:
+    | string
+    | null;
+
+  actorId:
+    | string
+    | null;
+};
+
+
 function formatScore(
   value:
     | number
@@ -165,6 +196,18 @@ function asRecord(
 }
 
 
+function asString(
+  value: unknown,
+) {
+  return (
+    typeof value === "string"
+    && value.trim()
+  )
+    ? value.trim()
+    : null;
+}
+
+
 function asMetricMetadata(
   value: unknown,
 ): EvaluationMetricMetadata | null {
@@ -212,16 +255,14 @@ function readEvaluationMetadata(
 
   return {
     evaluationPath:
-      typeof metadata.evaluation_path
-        === "string"
-        ? metadata.evaluation_path
-        : null,
+      asString(
+        metadata.evaluation_path,
+      ),
 
     evaluationOutcome:
-      typeof metadata.evaluation_outcome
-        === "string"
-        ? metadata.evaluation_outcome
-        : null,
+      asString(
+        metadata.evaluation_outcome,
+      ),
 
     contextAnswerable:
       typeof metadata.context_answerable
@@ -241,6 +282,90 @@ function readEvaluationMetadata(
           ?.context_answerability,
       ),
   };
+}
+
+
+function readProductionMetadata(
+  metadata:
+    Record<
+      string,
+      unknown
+    >,
+): ProductionMetadataView {
+  const workload =
+    asString(
+      metadata.workload,
+    )
+    ?? asString(
+      metadata.capture_source,
+    );
+
+  return {
+    workload,
+    agentId:
+      asString(
+        metadata.agent_id,
+      ),
+    agentName:
+      asString(
+        metadata.agent_name,
+      ),
+    agentRunId:
+      asString(
+        metadata.agent_run_id,
+      ),
+    agentThreadId:
+      asString(
+        metadata.agent_thread_id,
+      ),
+    actorType:
+      asString(
+        metadata.actor_type,
+      ),
+    actorId:
+      asString(
+        metadata.actor_id,
+      ),
+  };
+}
+
+
+function displayWorkload(
+  workload:
+    | string
+    | null,
+) {
+  if (
+    !workload
+  ) {
+    return "Chat";
+  }
+
+  const normalized =
+    workload
+      .trim()
+      .toLowerCase();
+
+  if (
+    normalized === "agent"
+  ) {
+    return "Agent";
+  }
+
+  if (
+    normalized === "chat"
+  ) {
+    return "Chat";
+  }
+
+  return (
+    normalized
+      .charAt(0)
+      .toUpperCase()
+    + normalized.slice(
+      1,
+    )
+  );
 }
 
 
@@ -295,7 +420,7 @@ function Field({
         {label}
       </p>
 
-      <div className="mt-1 text-sm text-slate-800">
+      <div className="mt-1 break-words text-sm text-slate-800">
         {value}
       </div>
     </div>
@@ -362,6 +487,19 @@ export default function OnlineEvaluationDetails({
           result.evaluation_metadata,
         )
       : null;
+
+  const productionView =
+    result
+      ? readProductionMetadata(
+          result.evaluation_metadata,
+        )
+      : null;
+
+  const isAgentWorkload =
+    productionView
+      ?.workload
+      ?.toLowerCase()
+      === "agent";
 
   const isSafeAbstention =
     evaluationView
@@ -595,9 +733,19 @@ export default function OnlineEvaluationDetails({
 
 
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="text-sm font-bold text-slate-900">
-                  Production request
-                </h3>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Production request
+                  </h3>
+
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                    {displayWorkload(
+                      productionView
+                        ?.workload
+                        ?? null,
+                    )}
+                  </span>
+                </div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <Field
@@ -624,21 +772,74 @@ export default function OnlineEvaluationDetails({
                     }
                   />
 
-                  <Field
-                    label="Conversation ID"
-                    value={
-                      result.conversation_id
-                      ?? "—"
-                    }
-                  />
+                  {isAgentWorkload ? (
+                    <>
+                      <Field
+                        label="Agent"
+                        value={
+                          productionView
+                            ?.agentName
+                          ?? productionView
+                            ?.agentId
+                          ?? "—"
+                        }
+                      />
 
-                  <Field
-                    label="Message ID"
-                    value={
-                      result.message_id
-                      ?? "—"
-                    }
-                  />
+                      <Field
+                        label="Agent Run ID"
+                        value={
+                          productionView
+                            ?.agentRunId
+                          ?? "—"
+                        }
+                      />
+
+                      <Field
+                        label="Agent Thread ID"
+                        value={
+                          productionView
+                            ?.agentThreadId
+                          ?? "—"
+                        }
+                      />
+
+                      <Field
+                        label="Actor Type"
+                        value={
+                          productionView
+                            ?.actorType
+                          ?? "—"
+                        }
+                      />
+
+                      <Field
+                        label="Actor ID"
+                        value={
+                          productionView
+                            ?.actorId
+                          ?? "—"
+                        }
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Field
+                        label="Conversation ID"
+                        value={
+                          result.conversation_id
+                          ?? "—"
+                        }
+                      />
+
+                      <Field
+                        label="Message ID"
+                        value={
+                          result.message_id
+                          ?? "—"
+                        }
+                      />
+                    </>
+                  )}
 
                   <Field
                     label="Captured"
@@ -708,7 +909,8 @@ export default function OnlineEvaluationDetails({
                   </div>
 
                   <p className="mt-2 text-xs text-slate-500">
-                    Open this trace to follow the original RAG request through retrieval and generation.
+                    The trace ID is persisted with this evaluation. Local span details
+                    are available only while the configured trace-debug exporter retains them.
                   </p>
                 </div>
               </section>

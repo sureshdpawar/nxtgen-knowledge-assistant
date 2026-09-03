@@ -525,13 +525,19 @@ export default function TraceDebugDetails({
         ) : error || !trace ? (
           <div className="m-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
             <p className="text-sm font-semibold text-amber-900">
-              Unable to load this trace.
+              Production trace is not available in local trace storage.
             </p>
 
             <p className="mt-2 text-sm leading-6 text-amber-800">
-              Local trace debugging only contains traces created after the backend
-              started with OTEL_TRACE_EXPORTER=memory. In-memory traces are lost
-              when the backend restarts.
+              The production trace ID was captured successfully with this request.
+              Local trace debugging only retains span details produced while the
+              backend is running with OTEL_TRACE_EXPORTER=memory. Those in-memory
+              spans are lost when the backend restarts.
+            </p>
+
+            <p className="mt-2 text-xs leading-5 text-amber-700">
+              The persisted trace ID remains valid correlation data and can be used
+              with a durable OpenTelemetry backend when one is configured.
             </p>
           </div>
         ) : (
