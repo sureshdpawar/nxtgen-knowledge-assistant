@@ -47,6 +47,9 @@ from app.models.agent_run import AgentRun
 from app.models.agent_run_step import (
     AgentRunStep,
 )
+from app.models.agent_action_approval import (
+    AgentActionApproval,
+)
 
 from app.models.integration import Integration
 from app.models.tool_definition import (
@@ -110,6 +113,7 @@ __all__ = [
     "AgentKnowledgeBase",
     "AgentRun",
     "AgentRunStep",
+    "AgentActionApproval",
     "Integration",
     "ToolDefinition",
     "AgentTool",

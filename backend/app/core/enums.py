@@ -100,6 +100,12 @@ class AgentRunStatus(str, Enum):
     FAILED = "FAILED"
 
 
+class AgentActionApprovalStatus(str, Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
 class AgentRunStepType(str, Enum):
     LLM = "LLM"
     TOOL = "TOOL"

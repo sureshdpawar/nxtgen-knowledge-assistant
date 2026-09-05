@@ -38,12 +38,16 @@ from app.agents.tool_registry import (
     AgentToolRegistry,
 )
 from app.core.enums import (
+    AgentActionApprovalStatus,
     AgentRunStatus,
     AgentRunStepStatus,
     AgentRunStepType,
     AgentStatus,
 )
 from app.models.agent import Agent
+from app.models.agent_action_approval import (
+    AgentActionApproval,
+)
 from app.models.agent_run import (
     AgentRun,
 )
@@ -594,6 +598,196 @@ class AgentExecutionService:
             source_trace_id,
         )
 
+    def _approval_actions(
+        self,
+        interrupts: list[dict],
+    ) -> list[dict]:
+        actions: list[dict] = []
+
+        for payload in (
+            interrupts
+            or []
+        ):
+            if not isinstance(
+                payload,
+                dict,
+            ):
+                continue
+
+            if (
+                payload.get("type")
+                != "tool_approval"
+            ):
+                continue
+
+            for action in (
+                payload.get(
+                    "tools",
+                    [],
+                )
+                or []
+            ):
+                if not isinstance(
+                    action,
+                    dict,
+                ):
+                    continue
+
+                actions.append(
+                    {
+                        "name":
+                            action.get(
+                                "name"
+                            ),
+                        "args":
+                            action.get(
+                                "args",
+                                {},
+                            ),
+                        "tool_call_id":
+                            action.get(
+                                "tool_call_id"
+                            ),
+                        "risk_level":
+                            action.get(
+                                "risk_level"
+                            ),
+                        "execution_policy":
+                            action.get(
+                                "execution_policy"
+                            ),
+                    }
+                )
+
+        return actions
+
+    def _persist_action_approval(
+        self,
+        db: Session,
+        *,
+        run: AgentRun,
+        interrupts: list[dict],
+    ) -> (
+        AgentActionApproval
+        | None
+    ):
+        actions = (
+            self._approval_actions(
+                interrupts
+            )
+        )
+
+        if not actions:
+            return None
+
+        if not run.checkpoint_id:
+            raise RuntimeError(
+                "Interrupted agent run has "
+                "no checkpoint_id."
+            )
+
+        existing = db.scalar(
+            select(
+                AgentActionApproval
+            )
+            .where(
+                AgentActionApproval
+                .agent_run_id
+                == run.id,
+                AgentActionApproval
+                .checkpoint_id
+                == run.checkpoint_id,
+            )
+        )
+
+        if existing is not None:
+            return existing
+
+        approval = (
+            AgentActionApproval(
+                tenant_id=
+                    run.tenant_id,
+                agent_id=
+                    run.agent_id,
+                agent_run_id=
+                    run.id,
+                checkpoint_id=
+                    run.checkpoint_id,
+                actions=
+                    actions,
+                status=(
+                    AgentActionApprovalStatus
+                    .PENDING
+                ),
+            )
+        )
+
+        db.add(
+            approval
+        )
+
+        return approval
+
+    def _mark_pending_approval_decision(
+        self,
+        db: Session,
+        *,
+        run: AgentRun,
+        decided_by_user_id: UUID,
+        decision: str,
+        reason: str | None,
+    ) -> None:
+        if not run.checkpoint_id:
+            return
+
+        approval = db.scalar(
+            select(
+                AgentActionApproval
+            )
+            .where(
+                AgentActionApproval
+                .agent_run_id
+                == run.id,
+                AgentActionApproval
+                .checkpoint_id
+                == run.checkpoint_id,
+                AgentActionApproval
+                .status
+                == (
+                    AgentActionApprovalStatus
+                    .PENDING
+                ),
+            )
+        )
+
+        if approval is None:
+            return
+
+        approval.status = (
+            AgentActionApprovalStatus
+            .APPROVED
+            if decision == "approve"
+            else
+            AgentActionApprovalStatus
+            .REJECTED
+        )
+        approval.decided_at = (
+            datetime.now(
+                timezone.utc,
+            )
+        )
+        approval.decided_by_user_id = (
+            decided_by_user_id
+        )
+        approval.decision_reason = (
+            reason
+        )
+
+        # Commit the governance decision before resuming
+        # LangGraph. Approval/rejection is a durable human
+        # decision even if downstream execution later fails.
+        db.commit()
+
     def _executed_tools(
         self,
         trace: list[dict],
@@ -626,7 +820,10 @@ class AgentExecutionService:
             # not an executed business tool.
             if (
                 item.get("name")
-                == "human_rejected_tools"
+                in {
+                    "human_rejected_tools",
+                    "policy_blocked_tools",
+                }
             ):
                 continue
 
@@ -690,6 +887,7 @@ class AgentExecutionService:
                     not in {
                         "tools",
                         "human_rejected_tools",
+                        "policy_blocked_tools",
                     }
                     and step_name
                     not in names
@@ -884,6 +1082,15 @@ class AgentExecutionService:
                 run.status = (
                     AgentRunStatus
                     .WAITING_FOR_APPROVAL
+                )
+
+                self._persist_action_approval(
+                    db,
+                    run=run,
+                    interrupts=
+                        result[
+                            "interrupts"
+                        ],
                 )
 
                 db.commit()
@@ -1218,6 +1425,8 @@ class AgentExecutionService:
                             auto_execute_tool_names
                             or set()
                         ),
+                        human_approval_supported=
+                            False,
                         progress_callback=
                             progress_callback,
                     )
@@ -1287,6 +1496,15 @@ class AgentExecutionService:
                 run.status = (
                     AgentRunStatus
                     .WAITING_FOR_APPROVAL
+                )
+
+                self._persist_action_approval(
+                    db,
+                    run=run,
+                    interrupts=
+                        result[
+                            "interrupts"
+                        ],
                 )
 
                 db.commit()
@@ -1393,6 +1611,341 @@ class AgentExecutionService:
 
             raise
 
+    async def resume_for_action_approval(
+        self,
+        db: Session,
+        *,
+        tenant_id: UUID,
+        run_id: UUID,
+        decision: str,
+        reason: str | None = None,
+        progress_callback:
+            ProgressCallback | None = None,
+    ) -> dict:
+        """
+        Resume a centrally approved AgentRun using the
+        original execution actor, not the approving Admin.
+
+        Current MVP HITL is enabled only for authenticated
+        platform USER executions. External/channel executions
+        explicitly disable resumable HITL.
+        """
+        run = db.get(
+            AgentRun,
+            run_id,
+        )
+
+        if (
+            run is None
+            or run.tenant_id
+            != tenant_id
+        ):
+            raise HTTPException(
+                status_code=
+                    status.HTTP_404_NOT_FOUND,
+                detail=
+                    "Agent run not found.",
+            )
+
+        if (
+            run.status
+            != AgentRunStatus
+            .WAITING_FOR_APPROVAL
+        ):
+            raise HTTPException(
+                status_code=
+                    status.HTTP_409_CONFLICT,
+                detail=(
+                    "Agent run is not waiting "
+                    "for human approval."
+                ),
+            )
+
+        if run.thread_id is None:
+            raise HTTPException(
+                status_code=
+                    status.HTTP_409_CONFLICT,
+                detail=(
+                    "Agent run has no "
+                    "LangGraph thread."
+                ),
+            )
+
+        if (
+            str(
+                run.actor_type
+                or ""
+            ).upper()
+            != "USER"
+            or run.user_id is None
+        ):
+            raise HTTPException(
+                status_code=
+                    status.HTTP_409_CONFLICT,
+                detail=(
+                    "This execution context "
+                    "does not support resumable "
+                    "human approval."
+                ),
+            )
+
+        agent = (
+            self.agent_repository
+            .get_by_id_and_tenant(
+                db=db,
+                tenant_id=
+                    tenant_id,
+                agent_id=
+                    run.agent_id,
+            )
+        )
+
+        if agent is None:
+            raise HTTPException(
+                status_code=
+                    status.HTTP_404_NOT_FOUND,
+                detail=
+                    "Agent not found.",
+            )
+
+        if (
+            agent.status
+            != AgentStatus.ACTIVE
+        ):
+            raise HTTPException(
+                status_code=
+                    status.HTTP_409_CONFLICT,
+                detail=(
+                    "Agent must remain active "
+                    "to resume an approval."
+                ),
+            )
+
+        (
+            configuration,
+            model,
+            tools,
+        ) = await self._runtime_dependencies(
+            db,
+            agent,
+        )
+
+        scoped_thread = (
+            self._scoped_thread_id(
+                tenant_id=
+                    agent.tenant_id,
+                agent_id=
+                    agent.id,
+                user_id=
+                    run.user_id,
+                thread_id=
+                    run.thread_id,
+            )
+        )
+
+        started_at = (
+            time.perf_counter()
+        )
+
+        try:
+            async with (
+                agent_checkpointer()
+            ) as checkpointer:
+                result = (
+                    await
+                    self.runtime.resume(
+                        model=model,
+                        tools=tools,
+                        system_prompt=
+                            agent.system_prompt,
+                        max_iterations=
+                            agent.max_iterations,
+                        checkpointer=
+                            checkpointer,
+                        thread_id=
+                            scoped_thread,
+                        decision={
+                            "decision":
+                                decision,
+                            "reason":
+                                reason,
+                        },
+                        progress_callback=
+                            progress_callback,
+                    )
+                )
+
+            duration_ms = (
+                (
+                    time.perf_counter()
+                    - started_at
+                )
+                * 1000
+            )
+
+            self._persist_trace(
+                db,
+                run,
+                result[
+                    "trace"
+                ],
+            )
+
+            self._record_agent_llm_usage(
+                db,
+                agent=agent,
+                run=run,
+                configuration=
+                    configuration,
+                messages=
+                    result[
+                        "new_messages"
+                    ],
+            )
+
+            resumed_tools = (
+                self._executed_tools(
+                    result[
+                        "trace"
+                    ]
+                )
+            )
+
+            merged_tools = list(
+                run.tools_used
+                or []
+            )
+
+            for name in resumed_tools:
+                if name not in merged_tools:
+                    merged_tools.append(
+                        name
+                    )
+
+            run.checkpoint_id = (
+                result[
+                    "checkpoint_id"
+                ]
+            )
+            run.llm_calls = (
+                result[
+                    "llm_calls"
+                ]
+            )
+            run.tools_used = (
+                merged_tools
+            )
+            run.duration_ms = (
+                (
+                    run.duration_ms
+                    or 0
+                )
+                + duration_ms
+            )
+
+            if result[
+                "interrupted"
+            ]:
+                run.status = (
+                    AgentRunStatus
+                    .WAITING_FOR_APPROVAL
+                )
+
+                self._persist_action_approval(
+                    db,
+                    run=run,
+                    interrupts=
+                        result[
+                            "interrupts"
+                        ],
+                )
+
+                db.commit()
+
+                return {
+                    "run_id":
+                        run.id,
+                    "thread_id":
+                        run.thread_id,
+                    "checkpoint_id":
+                        run.checkpoint_id,
+                    "answer":
+                        None,
+                    "status":
+                        run.status,
+                    "llm_calls":
+                        run.llm_calls,
+                    "tools_used":
+                        merged_tools,
+                    "duration_ms":
+                        run.duration_ms,
+                    "interrupts":
+                        result[
+                            "interrupts"
+                        ],
+                }
+
+            run.answer = (
+                result[
+                    "answer"
+                ]
+            )
+            run.status = (
+                AgentRunStatus.COMPLETED
+            )
+            run.completed_at = (
+                datetime.now(
+                    timezone.utc,
+                )
+            )
+
+            db.commit()
+
+            return {
+                "run_id":
+                    run.id,
+                "thread_id":
+                    run.thread_id,
+                "checkpoint_id":
+                    run.checkpoint_id,
+                "answer":
+                    run.answer,
+                "status":
+                    run.status,
+                "llm_calls":
+                    run.llm_calls,
+                "tools_used":
+                    merged_tools,
+                "duration_ms":
+                    run.duration_ms,
+                "interrupts":
+                    [],
+            }
+
+        except Exception as exc:
+            db.rollback()
+
+            failed_run = db.get(
+                AgentRun,
+                run_id,
+            )
+
+            if failed_run is not None:
+                failed_run.status = (
+                    AgentRunStatus.FAILED
+                )
+                failed_run.error_message = (
+                    str(exc)[:2000]
+                )
+                failed_run.completed_at = (
+                    datetime.now(
+                        timezone.utc,
+                    )
+                )
+                db.commit()
+
+            raise
+
     async def resume(
         self,
         db: Session,
@@ -1457,6 +2010,17 @@ class AgentExecutionService:
                     "LangGraph thread."
                 ),
             )
+
+        self._mark_pending_approval_decision(
+            db,
+            run=run,
+            decided_by_user_id=
+                current_user.id,
+            decision=
+                decision,
+            reason=
+                reason,
+        )
 
         (
             configuration,
@@ -1586,6 +2150,15 @@ class AgentExecutionService:
                 run.status = (
                     AgentRunStatus
                     .WAITING_FOR_APPROVAL
+                )
+
+                self._persist_action_approval(
+                    db,
+                    run=run,
+                    interrupts=
+                        result[
+                            "interrupts"
+                        ],
                 )
 
                 db.commit()

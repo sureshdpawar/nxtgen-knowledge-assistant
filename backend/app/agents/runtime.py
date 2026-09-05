@@ -193,6 +193,8 @@ class AgentRuntime:
             ProgressCallback | None,
         auto_execute_tool_names:
             set[str] | None = None,
+        human_approval_supported:
+            bool = True,
     ):
         if tools:
             model_with_tools = (
@@ -221,7 +223,9 @@ class AgentRuntime:
         execution_policy_context = (
             ToolExecutionPolicyContext
             .from_auto_execute_tool_names(
-                auto_execute_tool_names
+                auto_execute_tool_names,
+                human_approval_supported=
+                    human_approval_supported,
             )
         )
 
@@ -496,6 +500,27 @@ class AgentRuntime:
                         None,
                 }
 
+            if (
+                not execution_policy_context
+                .human_approval_supported
+            ):
+                return {
+                    "approval": {
+                        "decision":
+                            "reject",
+                        "reason":
+                            (
+                                "Human approval is not "
+                                "supported for this "
+                                "execution context. "
+                                "The requested action "
+                                "was not executed."
+                            ),
+                        "source":
+                            "execution_policy",
+                    },
+                }
+
             decision = interrupt(
                 {
                     "type":
@@ -715,6 +740,22 @@ class AgentRuntime:
                 )
             )
 
+            rejection_source = str(
+                approval.get(
+                    "source",
+                    "human",
+                )
+                or "human"
+            ).strip().lower()
+
+            trace_name = (
+                "policy_blocked_tools"
+                if rejection_source
+                == "execution_policy"
+                else
+                "human_rejected_tools"
+            )
+
             messages = [
                 ToolMessage(
                     content=json.dumps(
@@ -753,7 +794,7 @@ class AgentRuntime:
                             "TOOL",
 
                         "name":
-                            "human_rejected_tools",
+                            trace_name,
 
                         "status":
                             "COMPLETED",
@@ -1193,6 +1234,8 @@ class AgentRuntime:
         run_id: str,
         auto_execute_tool_names:
             set[str] | None = None,
+        human_approval_supported:
+            bool = True,
         progress_callback:
             ProgressCallback | None = None,
     ) -> dict:
@@ -1211,6 +1254,8 @@ class AgentRuntime:
                 progress_callback,
             auto_execute_tool_names=
                 auto_execute_tool_names,
+            human_approval_supported=
+                human_approval_supported,
         )
 
         config = {

@@ -27,18 +27,28 @@ class ToolExecutionPolicyContext:
     - risk_level describes what the tool can do
     - this context describes what the current invocation allows
 
-    For the current MVP, public channels supply a set of WRITE
-    tool names that are explicitly allowed to auto-execute.
+    For the current MVP:
+    - invocation contexts may explicitly allow selected WRITE
+      tools to auto-execute
+    - invocation contexts also declare whether resumable human
+      approval is supported
+
+    The support flag does not change HUMAN_APPROVAL into AUTO.
+    It only tells the runtime whether it may pause for approval.
     """
 
     auto_execute_tool_names: (
         frozenset[str]
     ) = frozenset()
 
+    human_approval_supported: bool = True
+
     @classmethod
     def from_auto_execute_tool_names(
         cls,
         names: set[str] | None,
+        *,
+        human_approval_supported: bool = True,
     ) -> "ToolExecutionPolicyContext":
         normalized = frozenset(
             str(name).strip()
@@ -52,6 +62,8 @@ class ToolExecutionPolicyContext:
         return cls(
             auto_execute_tool_names=
                 normalized,
+            human_approval_supported=
+                human_approval_supported,
         )
 
 
@@ -70,6 +82,12 @@ class ToolExecutionPolicyResolver:
     Future policy sources can be added here without changing the
     LangGraph approval node: tenant policy, agent policy, channel
     policy, user role, environment, tool-level policy, etc.
+
+    Note:
+    human_approval_supported is an execution capability, not a
+    policy override. A HUMAN_APPROVAL action must never be silently
+    converted to AUTO merely because the current channel cannot
+    support approval.
     """
 
     def resolve(
