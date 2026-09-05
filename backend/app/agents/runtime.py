@@ -5,10 +5,7 @@ import json
 import logging
 import time
 
-from collections.abc import (
-    Awaitable,
-    Callable,
-)
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langchain_core.messages import (
@@ -17,24 +14,16 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from langchain_core.tools import (
-    BaseTool,
-)
-from langgraph.graph import (
-    END,
-    START,
-    StateGraph,
-)
-from langgraph.prebuilt import (
-    ToolNode,
-)
-from langgraph.types import (
-    Command,
-    interrupt,
-)
+from langchain_core.tools import BaseTool
+from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt import ToolNode
+from langgraph.types import Command, interrupt
 
-from app.agents.state import (
-    AgentState,
+from app.agents.state import AgentState
+from app.agents.tool_execution_policy import (
+    ToolExecutionPolicy,
+    ToolExecutionPolicyContext,
+    ToolExecutionPolicyResolver,
 )
 
 
@@ -42,9 +31,7 @@ logger = logging.getLogger(
     "nxtgen.agent_runtime"
 )
 
-
 MAX_TRACE_OUTPUT_LENGTH = 4000
-
 
 ProgressCallback = Callable[
     [dict[str, Any]],
@@ -54,45 +41,35 @@ ProgressCallback = Callable[
 
 class AgentRuntime:
 
+    def __init__(self):
+        self.tool_execution_policy_resolver = (
+            ToolExecutionPolicyResolver()
+        )
+
     async def _emit(
         self,
-        callback:
-            ProgressCallback | None,
-        event: dict[
-            str,
-            Any,
-        ],
+        callback: ProgressCallback | None,
+        event: dict[str, Any],
     ) -> None:
         if callback is None:
             return
 
-        result = callback(
-            event,
-        )
+        result = callback(event)
 
-        if inspect.isawaitable(
-            result,
-        ):
+        if inspect.isawaitable(result):
             await result
 
     def _safe_output(
         self,
         value,
     ) -> str:
-        text = str(
-            value,
-        )
+        text = str(value)
 
-        if (
-            len(text)
-            <= MAX_TRACE_OUTPUT_LENGTH
-        ):
+        if len(text) <= MAX_TRACE_OUTPUT_LENGTH:
             return text
 
         return (
-            text[
-                :MAX_TRACE_OUTPUT_LENGTH
-            ]
+            text[:MAX_TRACE_OUTPUT_LENGTH]
             + "...[truncated]"
         )
 
@@ -162,9 +139,7 @@ class AgentRuntime:
         self,
         snapshot,
     ) -> list[dict]:
-        payloads: list[
-            dict
-        ] = []
+        payloads: list[dict] = []
 
         if snapshot is None:
             return payloads
@@ -195,9 +170,7 @@ class AgentRuntime:
                     value,
                     dict,
                 ):
-                    payloads.append(
-                        value
-                    )
+                    payloads.append(value)
                 else:
                     payloads.append(
                         {
@@ -212,9 +185,7 @@ class AgentRuntime:
         self,
         *,
         model,
-        tools: list[
-            BaseTool
-        ],
+        tools: list[BaseTool],
         system_prompt: str,
         max_iterations: int,
         checkpointer,
@@ -247,14 +218,29 @@ class AgentRuntime:
             for tool in tools
         }
 
-        auto_execute_tool_names = {
-            str(name).strip()
-            for name
-            in (
+        execution_policy_context = (
+            ToolExecutionPolicyContext
+            .from_auto_execute_tool_names(
                 auto_execute_tool_names
-                or set()
             )
-            if str(name).strip()
+        )
+
+        policy_by_tool_name = {
+            tool.name:
+                self
+                .tool_execution_policy_resolver
+                .resolve(
+                    tool_name=
+                        tool.name,
+                    risk_level=
+                        risk_by_tool_name.get(
+                            tool.name,
+                            "READ",
+                        ),
+                    context=
+                        execution_policy_context,
+                )
+            for tool in tools
         }
 
         async def call_model(
@@ -267,10 +253,7 @@ class AgentRuntime:
                 )
             )
 
-            if (
-                llm_calls
-                >= max_iterations
-            ):
+            if llm_calls >= max_iterations:
                 return {
                     "llm_calls":
                         llm_calls,
@@ -295,7 +278,6 @@ class AgentRuntime:
                 {
                     "type":
                         "llm_started",
-
                     "iteration":
                         iteration,
                 },
@@ -351,6 +333,15 @@ class AgentRuntime:
                             ),
                             "READ",
                         ),
+
+                    "execution_policy":
+                        policy_by_tool_name.get(
+                            tool_call.get(
+                                "name",
+                                "",
+                            ),
+                            ToolExecutionPolicy.AUTO,
+                        ).value,
                 }
                 for tool_call
                 in tool_calls
@@ -375,14 +366,10 @@ class AgentRuntime:
 
                     "tools":
                         [
-                            item[
-                                "name"
-                            ]
+                            item["name"]
                             for item
                             in requested_tools
-                            if item[
-                                "name"
-                            ]
+                            if item["name"]
                         ],
                 },
             )
@@ -455,7 +442,7 @@ class AgentRuntime:
                 or []
             )
 
-            write_calls = [
+            approval_calls = [
                 {
                     "name":
                         tool_call.get(
@@ -474,29 +461,36 @@ class AgentRuntime:
                         ),
 
                     "risk_level":
-                        "WRITE",
+                        risk_by_tool_name.get(
+                            tool_call.get(
+                                "name",
+                                "",
+                            ),
+                            "READ",
+                        ),
+
+                    "execution_policy":
+                        ToolExecutionPolicy
+                        .HUMAN_APPROVAL
+                        .value,
                 }
                 for tool_call
                 in tool_calls
                 if (
-                    risk_by_tool_name.get(
+                    policy_by_tool_name.get(
                         tool_call.get(
                             "name",
                             "",
                         ),
-                        "READ",
+                        ToolExecutionPolicy.AUTO,
                     )
-                    == "WRITE"
-                    and tool_call.get(
-                        "name",
-                        "",
-                    )
-                    not in
-                    auto_execute_tool_names
+                    ==
+                    ToolExecutionPolicy
+                    .HUMAN_APPROVAL
                 )
             ]
 
-            if not write_calls:
+            if not approval_calls:
                 return {
                     "approval":
                         None,
@@ -509,13 +503,12 @@ class AgentRuntime:
 
                     "message":
                         (
-                            "One or more WRITE "
-                            "tools require human "
-                            "approval."
+                            "One or more tools "
+                            "require human approval."
                         ),
 
                     "tools":
-                        write_calls,
+                        approval_calls,
                 }
             )
 
@@ -931,40 +924,158 @@ class AgentRuntime:
                 checkpointer,
         )
 
-
     @staticmethod
-    def _serialize_message(message) -> dict:
+    def _serialize_message(
+        message,
+    ) -> dict:
         """Return a UI-safe view of a LangChain message."""
         return {
-            "type": getattr(message, "type", message.__class__.__name__),
-            "id": getattr(message, "id", None),
-            "content": getattr(message, "content", None),
-            "name": getattr(message, "name", None),
-            "tool_calls": getattr(message, "tool_calls", None),
-            "tool_call_id": getattr(message, "tool_call_id", None),
+            "type":
+                getattr(
+                    message,
+                    "type",
+                    message
+                    .__class__
+                    .__name__,
+                ),
+
+            "id":
+                getattr(
+                    message,
+                    "id",
+                    None,
+                ),
+
+            "content":
+                getattr(
+                    message,
+                    "content",
+                    None,
+                ),
+
+            "name":
+                getattr(
+                    message,
+                    "name",
+                    None,
+                ),
+
+            "tool_calls":
+                getattr(
+                    message,
+                    "tool_calls",
+                    None,
+                ),
+
+            "tool_call_id":
+                getattr(
+                    message,
+                    "tool_call_id",
+                    None,
+                ),
         }
 
-    def _serialize_snapshot(self, snapshot) -> dict:
-        values = getattr(snapshot, "values", {}) or {}
-        messages = values.get("messages", []) or []
+    def _serialize_snapshot(
+        self,
+        snapshot,
+    ) -> dict:
+        values = (
+            getattr(
+                snapshot,
+                "values",
+                {},
+            )
+            or {}
+        )
+
+        messages = (
+            values.get(
+                "messages",
+                [],
+            )
+            or []
+        )
 
         return {
-            "checkpoint_id": self._checkpoint_id(snapshot),
-            "next": list(getattr(snapshot, "next", ()) or ()),
-            "created_at": getattr(snapshot, "created_at", None),
-            "metadata": getattr(snapshot, "metadata", {}) or {},
-            "interrupts": self._interrupt_payloads(snapshot),
-            "state": {
-                "messages": [
-                    self._serialize_message(message)
-                    for message in messages
-                ],
-                "message_count": len(messages),
-                "llm_calls": int(values.get("llm_calls", 0) or 0),
-                "active_run_id": values.get("active_run_id"),
-                "approval": values.get("approval"),
-                "trace_count": len(values.get("trace", []) or []),
-            },
+            "checkpoint_id":
+                self._checkpoint_id(
+                    snapshot
+                ),
+
+            "next":
+                list(
+                    getattr(
+                        snapshot,
+                        "next",
+                        (),
+                    )
+                    or ()
+                ),
+
+            "created_at":
+                getattr(
+                    snapshot,
+                    "created_at",
+                    None,
+                ),
+
+            "metadata":
+                getattr(
+                    snapshot,
+                    "metadata",
+                    {},
+                )
+                or {},
+
+            "interrupts":
+                self._interrupt_payloads(
+                    snapshot
+                ),
+
+            "state":
+                {
+                    "messages":
+                        [
+                            self._serialize_message(
+                                message
+                            )
+                            for message
+                            in messages
+                        ],
+
+                    "message_count":
+                        len(
+                            messages
+                        ),
+
+                    "llm_calls":
+                        int(
+                            values.get(
+                                "llm_calls",
+                                0,
+                            )
+                            or 0
+                        ),
+
+                    "active_run_id":
+                        values.get(
+                            "active_run_id"
+                        ),
+
+                    "approval":
+                        values.get(
+                            "approval"
+                        ),
+
+                    "trace_count":
+                        len(
+                            values.get(
+                                "trace",
+                                [],
+                            )
+                            or []
+                        ),
+                },
         }
 
     async def inspect_state(
@@ -982,22 +1093,38 @@ class AgentRuntime:
         Knowgentiq does not query checkpoint tables directly.
         """
         graph = await self._build_graph(
-            model=model,
-            tools=tools,
-            system_prompt=system_prompt,
-            max_iterations=max_iterations,
-            checkpointer=checkpointer,
-            progress_callback=None,
+            model=
+                model,
+            tools=
+                tools,
+            system_prompt=
+                system_prompt,
+            max_iterations=
+                max_iterations,
+            checkpointer=
+                checkpointer,
+            progress_callback=
+                None,
         )
 
         config = {
             "configurable": {
-                "thread_id": thread_id,
+                "thread_id":
+                    thread_id,
             }
         }
 
-        snapshot = await graph.aget_state(config)
-        return self._serialize_snapshot(snapshot)
+        snapshot = (
+            await graph.aget_state(
+                config
+            )
+        )
+
+        return (
+            self._serialize_snapshot(
+                snapshot
+            )
+        )
 
     async def checkpoint_history(
         self,
@@ -1015,27 +1142,40 @@ class AgentRuntime:
         This is intentionally framework-owned time-travel state.
         """
         graph = await self._build_graph(
-            model=model,
-            tools=tools,
-            system_prompt=system_prompt,
-            max_iterations=max_iterations,
-            checkpointer=checkpointer,
-            progress_callback=None,
+            model=
+                model,
+            tools=
+                tools,
+            system_prompt=
+                system_prompt,
+            max_iterations=
+                max_iterations,
+            checkpointer=
+                checkpointer,
+            progress_callback=
+                None,
         )
 
         config = {
             "configurable": {
-                "thread_id": thread_id,
+                "thread_id":
+                    thread_id,
             }
         }
 
         history: list[dict] = []
-        async for snapshot in graph.aget_state_history(
-            config,
-            limit=limit,
+
+        async for snapshot in (
+            graph.aget_state_history(
+                config,
+                limit=
+                    limit,
+            )
         ):
             history.append(
-                self._serialize_snapshot(snapshot)
+                self._serialize_snapshot(
+                    snapshot
+                )
             )
 
         return history
@@ -1044,9 +1184,7 @@ class AgentRuntime:
         self,
         *,
         model,
-        tools: list[
-            BaseTool
-        ],
+        tools: list[BaseTool],
         system_prompt: str,
         query: str,
         max_iterations: int,
@@ -1058,10 +1196,11 @@ class AgentRuntime:
         progress_callback:
             ProgressCallback | None = None,
     ) -> dict:
-
         graph = await self._build_graph(
-            model=model,
-            tools=tools,
+            model=
+                model,
+            tools=
+                tools,
             system_prompt=
                 system_prompt,
             max_iterations=
@@ -1145,27 +1284,30 @@ class AgentRuntime:
                 "approval":
                     None,
             },
-            config=config,
+            config=
+                config,
         )
 
         return await self._result(
-            graph=graph,
-            config=config,
-            result=result,
+            graph=
+                graph,
+            config=
+                config,
+            result=
+                result,
             message_offset=
                 message_offset,
             trace_offset=
                 trace_offset,
-            llm_calls_before=0,
+            llm_calls_before=
+                0,
         )
 
     async def resume(
         self,
         *,
         model,
-        tools: list[
-            BaseTool
-        ],
+        tools: list[BaseTool],
         system_prompt: str,
         max_iterations: int,
         checkpointer,
@@ -1174,10 +1316,11 @@ class AgentRuntime:
         progress_callback:
             ProgressCallback | None = None,
     ) -> dict:
-
         graph = await self._build_graph(
-            model=model,
-            tools=tools,
+            model=
+                model,
+            tools=
+                tools,
             system_prompt=
                 system_prompt,
             max_iterations=
@@ -1249,13 +1392,17 @@ class AgentRuntime:
                 resume=
                     decision,
             ),
-            config=config,
+            config=
+                config,
         )
 
         return await self._result(
-            graph=graph,
-            config=config,
-            result=result,
+            graph=
+                graph,
+            config=
+                config,
+            result=
+                result,
             message_offset=
                 message_offset,
             trace_offset=
@@ -1274,7 +1421,6 @@ class AgentRuntime:
         trace_offset: int,
         llm_calls_before: int,
     ) -> dict:
-
         snapshot = (
             await graph.aget_state(
                 config
