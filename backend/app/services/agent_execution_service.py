@@ -43,6 +43,7 @@ from app.core.enums import (
     AgentRunStepStatus,
     AgentRunStepType,
     AgentStatus,
+    ToolExecutionPolicy,
 )
 from app.models.agent import Agent
 from app.models.agent_action_approval import (
@@ -329,6 +330,109 @@ class AgentExecutionService:
             configuration,
             model,
             tools,
+        )
+
+    def _checkpoint_approval(
+        self,
+        db: Session,
+        *,
+        run: AgentRun,
+    ) -> AgentActionApproval | None:
+        if not run.checkpoint_id:
+            return None
+
+        return db.scalar(
+            select(
+                AgentActionApproval
+            )
+            .where(
+                AgentActionApproval
+                .agent_run_id
+                == run.id,
+                AgentActionApproval
+                .checkpoint_id
+                == run.checkpoint_id,
+            )
+        )
+
+    def _tool_policy_names(
+        self,
+        agent: Agent,
+        *,
+        checkpoint_approval:
+            AgentActionApproval | None = None,
+    ) -> tuple[
+        set[str],
+        set[str],
+    ]:
+        """
+        Resolve persisted AgentTool policies into the runtime's
+        name-based execution-policy contract.
+
+        If a checkpoint is already waiting for human approval,
+        the actions persisted for that checkpoint remain governed
+        for the resume even if AgentTool policy changes meanwhile.
+        """
+        auto_execute_tool_names: set[str] = set()
+        human_approval_tool_names: set[str] = set()
+
+        for link in agent.tool_links:
+            tool_name = str(
+                getattr(
+                    link.tool,
+                    "name",
+                    "",
+                )
+                or ""
+            ).strip()
+
+            if not tool_name:
+                continue
+
+            if (
+                link.execution_policy
+                == ToolExecutionPolicy.AUTO
+            ):
+                auto_execute_tool_names.add(
+                    tool_name
+                )
+            else:
+                human_approval_tool_names.add(
+                    tool_name
+                )
+
+        if checkpoint_approval is not None:
+            for action in (
+                checkpoint_approval.actions
+                or []
+            ):
+                if not isinstance(
+                    action,
+                    dict,
+                ):
+                    continue
+
+                tool_name = str(
+                    action.get(
+                        "name",
+                        "",
+                    )
+                    or ""
+                ).strip()
+
+                if not tool_name:
+                    continue
+
+                auto_execute_tool_names.discard(
+                    tool_name
+                )
+                human_approval_tool_names.add(
+                    tool_name
+                )
+
+        return (
+            auto_execute_tool_names,
+            human_approval_tool_names,
         )
 
     def _persist_trace(
@@ -676,8 +780,7 @@ class AgentExecutionService:
                 interrupts
             )
         )
-        
-        
+
         logger.info(
             (
                 "Agent approval requested "
@@ -970,6 +1073,13 @@ class AgentExecutionService:
             agent,
         )
 
+        (
+            auto_execute_tool_names,
+            human_approval_tool_names,
+        ) = self._tool_policy_names(
+            agent,
+        )
+
         run = AgentRun(
             tenant_id=
                 agent.tenant_id,
@@ -1043,6 +1153,12 @@ class AgentExecutionService:
                             str(
                                 run.id
                             ),
+                        auto_execute_tool_names=
+                            auto_execute_tool_names,
+                        human_approval_tool_names=
+                            human_approval_tool_names,
+                        human_approval_supported=
+                            True,
                         progress_callback=
                             progress_callback,
                     )
@@ -1758,6 +1874,22 @@ class AgentExecutionService:
             agent,
         )
 
+        checkpoint_approval = (
+            self._checkpoint_approval(
+                db,
+                run=run,
+            )
+        )
+
+        (
+            auto_execute_tool_names,
+            human_approval_tool_names,
+        ) = self._tool_policy_names(
+            agent,
+            checkpoint_approval=
+                checkpoint_approval,
+        )
+
         scoped_thread = (
             self._scoped_thread_id(
                 tenant_id=
@@ -1798,6 +1930,12 @@ class AgentExecutionService:
                             "reason":
                                 reason,
                         },
+                        auto_execute_tool_names=
+                            auto_execute_tool_names,
+                        human_approval_tool_names=
+                            human_approval_tool_names,
+                        human_approval_supported=
+                            True,
                         progress_callback=
                             progress_callback,
                     )
@@ -2059,6 +2197,22 @@ class AgentExecutionService:
             agent,
         )
 
+        checkpoint_approval = (
+            self._checkpoint_approval(
+                db,
+                run=run,
+            )
+        )
+
+        (
+            auto_execute_tool_names,
+            human_approval_tool_names,
+        ) = self._tool_policy_names(
+            agent,
+            checkpoint_approval=
+                checkpoint_approval,
+        )
+
         scoped_thread = (
             self._scoped_thread_id(
                 tenant_id=
@@ -2099,6 +2253,12 @@ class AgentExecutionService:
                             "reason":
                                 reason,
                         },
+                        auto_execute_tool_names=
+                            auto_execute_tool_names,
+                        human_approval_tool_names=
+                            human_approval_tool_names,
+                        human_approval_supported=
+                            True,
                         progress_callback=
                             progress_callback,
                     )

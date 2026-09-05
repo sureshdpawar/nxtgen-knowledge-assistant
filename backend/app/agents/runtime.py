@@ -193,6 +193,8 @@ class AgentRuntime:
             ProgressCallback | None,
         auto_execute_tool_names:
             set[str] | None = None,
+        human_approval_tool_names:
+            set[str] | None = None,
         human_approval_supported:
             bool = True,
     ):
@@ -222,8 +224,11 @@ class AgentRuntime:
 
         execution_policy_context = (
             ToolExecutionPolicyContext
-            .from_auto_execute_tool_names(
-                auto_execute_tool_names,
+            .from_tool_policy_names(
+                auto_execute_tool_names=
+                    auto_execute_tool_names,
+                human_approval_tool_names=
+                    human_approval_tool_names,
                 human_approval_supported=
                     human_approval_supported,
             )
@@ -1234,6 +1239,8 @@ class AgentRuntime:
         run_id: str,
         auto_execute_tool_names:
             set[str] | None = None,
+        human_approval_tool_names:
+            set[str] | None = None,
         human_approval_supported:
             bool = True,
         progress_callback:
@@ -1254,6 +1261,8 @@ class AgentRuntime:
                 progress_callback,
             auto_execute_tool_names=
                 auto_execute_tool_names,
+            human_approval_tool_names=
+                human_approval_tool_names,
             human_approval_supported=
                 human_approval_supported,
         )
@@ -1358,6 +1367,12 @@ class AgentRuntime:
         checkpointer,
         thread_id: str,
         decision: dict,
+        auto_execute_tool_names:
+            set[str] | None = None,
+        human_approval_tool_names:
+            set[str] | None = None,
+        human_approval_supported:
+            bool = True,
         progress_callback:
             ProgressCallback | None = None,
     ) -> dict:
@@ -1374,6 +1389,12 @@ class AgentRuntime:
                 checkpointer,
             progress_callback=
                 progress_callback,
+            auto_execute_tool_names=
+                auto_execute_tool_names,
+            human_approval_tool_names=
+                human_approval_tool_names,
+            human_approval_supported=
+                human_approval_supported,
         )
 
         config = {
