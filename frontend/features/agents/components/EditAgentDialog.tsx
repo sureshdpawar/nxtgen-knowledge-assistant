@@ -688,6 +688,12 @@ export default function EditAgentDialog({
                     to invoke.
                   </p>
 
+                  <p className="mt-1 text-xs text-slate-500">
+                    READ / WRITE describes tool risk only.
+                    AUTO / HUMAN_APPROVAL is resolved separately
+                    by the execution context.
+                  </p>
+
                 </div>
 
 
@@ -800,12 +806,15 @@ export default function EditAgentDialog({
 
                           {tool.risk_level ===
                             "WRITE" && (
-                            <div className="mt-2 flex items-center gap-1 text-xs text-amber-600">
+                            <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-700">
 
-                              <Shield className="h-3.5 w-3.5" />
+                              <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" />
 
-                              May modify an
-                              external system
+                              <span>
+                                Can modify external state.
+                                Approval behavior is configured
+                                separately by execution context.
+                              </span>
 
                             </div>
                           )}

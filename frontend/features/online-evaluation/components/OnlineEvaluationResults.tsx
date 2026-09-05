@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-
+import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   ChevronLeft,
@@ -19,10 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import {
-  useOnlineEvalResults,
-} from "@/features/online-evaluation/hooks";
-
+import { useOnlineEvalResults } from "@/features/online-evaluation/hooks";
 import type {
   OnlineEvalFilters,
   OnlineEvalOutcome,
@@ -31,109 +23,93 @@ import type {
   OnlineEvalSummaryFilters,
 } from "@/features/online-evaluation/types";
 
-
-type PassedFilter =
-  | "all"
-  | "passed"
-  | "failed";
-
+type PassedFilter = "all" | "passed" | "failed";
 
 type OnlineEvaluationResultsProps = {
   baseFilters?: OnlineEvalSummaryFilters;
-  onSelectResult?: (
-    result: OnlineEvalResultSummary,
-  ) => void;
+  onSelectResult?: (result: OnlineEvalResultSummary) => void;
 };
 
-
-function formatScore(
-  value: number | null | undefined,
-) {
-  if (
-    value === null
-    || value === undefined
-  ) {
-    return "—";
-  }
-
+function formatScore(value: number | null | undefined) {
+  if (value === null || value === undefined) return "—";
   return `${(value * 100).toFixed(1)}%`;
 }
 
-
-function formatDateTime(
-  value: string | null | undefined,
-) {
-  if (!value) {
-    return "—";
-  }
-
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "—";
   const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
-  return new Intl.DateTimeFormat(
-    undefined,
-    {
-      dateStyle: "medium",
-      timeStyle: "short",
-    },
-  ).format(date);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }
 
-
-function shortenTrace(
-  traceId: string,
-) {
-  if (traceId.length <= 16) {
-    return traceId;
-  }
-
+function shortenTrace(traceId: string) {
+  if (traceId.length <= 16) return traceId;
   return `${traceId.slice(0, 8)}…${traceId.slice(-8)}`;
 }
 
+function getWorkload(result: OnlineEvalResultSummary) {
+  const metadata = result.evaluation_metadata ?? {};
+  const raw =
+    typeof metadata.workload === "string"
+      ? metadata.workload
+      : typeof metadata.capture_source === "string"
+        ? metadata.capture_source
+        : "chat";
 
-function StatusBadge({
-  status,
-}: {
-  status: OnlineEvalStatus;
-}) {
-  if (status === "completed") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-        <CheckCircle2 className="h-3.5 w-3.5" />
-        Completed
-      </span>
-    );
-  }
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "agent") return "Agent";
+  if (normalized === "chat") return "Chat";
+  return normalized
+    ? normalized.charAt(0).toUpperCase() + normalized.slice(1)
+    : "Chat";
+}
 
-  if (status === "failed") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
-        <XCircle className="h-3.5 w-3.5" />
-        Failed
-      </span>
-    );
-  }
-
-  if (status === "running") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        Running
-      </span>
-    );
-  }
-
+function WorkloadBadge({ result }: { result: OnlineEvalResultSummary }) {
+  const workload = getWorkload(result);
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-      <CircleMinus className="h-3.5 w-3.5" />
-      Pending
+    <span
+      className={
+        workload === "Agent"
+          ? "inline-flex rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700"
+          : "inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700"
+      }
+    >
+      {workload}
     </span>
   );
 }
 
+function StatusBadge({ status }: { status: OnlineEvalStatus }) {
+  if (status === "completed") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+        <CheckCircle2 className="h-3.5 w-3.5" /> Completed
+      </span>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+        <XCircle className="h-3.5 w-3.5" /> Failed
+      </span>
+    );
+  }
+  if (status === "running") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Running
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+      <CircleMinus className="h-3.5 w-3.5" /> Pending
+    </span>
+  );
+}
 
 function OutcomeBadge({
   outcome,
@@ -142,58 +118,37 @@ function OutcomeBadge({
   outcome: OnlineEvalOutcome | null;
   status: OnlineEvalStatus;
 }) {
-  if (
-    status !== "completed"
-    || outcome === null
-  ) {
+  if (status !== "completed" || outcome === null) {
     return <span className="text-sm text-slate-400">—</span>;
   }
-
   if (outcome === "safe_abstention") {
     return (
       <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-700">
-        <ShieldCheck className="h-4 w-4" />
-        Safe abstention
+        <ShieldCheck className="h-4 w-4" /> Safe abstention
       </span>
     );
   }
-
   if (outcome === "pass") {
     return (
       <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700">
-        <CheckCircle2 className="h-4 w-4" />
-        Answered
+        <CheckCircle2 className="h-4 w-4" /> Answered
       </span>
     );
   }
-
   return (
     <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-700">
-      <XCircle className="h-4 w-4" />
-      Failed
+      <XCircle className="h-4 w-4" /> Failed
     </span>
   );
 }
 
-
-function ScoreCell({
-  value,
-}: {
-  value: number | null;
-}) {
+function ScoreCell({ value }: { value: number | null }) {
   return (
-    <span
-      className={
-        value === null
-          ? "text-slate-400"
-          : "font-medium text-slate-700"
-      }
-    >
+    <span className={value === null ? "text-slate-400" : "font-medium text-slate-700"}>
       {formatScore(value)}
     </span>
   );
 }
-
 
 export default function OnlineEvaluationResults({
   baseFilters = {},
@@ -206,22 +161,19 @@ export default function OnlineEvaluationResults({
   const [limit, setLimit] = useState(25);
   const [offset, setOffset] = useState(0);
 
-  useEffect(
-    () => {
-      setOffset(0);
-    },
-    [
-      baseFilters.knowledge_base_id,
-      baseFilters.generator_provider,
-      baseFilters.generator_model,
-      baseFilters.created_from,
-      baseFilters.created_to,
-      status,
-      passedFilter,
-      traceFilter,
-      limit,
-    ],
-  );
+  useEffect(() => {
+    setOffset(0);
+  }, [
+    baseFilters.knowledge_base_id,
+    baseFilters.generator_provider,
+    baseFilters.generator_model,
+    baseFilters.created_from,
+    baseFilters.created_to,
+    status,
+    passedFilter,
+    traceFilter,
+    limit,
+  ]);
 
   const filters = useMemo<OnlineEvalFilters>(
     () => ({
@@ -235,14 +187,7 @@ export default function OnlineEvaluationResults({
       limit,
       offset,
     }),
-    [
-      baseFilters,
-      status,
-      passedFilter,
-      traceFilter,
-      limit,
-      offset,
-    ],
+    [baseFilters, status, passedFilter, traceFilter, limit, offset],
   );
 
   const {
@@ -257,17 +202,11 @@ export default function OnlineEvaluationResults({
     setTraceFilter(traceInput.trim());
   }
 
-  function handleTraceKeyDown(
-    event: React.KeyboardEvent<HTMLInputElement>,
-  ) {
-    if (event.key === "Enter") {
-      handleTraceSearch();
-    }
+  function handleTraceKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") handleTraceSearch();
   }
 
-  async function copyTrace(
-    traceId: string,
-  ) {
+  async function copyTrace(traceId: string) {
     try {
       await navigator.clipboard.writeText(traceId);
       toast.success("Trace ID copied.");
@@ -299,9 +238,7 @@ export default function OnlineEvaluationResults({
             disabled={isFetching}
             className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isFetching ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : null}
+            {isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Refresh results
           </button>
         </div>
@@ -314,9 +251,7 @@ export default function OnlineEvaluationResults({
             <select
               value={status}
               onChange={(event) =>
-                setStatus(
-                  event.target.value as OnlineEvalStatus | "all",
-                )
+                setStatus(event.target.value as OnlineEvalStatus | "all")
               }
               className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-slate-500"
             >
@@ -412,11 +347,12 @@ export default function OnlineEvaluationResults({
       ) : null}
 
       <div className="overflow-x-auto">
-        <table className="min-w-[1150px] w-full border-collapse">
+        <table className="min-w-[1240px] w-full border-collapse">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-left">
               <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
               <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Outcome</th>
+              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Workload</th>
               <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Faithfulness</th>
               <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Answer relevancy</th>
               <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Context relevancy</th>
@@ -429,7 +365,7 @@ export default function OnlineEvaluationResults({
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center">
+                <td colSpan={9} className="px-4 py-12 text-center">
                   <div className="inline-flex items-center gap-2 text-sm text-slate-500">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Loading online evaluations…
@@ -438,7 +374,7 @@ export default function OnlineEvaluationResults({
               </tr>
             ) : results.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center">
+                <td colSpan={9} className="px-4 py-12 text-center">
                   <p className="text-sm font-semibold text-slate-700">
                     No online evaluation results
                   </p>
@@ -453,34 +389,30 @@ export default function OnlineEvaluationResults({
                   key={result.id}
                   onClick={() => onSelectResult?.(result)}
                   className={`border-b border-slate-100 transition last:border-b-0 ${
-                    onSelectResult
-                      ? "cursor-pointer hover:bg-slate-50"
-                      : ""
+                    onSelectResult ? "cursor-pointer hover:bg-slate-50" : ""
                   }`}
                 >
                   <td className="whitespace-nowrap px-4 py-4">
                     <StatusBadge status={result.status} />
                   </td>
-
                   <td className="whitespace-nowrap px-4 py-4">
                     <OutcomeBadge
                       outcome={result.evaluation_outcome}
                       status={result.status}
                     />
                   </td>
-
+                  <td className="whitespace-nowrap px-4 py-4">
+                    <WorkloadBadge result={result} />
+                  </td>
                   <td className="whitespace-nowrap px-4 py-4 text-sm">
                     <ScoreCell value={result.faithfulness_score} />
                   </td>
-
                   <td className="whitespace-nowrap px-4 py-4 text-sm">
                     <ScoreCell value={result.answer_relevancy_score} />
                   </td>
-
                   <td className="whitespace-nowrap px-4 py-4 text-sm">
                     <ScoreCell value={result.contextual_relevancy_score} />
                   </td>
-
                   <td className="px-4 py-4">
                     <div className="max-w-[220px]">
                       <p className="truncate text-sm font-medium text-slate-800">
@@ -493,7 +425,6 @@ export default function OnlineEvaluationResults({
                       ) : null}
                     </div>
                   </td>
-
                   <td className="whitespace-nowrap px-4 py-4">
                     <div className="flex items-center gap-2">
                       <code
@@ -515,7 +446,6 @@ export default function OnlineEvaluationResults({
                       </button>
                     </div>
                   </td>
-
                   <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-600">
                     {formatDateTime(result.created_at)}
                   </td>

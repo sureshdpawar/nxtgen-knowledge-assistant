@@ -59,6 +59,7 @@ export type OnlineEvalResultSummary = {
   contextual_relevancy_score: number | null;
   passed: boolean | null;
   evaluation_outcome: OnlineEvalOutcome | null;
+  evaluation_metadata: Record<string, unknown>;
   evaluated_at: string | null;
   created_at: string;
 };

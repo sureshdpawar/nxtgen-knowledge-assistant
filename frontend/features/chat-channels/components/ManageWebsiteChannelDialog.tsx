@@ -10,6 +10,7 @@ import {
   Check,
   Copy,
   Power,
+  ShieldCheck,
   Trash2,
 } from "lucide-react";
 
@@ -32,6 +33,10 @@ import {
 import {
   useAgents,
 } from "@/features/agents/hooks";
+
+import {
+  useTools,
+} from "@/features/tools/hooks";
 
 import {
   useDeleteChatChannel,
@@ -179,12 +184,10 @@ export default function ManageWebsiteChannelDialog({
   const [
     autoExecuteTools,
     setAutoExecuteTools,
-  ] = useState(
-    (
-      channel.configuration
-        .auto_execute_tools
-      || []
-    ).join("\n"),
+  ] = useState<string[]>(
+    channel.configuration
+      .auto_execute_tools
+    || [],
   );
 
   const [
@@ -202,6 +205,13 @@ export default function ManageWebsiteChannelDialog({
   const agentsQuery =
     useAgents(open);
 
+  const toolsQuery =
+    useTools(
+      open
+      && executionMode
+        === "AGENT",
+    );
+
   const activeAgents =
     (
       agentsQuery.data
@@ -210,6 +220,32 @@ export default function ManageWebsiteChannelDialog({
       (agent) =>
         agent.status
         === "ACTIVE",
+    );
+
+  const selectedAgent =
+    activeAgents.find(
+      (agent) =>
+        agent.id
+        === agentId,
+    )
+    ?? null;
+
+  const assignedWriteTools =
+    (
+      toolsQuery.data
+      || []
+    ).filter(
+      (tool) =>
+        tool.is_active
+        && tool.risk_level
+          === "WRITE"
+        && (
+          selectedAgent
+            ?.tool_ids
+            ?? []
+        ).includes(
+          tool.id,
+        ),
     );
 
   const updateMutation =
@@ -284,11 +320,9 @@ export default function ManageWebsiteChannelDialog({
     );
 
     setAutoExecuteTools(
-      (
-        channel.configuration
-          .auto_execute_tools
-        || []
-      ).join("\n"),
+      channel.configuration
+        .auto_execute_tools
+      || [],
     );
 
     setError(null);
@@ -297,6 +331,43 @@ export default function ManageWebsiteChannelDialog({
   }, [
     open,
     channel,
+  ]);
+
+
+  useEffect(() => {
+    if (
+      !open
+      || executionMode
+        !== "AGENT"
+      || !selectedAgent
+      || toolsQuery.isLoading
+    ) {
+      return;
+    }
+
+    const assignedWriteToolNames =
+      new Set(
+        assignedWriteTools.map(
+          (tool) =>
+            tool.name,
+        ),
+      );
+
+    setAutoExecuteTools(
+      (current) =>
+        current.filter(
+          (name) =>
+            assignedWriteToolNames.has(
+              name,
+            ),
+        ),
+    );
+  }, [
+    open,
+    executionMode,
+    selectedAgent,
+    toolsQuery.isLoading,
+    assignedWriteTools,
   ]);
 
 
@@ -355,6 +426,31 @@ export default function ManageWebsiteChannelDialog({
   }
 
 
+  function toggleAutoExecuteTool(
+    toolName: string,
+  ) {
+    setAutoExecuteTools(
+      (current) => {
+        if (
+          current.includes(
+            toolName,
+          )
+        ) {
+          return current.filter(
+            (name) =>
+              name !== toolName,
+          );
+        }
+
+        return [
+          ...current,
+          toolName,
+        ];
+      },
+    );
+  }
+
+
   async function save() {
     const normalizedName =
       name.trim();
@@ -403,6 +499,22 @@ export default function ManageWebsiteChannelDialog({
     }
 
     setError(null);
+
+    const assignedWriteToolNames =
+      new Set(
+        assignedWriteTools.map(
+          (tool) =>
+            tool.name,
+        ),
+      );
+
+    const validAutoExecuteTools =
+      autoExecuteTools.filter(
+        (toolName) =>
+          assignedWriteToolNames.has(
+            toolName,
+          ),
+      );
 
     const nextConfiguration = {
       ...channel.configuration,
@@ -494,9 +606,7 @@ export default function ManageWebsiteChannelDialog({
       auto_execute_tools:
         executionMode
         === "AGENT"
-          ? parsedLines(
-              autoExecuteTools,
-            )
+          ? validAutoExecuteTools
           : [],
     };
 
@@ -749,6 +859,14 @@ export default function ManageWebsiteChannelDialog({
                         event.currentTarget.value as WebsiteExecutionMode;
 
                       setExecutionMode(mode);
+
+                      if (
+                        mode !== "AGENT"
+                      ) {
+                        setAutoExecuteTools(
+                          [],
+                        );
+                      }
                     }}
                     className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
                   >
@@ -775,7 +893,12 @@ export default function ManageWebsiteChannelDialog({
                       <select
                         value={agentId}
                         onChange={(event) => {
-                          setAgentId(event.currentTarget.value);
+                          setAgentId(
+                            event.currentTarget.value,
+                          );
+                          setAutoExecuteTools(
+                            [],
+                          );
                         }}
                         className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
                       >
@@ -807,8 +930,126 @@ export default function ManageWebsiteChannelDialog({
               executionMode
               === "AGENT"
               && (
-                <div className="space-y-4 rounded-xl border p-4">
+                <div className="space-y-5 rounded-xl border p-4">
                   <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      Website Agent Governance
+                    </p>
+
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Tool risk and execution policy are separate.
+                      READ / WRITE describes what a tool can do.
+                      AUTO / HUMAN_APPROVAL is resolved for this website execution context.
+                    </p>
+                  </div>
+
+
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex items-start gap-2">
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" />
+
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">
+                          Auto-execution policy for this website
+                        </p>
+
+                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                          Select only assigned WRITE tools that this channel is explicitly
+                          allowed to execute automatically. Unselected WRITE tools continue
+                          through the runtime approval path.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+
+                  {!agentId ? (
+                    <p className="text-sm text-slate-500">
+                      Select an active agent to configure its website execution policy.
+                    </p>
+                  ) : toolsQuery.isLoading ? (
+                    <p className="text-sm text-slate-500">
+                      Loading assigned WRITE tools...
+                    </p>
+                  ) : toolsQuery.isError ? (
+                    <p className="text-sm text-red-600">
+                      Failed to load tools.
+                    </p>
+                  ) : assignedWriteTools.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      This agent has no active WRITE tools assigned.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {assignedWriteTools.map(
+                        (tool) => {
+                          const isAuto =
+                            autoExecuteTools.includes(
+                              tool.name,
+                            );
+
+                          return (
+                            <label
+                              key={tool.id}
+                              className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isAuto}
+                                onChange={() =>
+                                  toggleAutoExecuteTool(
+                                    tool.name,
+                                  )
+                                }
+                                className="mt-1 h-4 w-4"
+                              />
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-sm font-medium text-slate-900">
+                                    {tool.name}
+                                  </p>
+
+                                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                                    {tool.tool_type}
+                                  </span>
+
+                                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                                    WRITE
+                                  </span>
+
+                                  <span
+                                    className={
+                                      isAuto
+                                        ? "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"
+                                        : "rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700"
+                                    }
+                                  >
+                                    {isAuto
+                                      ? "AUTO"
+                                      : "HUMAN_APPROVAL"}
+                                  </span>
+                                </div>
+
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {tool.description}
+                                </p>
+
+                                <p className="mt-2 text-xs text-slate-500">
+                                  {isAuto
+                                    ? "This website channel may execute this WRITE tool without a human interrupt."
+                                    : "This website channel does not grant auto-execution for this WRITE tool."}
+                                </p>
+                              </div>
+                            </label>
+                          );
+                        },
+                      )}
+                    </div>
+                  )}
+
+
+                  <div className="border-t border-slate-200 pt-4">
                     <p className="text-sm font-semibold text-slate-900">
                       Contact Capture MVP
                     </p>
@@ -854,29 +1095,14 @@ export default function ManageWebsiteChannelDialog({
                           }}
                           placeholder="create_enquiry"
                         />
+
+                        <p className="text-xs text-slate-500">
+                          Session-start execution is deterministic and separate from
+                          LLM-proposed tool execution policy.
+                        </p>
                       </div>
                     )
                   }
-
-                  <div className="space-y-2">
-                    <Label>
-                      Auto-execute tool names
-                    </Label>
-
-                    <textarea
-                      value={autoExecuteTools}
-                      onChange={(event) => {
-                        setAutoExecuteTools(event.currentTarget.value);
-                      }}
-                      rows={3}
-                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
-                      placeholder="update_enquiry"
-                    />
-
-                    <p className="text-xs text-slate-500">
-                      One tool per line. Only these WRITE tools bypass HITL on this public website channel.
-                    </p>
-                  </div>
                 </div>
               )
             }

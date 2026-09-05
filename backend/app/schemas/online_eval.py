@@ -2,20 +2,11 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-)
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OnlineEvalProcessRequest(BaseModel):
-    limit: int = Field(
-        default=10,
-        ge=1,
-        le=100,
-    )
-
+    limit: int = Field(default=10, ge=1, le=100)
     evaluator_llm_configuration_id: UUID | None = None
 
 
@@ -68,6 +59,7 @@ class OnlineEvalResultSummary(BaseModel):
     contextual_relevancy_score: float | None
     passed: bool | None
     evaluation_outcome: str | None
+    evaluation_metadata: dict[str, Any]
     evaluated_at: datetime | None
     created_at: datetime
 
