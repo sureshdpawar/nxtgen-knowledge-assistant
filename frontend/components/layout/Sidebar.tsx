@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Search,
+  ShieldCheck,
   Users,
   Wrench,
   X,
@@ -155,6 +156,16 @@ const menu: MenuItem[] = [
     label: "LLM Profiles",
     href: "/settings",
     icon: BrainCircuit,
+    roles: [
+      "ADMIN",
+    ],
+    section: "governance",
+  },
+
+  {
+    label: "Approvals",
+    href: "/approvals",
+    icon: ShieldCheck,
     roles: [
       "ADMIN",
     ],
