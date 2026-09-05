@@ -222,7 +222,10 @@ function ApprovalDetails({
 }: {
   approval:
     AgentActionApproval;
-  onClose: () => void;
+  onClose: (
+    resolved?:
+      AgentActionApproval,
+  ) => void;
 }) {
   const approveMutation =
     useApproveAgentAction();
@@ -267,27 +270,34 @@ function ApprovalDetails({
           || null,
       };
 
+      let resolved:
+        AgentActionApproval;
+
       if (
         decision === "approve"
       ) {
-        await approveMutation.mutateAsync(
-          {
-            id:
-              approval.id,
-            payload,
-          },
-        );
+        resolved =
+          await approveMutation.mutateAsync(
+            {
+              id:
+                approval.id,
+              payload,
+            },
+          );
       } else {
-        await rejectMutation.mutateAsync(
-          {
-            id:
-              approval.id,
-            payload,
-          },
-        );
+        resolved =
+          await rejectMutation.mutateAsync(
+            {
+              id:
+                approval.id,
+              payload,
+            },
+          );
       }
 
-      onClose();
+      onClose(
+        resolved,
+      );
     } catch (
       error
     ) {
@@ -1122,6 +1132,13 @@ export default function ApprovalsPage() {
     | null
   >(null);
 
+  const [
+    decisionNotice,
+    setDecisionNotice,
+  ] = useState<
+    string | null
+  >(null);
+
   const {
     data:
       approvals = [],
@@ -1272,6 +1289,88 @@ export default function ApprovalsPage() {
           workflow can continue.
         </p>
       </div>
+
+
+      {
+        decisionNotice
+        && (
+          <div
+            className="
+              flex
+              items-start
+              gap-3
+              rounded-xl
+              border
+              border-blue-200
+              bg-blue-50
+              p-4
+              text-sm
+              text-blue-900
+            "
+          >
+            <CheckCircle2
+              className="
+                mt-0.5
+                h-5
+                w-5
+                shrink-0
+                text-blue-700
+              "
+            />
+
+            <div
+              className="
+                min-w-0
+                flex-1
+              "
+            >
+              <p
+                className="
+                  font-semibold
+                "
+              >
+                Approval decision recorded
+              </p>
+
+              <p
+                className="
+                  mt-1
+                  text-blue-800
+                "
+              >
+                {
+                  decisionNotice
+                }
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setDecisionNotice(
+                  null,
+                )
+              }
+              aria-label="Dismiss approval notice"
+              className="
+                inline-flex
+                h-8
+                w-8
+                shrink-0
+                items-center
+                justify-center
+                rounded-lg
+                text-blue-700
+                hover:bg-blue-100
+              "
+            >
+              <X
+                className="h-4 w-4"
+              />
+            </button>
+          </div>
+        )
+      }
 
 
       <div
@@ -1860,11 +1959,44 @@ export default function ApprovalsPage() {
             approval={
               selected
             }
-            onClose={() =>
+            onClose={(resolved) => {
               setSelected(
                 null,
-              )
-            }
+              );
+
+              if (
+                !resolved
+              ) {
+                return;
+              }
+
+              if (
+                resolved.run_status
+                === "WAITING_FOR_APPROVAL"
+              ) {
+                setDecisionNotice(
+                  (
+                    "This approval was recorded successfully. "
+                    + "The resumed agent has proposed another "
+                    + "action that also requires approval."
+                  ),
+                );
+                return;
+              }
+
+              setDecisionNotice(
+                resolved.status
+                === "APPROVED"
+                  ? (
+                      "The action was approved and "
+                      + "the agent run resumed."
+                    )
+                  : (
+                      "The action was rejected and "
+                      + "the agent run resumed."
+                    ),
+              );
+            }}
           />
         )
       }

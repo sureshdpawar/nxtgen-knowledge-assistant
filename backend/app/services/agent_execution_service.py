@@ -676,6 +676,34 @@ class AgentExecutionService:
                 interrupts
             )
         )
+        
+        
+        logger.info(
+            (
+                "Agent approval requested "
+                "run_id=%s checkpoint_id=%s "
+                "actions=%s"
+            ),
+            run.id,
+            run.checkpoint_id,
+            [
+                {
+                    "name":
+                        action.get(
+                            "name"
+                        ),
+                    "args":
+                        action.get(
+                            "args"
+                        ),
+                    "tool_call_id":
+                        action.get(
+                            "tool_call_id"
+                        ),
+                }
+                for action in actions
+            ],
+        )
 
         if not actions:
             return None
