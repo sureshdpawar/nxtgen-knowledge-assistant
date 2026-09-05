@@ -8,6 +8,7 @@ from pydantic import (
 )
 
 from app.core.enums import (
+    ToolExecutionPolicy,
     ToolRiskLevel,
     ToolType,
 )
@@ -87,3 +88,21 @@ class AgentToolAssignRequest(BaseModel):
     tool_ids: list[UUID] = Field(
         default_factory=list,
     )
+
+
+class AgentToolPolicyUpdateRequest(
+    BaseModel,
+):
+    execution_policy: ToolExecutionPolicy
+
+
+class AgentToolPolicyResponse(
+    BaseModel,
+):
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+    agent_id: UUID
+    tool_id: UUID
+    execution_policy: ToolExecutionPolicy

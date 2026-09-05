@@ -138,6 +138,11 @@ class ToolRiskLevel(str, Enum):
     WRITE = "WRITE"
 
 
+class ToolExecutionPolicy(str, Enum):
+    AUTO = "AUTO"
+    HUMAN_APPROVAL = "HUMAN_APPROVAL"
+
+
 class ChatChannelType(str, Enum):
     PUBLIC_API = "PUBLIC_API"
     WEBSITE = "WEBSITE"

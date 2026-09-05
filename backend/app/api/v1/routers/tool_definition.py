@@ -15,6 +15,8 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.tool_definition import (
     AgentToolAssignRequest,
+    AgentToolPolicyResponse,
+    AgentToolPolicyUpdateRequest,
     ToolDefinitionCreate,
     ToolDefinitionResponse,
     ToolDefinitionUpdate,
@@ -141,4 +143,54 @@ def assign_agent_tools(
         agent_id=agent_id,
         tool_ids=
             payload.tool_ids,
+    )
+
+
+@router.get(
+    "/agents/{agent_id}/tools/policies",
+    response_model=list[
+        AgentToolPolicyResponse
+    ],
+)
+def list_agent_tool_policies(
+    agent_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    return (
+        service.list_agent_tool_policies(
+            db=db,
+            current_user=current_user,
+            agent_id=agent_id,
+        )
+    )
+
+
+@router.put(
+    "/agents/{agent_id}/tools/{tool_id}/policy",
+    response_model=
+        AgentToolPolicyResponse,
+)
+def update_agent_tool_policy(
+    agent_id: UUID,
+    tool_id: UUID,
+    payload:
+        AgentToolPolicyUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    return (
+        service.update_agent_tool_policy(
+            db=db,
+            current_user=current_user,
+            agent_id=agent_id,
+            tool_id=tool_id,
+            execution_policy=(
+                payload.execution_policy
+            ),
+        )
     )

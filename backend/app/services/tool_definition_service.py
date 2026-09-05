@@ -13,6 +13,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Session
 
 from app.core.enums import (
+    ToolExecutionPolicy,
     ToolType,
 )
 from app.models.agent import (
@@ -65,6 +66,30 @@ class ToolDefinitionService:
             )
 
         return integration
+
+    def _get_agent(
+        self,
+        db: Session,
+        current_user: User,
+        agent_id: UUID,
+    ) -> Agent:
+        agent = db.get(
+            Agent,
+            agent_id,
+        )
+
+        if (
+            agent is None
+            or agent.tenant_id
+            != current_user.tenant_id
+        ):
+            raise HTTPException(
+                status_code=
+                    status.HTTP_404_NOT_FOUND,
+                detail="Agent not found.",
+            )
+
+        return agent
 
     def list(
         self,
@@ -382,23 +407,11 @@ class ToolDefinitionService:
         tool_ids: list[UUID],
     ) -> list[ToolDefinition]:
 
-        agent = db.get(
-            Agent,
-            agent_id,
+        agent = self._get_agent(
+            db=db,
+            current_user=current_user,
+            agent_id=agent_id,
         )
-
-        if (
-            agent is None
-            or agent.tenant_id
-            != current_user.tenant_id
-        ):
-            raise HTTPException(
-                status_code=
-                    status.HTTP_404_NOT_FOUND,
-                detail=(
-                    "Agent not found."
-                ),
-            )
 
         unique_ids = list(
             dict.fromkeys(
@@ -445,6 +458,24 @@ class ToolDefinitionService:
                     ),
                 )
 
+        existing_links = list(
+            db.scalars(
+                select(
+                    AgentTool,
+                )
+                .where(
+                    AgentTool.agent_id
+                    == agent.id,
+                )
+            ).all()
+        )
+
+        existing_policies = {
+            link.tool_id:
+                link.execution_policy
+            for link in existing_links
+        }
+
         db.execute(
             delete(
                 AgentTool,
@@ -464,9 +495,106 @@ class ToolDefinitionService:
                         agent.id,
                     tool_id=
                         tool_id,
+                    execution_policy=(
+                        existing_policies.get(
+                            tool_id,
+                            ToolExecutionPolicy
+                            .HUMAN_APPROVAL,
+                        )
+                    ),
                 )
             )
 
         db.commit()
 
         return tools
+
+    def list_agent_tool_policies(
+        self,
+        db: Session,
+        current_user: User,
+        agent_id: UUID,
+    ) -> list[AgentTool]:
+        agent = self._get_agent(
+            db=db,
+            current_user=current_user,
+            agent_id=agent_id,
+        )
+
+        stmt = (
+            select(
+                AgentTool,
+            )
+            .where(
+                AgentTool.agent_id
+                == agent.id,
+            )
+            .order_by(
+                AgentTool.created_at,
+            )
+        )
+
+        return list(
+            db.scalars(
+                stmt,
+            ).all()
+        )
+
+    def update_agent_tool_policy(
+        self,
+        db: Session,
+        current_user: User,
+        agent_id: UUID,
+        tool_id: UUID,
+        execution_policy:
+            ToolExecutionPolicy,
+    ) -> AgentTool:
+        agent = self._get_agent(
+            db=db,
+            current_user=current_user,
+            agent_id=agent_id,
+        )
+
+        stmt = (
+            select(
+                AgentTool,
+            )
+            .join(
+                ToolDefinition,
+                ToolDefinition.id
+                == AgentTool.tool_id,
+            )
+            .where(
+                AgentTool.agent_id
+                == agent.id,
+                AgentTool.tool_id
+                == tool_id,
+                ToolDefinition.tenant_id
+                == current_user.tenant_id,
+            )
+        )
+
+        link = (
+            db.scalars(
+                stmt,
+            ).first()
+        )
+
+        if link is None:
+            raise HTTPException(
+                status_code=
+                    status.HTTP_404_NOT_FOUND,
+                detail=(
+                    "Tool is not assigned "
+                    "to this agent."
+                ),
+            )
+
+        link.execution_policy = (
+            execution_policy
+        )
+
+        db.commit()
+        db.refresh(link)
+
+        return link

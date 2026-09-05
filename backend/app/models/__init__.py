@@ -50,6 +50,9 @@ from app.models.agent_run_step import (
 from app.models.agent_action_approval import (
     AgentActionApproval,
 )
+from app.models.user_agent_access import (
+    UserAgentAccess,
+)
 
 from app.models.integration import Integration
 from app.models.tool_definition import (
@@ -114,6 +117,7 @@ __all__ = [
     "AgentRun",
     "AgentRunStep",
     "AgentActionApproval",
+    "UserAgentAccess",
     "Integration",
     "ToolDefinition",
     "AgentTool",

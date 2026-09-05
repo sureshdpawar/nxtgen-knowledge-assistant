@@ -19,29 +19,69 @@ class ToolExecutionPolicy(
 )
 class ToolExecutionPolicyContext:
     """
-    Execution-policy inputs supplied by the invocation context.
+    Deterministic execution-policy inputs for one invocation.
 
     Risk classification and execution policy are intentionally
     separate concerns:
 
     - risk_level describes what the tool can do
-    - this context describes what the current invocation allows
+    - execution policy describes whether that tool may execute
+      automatically or requires human approval
 
-    For the current MVP:
-    - invocation contexts may explicitly allow selected WRITE
-      tools to auto-execute
-    - invocation contexts also declare whether resumable human
-      approval is supported
+    Explicit policy names are used by authenticated/internal
+    Agent executions after AgentTool policy persistence.
 
-    The support flag does not change HUMAN_APPROVAL into AUTO.
-    It only tells the runtime whether it may pause for approval.
+    auto_execute_tool_names is also retained for the current
+    external-channel compatibility path. Channel policy is
+    intentionally not redesigned in this slice.
     """
 
     auto_execute_tool_names: (
         frozenset[str]
     ) = frozenset()
 
+    human_approval_tool_names: (
+        frozenset[str]
+    ) = frozenset()
+
     human_approval_supported: bool = True
+
+    @classmethod
+    def from_tool_policy_names(
+        cls,
+        auto_execute_tool_names:
+            set[str] | None,
+        human_approval_tool_names:
+            set[str] | None = None,
+        *,
+        human_approval_supported: bool = True,
+    ) -> "ToolExecutionPolicyContext":
+        auto_names = frozenset(
+            str(name).strip()
+            for name in (
+                auto_execute_tool_names
+                or set()
+            )
+            if str(name).strip()
+        )
+
+        approval_names = frozenset(
+            str(name).strip()
+            for name in (
+                human_approval_tool_names
+                or set()
+            )
+            if str(name).strip()
+        )
+
+        return cls(
+            auto_execute_tool_names=
+                auto_names,
+            human_approval_tool_names=
+                approval_names,
+            human_approval_supported=
+                human_approval_supported,
+        )
 
     @classmethod
     def from_auto_execute_tool_names(
@@ -50,18 +90,14 @@ class ToolExecutionPolicyContext:
         *,
         human_approval_supported: bool = True,
     ) -> "ToolExecutionPolicyContext":
-        normalized = frozenset(
-            str(name).strip()
-            for name in (
-                names
-                or set()
-            )
-            if str(name).strip()
-        )
-
-        return cls(
+        """
+        Backwards-compatible constructor for existing callers.
+        """
+        return cls.from_tool_policy_names(
             auto_execute_tool_names=
-                normalized,
+                names,
+            human_approval_tool_names=
+                None,
             human_approval_supported=
                 human_approval_supported,
         )
@@ -73,21 +109,19 @@ class ToolExecutionPolicyResolver:
 
     The LLM never decides this policy.
 
-    Current MVP behavior is preserved:
-    - READ tools execute automatically.
-    - WRITE tools explicitly allowed by the invocation context
-      execute automatically.
-    - Other WRITE tools require human approval.
+    Resolution order:
+    1. explicit HUMAN_APPROVAL assignment
+    2. explicit AUTO assignment
+    3. legacy MVP fallback:
+       - READ -> AUTO
+       - WRITE -> HUMAN_APPROVAL
 
-    Future policy sources can be added here without changing the
-    LangGraph approval node: tenant policy, agent policy, channel
-    policy, user role, environment, tool-level policy, etc.
+    Checking HUMAN_APPROVAL first is intentionally fail-safe if
+    contradictory policy inputs are ever supplied.
 
-    Note:
     human_approval_supported is an execution capability, not a
-    policy override. A HUMAN_APPROVAL action must never be silently
-    converted to AUTO merely because the current channel cannot
-    support approval.
+    policy override. A HUMAN_APPROVAL action is never converted
+    to AUTO merely because the current surface cannot pause.
     """
 
     def resolve(
@@ -117,11 +151,13 @@ class ToolExecutionPolicyResolver:
         )
 
         if (
-            normalized_risk
-            != "WRITE"
+            normalized_name
+            in resolved_context
+            .human_approval_tool_names
         ):
             return (
-                ToolExecutionPolicy.AUTO
+                ToolExecutionPolicy
+                .HUMAN_APPROVAL
             )
 
         if (
@@ -129,6 +165,11 @@ class ToolExecutionPolicyResolver:
             in resolved_context
             .auto_execute_tool_names
         ):
+            return (
+                ToolExecutionPolicy.AUTO
+            )
+
+        if normalized_risk != "WRITE":
             return (
                 ToolExecutionPolicy.AUTO
             )
