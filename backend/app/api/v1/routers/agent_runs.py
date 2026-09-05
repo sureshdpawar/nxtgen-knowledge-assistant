@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import (
     APIRouter,
     Depends,
+    Query,
     status,
 )
 from sqlalchemy.orm import Session
@@ -12,6 +13,9 @@ from app.auth.permissions import (
 )
 from app.db.session import get_db
 from app.models.user import User
+from app.schemas.agent_observability import (
+    AgentObservabilityResponse,
+)
 from app.schemas.agent_run import (
     AgentRunDetailResponse,
     AgentRunListResponse,
@@ -19,6 +23,9 @@ from app.schemas.agent_run import (
 from app.schemas.eval_promotion import (
     AgentRunEvalPromotionRequest,
     AgentRunEvalPromotionResponse,
+)
+from app.services.agent_observability_service import (
+    AgentObservabilityService,
 )
 from app.services.agent_run_service import (
     AgentRunService,
@@ -35,6 +42,10 @@ router = APIRouter(
 
 
 service = AgentRunService()
+
+observability_service = (
+    AgentObservabilityService()
+)
 
 promotion_service = (
     EvalPromotionService()
@@ -63,6 +74,36 @@ def list_agent_runs(
                 current_user,
             agent_id=
                 agent_id,
+        )
+    )
+
+
+@router.get(
+    "/agent/{agent_id}/metrics",
+    response_model=
+        AgentObservabilityResponse,
+)
+def get_agent_metrics(
+    agent_id: UUID,
+    hours: int = Query(
+        default=24,
+        ge=1,
+        le=720,
+    ),
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    return (
+        observability_service
+        .get_agent_metrics(
+            db=db,
+            current_user=current_user,
+            agent_id=agent_id,
+            hours=hours,
         )
     )
 
