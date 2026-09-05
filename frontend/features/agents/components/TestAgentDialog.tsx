@@ -1,7 +1,9 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import Link from "next/link";
 import {
+  ArrowRight,
   Bot,
   CheckCircle2,
   Clock3,
@@ -12,7 +14,6 @@ import {
   RotateCcw,
   ShieldAlert,
   Wrench,
-  XCircle,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -25,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { resumeAgent, runAgentStream } from "../api";
+import { runAgentStream } from "../api";
 import {
   useAgentCheckpointHistory,
   useAgentGraphState,
@@ -60,18 +61,78 @@ export default function TestAgentDialog({ agent }: Props) {
   const [progress, setProgress] = useState<AgentProgressItem[]>([]);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
 
   const runDetailsQuery = useAgentRun(runId);
   const graphStateQuery = useAgentGraphState(agent.id, threadId);
   const historyQuery = useAgentCheckpointHistory(agent.id, threadId);
 
   async function refreshRuntime() {
-    await Promise.all([
+    const [
+      graphStateResult,
+      historyResult,
+      runResult,
+    ] = await Promise.all([
       graphStateQuery.refetch(),
       historyQuery.refetch(),
-      runId ? runDetailsQuery.refetch() : Promise.resolve(),
+      runId
+        ? runDetailsQuery.refetch()
+        : Promise.resolve(null),
     ]);
+
+    if (
+      approval
+      && runResult?.data
+      && runResult.data.status
+        !== "WAITING_FOR_APPROVAL"
+    ) {
+      setApproval(null);
+
+      setMessages((current) => {
+        const next: ConversationMessage[] = [
+          ...current,
+          {
+            id: `approval-resolved-${Date.now()}`,
+            role: "system",
+            content:
+              runResult.data.status === "COMPLETED"
+                ? "The approval was resolved and the agent run resumed successfully."
+                : "The approval decision was recorded and the agent run resumed.",
+          },
+        ];
+
+        if (
+          runResult.data.answer
+          && !current.some(
+            (message) =>
+              message.role === "assistant"
+              && message.content
+                === runResult.data.answer,
+          )
+        ) {
+          next.push({
+            id: `assistant-resumed-${runResult.data.id}-${Date.now()}`,
+            role: "assistant",
+            content:
+              runResult.data.answer,
+          });
+        }
+
+        return next;
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: [
+          "agent-runs",
+          agent.id,
+        ],
+      });
+    }
+
+    return {
+      graphStateResult,
+      historyResult,
+      runResult,
+    };
   }
 
   function newConversation() {
@@ -84,7 +145,6 @@ export default function TestAgentDialog({ agent }: Props) {
     setProgress([]);
     setMessages([]);
     setError(null);
-    setRejectReason("");
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -175,7 +235,8 @@ export default function TestAgentDialog({ agent }: Props) {
         {
           id: `approval-${event.result.run_id}`,
           role: "system",
-          content: "Human approval is required before the requested write action can execute.",
+          content:
+            "This run is waiting for a governed action approval. Review and decide it from Governance → Approvals.",
         },
       ]);
       void refreshRuntime();
@@ -246,60 +307,6 @@ export default function TestAgentDialog({ agent }: Props) {
     }
   }
 
-  async function decide(decision: "approve" | "reject") {
-    if (!approval || running) return;
-
-    setRunning(true);
-    setError(null);
-
-    try {
-      const resumed = await resumeAgent(
-        agent.id,
-        approval.run_id,
-        {
-          decision,
-          reason: decision === "reject" ? rejectReason.trim() || null : null,
-        },
-      );
-
-      setResult(resumed);
-      setApproval(
-        resumed.status === "WAITING_FOR_APPROVAL" ? resumed : null,
-      );
-      setRunId(resumed.run_id);
-      setThreadId(resumed.thread_id);
-
-      setMessages((current) => [
-        ...current,
-        {
-          id: `decision-${Date.now()}`,
-          role: "system",
-          content:
-            decision === "approve"
-              ? "Human approved the requested action."
-              : `Human rejected the requested action${rejectReason.trim() ? `: ${rejectReason.trim()}` : "."}`,
-        },
-        ...(resumed.answer
-          ? [
-              {
-                id: `assistant-${resumed.run_id}-${Date.now()}`,
-                role: "assistant" as const,
-                content: resumed.answer,
-              },
-            ]
-          : []),
-      ]);
-
-      setRejectReason("");
-      queryClient.invalidateQueries({ queryKey: ["agent-runs", agent.id] });
-      await refreshRuntime();
-    } catch {
-      setError("Failed to resume the interrupted LangGraph run.");
-    } finally {
-      setRunning(false);
-    }
-  }
-
   const graphState = graphStateQuery.data;
 
   return (
@@ -314,7 +321,7 @@ export default function TestAgentDialog({ agent }: Props) {
       </Button>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-h-[94vh] overflow-y-auto sm:max-w-6xl">
+        <DialogContent className="max-h-[94vh] overflow-y-auto sm:max-w-7xl">
           <DialogHeader>
             <div className="flex items-start justify-between gap-4 pr-8">
               <div>
@@ -323,7 +330,7 @@ export default function TestAgentDialog({ agent }: Props) {
                   Agent Studio · Runtime
                 </DialogTitle>
                 <DialogDescription className="mt-1">
-                  Exercise durable LangGraph threads, checkpoints, tools and human approval for{" "}
+                  Exercise durable LangGraph threads, checkpoints, tools and governed action approvals for{" "}
                   <span className="font-medium text-slate-700">{agent.name}</span>.
                 </DialogDescription>
               </div>
@@ -334,7 +341,7 @@ export default function TestAgentDialog({ agent }: Props) {
             </div>
           </DialogHeader>
 
-          <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="grid gap-6 lg:grid-cols-2">
             <div className="space-y-4">
               <div className="rounded-xl border bg-white">
                 <div className="border-b px-4 py-3">
@@ -374,12 +381,34 @@ export default function TestAgentDialog({ agent }: Props) {
                 <form onSubmit={submit} className="border-t p-4">
                   <textarea
                     value={query}
-                    onChange={(event) => setQuery(event.target.value)}
+                    onChange={(event) =>
+                      setQuery(event.target.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === "Enter"
+                        && !event.shiftKey
+                      ) {
+                        event.preventDefault();
+
+                        if (
+                          !running
+                          && !approval
+                          && query.trim()
+                        ) {
+                          event.currentTarget
+                            .form
+                            ?.requestSubmit();
+                        }
+                      }
+                    }}
                     rows={3}
-                    disabled={running || Boolean(approval)}
+                    disabled={
+                      running || Boolean(approval)
+                    }
                     placeholder={
                       approval
-                        ? "Resolve the pending approval before sending another message."
+                        ? "This run is waiting for an Admin decision in Governance → Approvals."
                         : "Message the agent..."
                     }
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 disabled:bg-slate-50"
@@ -405,9 +434,13 @@ export default function TestAgentDialog({ agent }: Props) {
                   <div className="flex items-start gap-3">
                     <ShieldAlert className="mt-0.5 h-5 w-5 text-amber-700" />
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-amber-950">Human approval required</h3>
+                      <h3 className="font-semibold text-amber-950">Waiting for approval</h3>
                       <p className="mt-1 text-sm text-amber-800">
-                        LangGraph is interrupted. No write tool executes until a human resumes this same run.
+                        LangGraph has persisted and paused this run because one or more proposed actions require human approval. The action has not executed.
+                      </p>
+
+                      <p className="mt-2 text-sm text-amber-800">
+                        Approval decisions are managed centrally under Governance → Approvals. After an Admin approves or rejects the request, this persisted run resumes from the same checkpoint.
                       </p>
 
                       <div className="mt-4 space-y-3">
@@ -421,22 +454,41 @@ export default function TestAgentDialog({ agent }: Props) {
                         ))}
                       </div>
 
-                      <textarea
-                        value={rejectReason}
-                        onChange={(event) => setRejectReason(event.target.value)}
-                        rows={2}
-                        placeholder="Optional rejection reason"
-                        className="mt-4 w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm"
-                      />
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <Link
+                          href="/approvals"
+                          className="
+                            inline-flex
+                            h-10
+                            items-center
+                            justify-center
+                            rounded-md
+                            bg-primary
+                            px-4
+                            py-2
+                            text-sm
+                            font-medium
+                            text-primary-foreground
+                            shadow
+                            transition-colors
+                            hover:bg-primary/90
+                            focus-visible:outline-none
+                            focus-visible:ring-1
+                            focus-visible:ring-ring
+                          "
+                        >
+                          Open Governance Approvals
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </Link>
 
-                      <div className="mt-3 flex gap-2">
-                        <Button type="button" variant="outline" disabled={running} onClick={() => decide("reject")}>
-                          <XCircle className="mr-2 h-4 w-4" />
-                          Reject
-                        </Button>
-                        <Button type="button" disabled={running} onClick={() => decide("approve")}>
-                          <CheckCircle2 className="mr-2 h-4 w-4" />
-                          Approve & Resume
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={graphStateQuery.isFetching || historyQuery.isFetching}
+                          onClick={() => void refreshRuntime()}
+                        >
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Refresh Runtime
                         </Button>
                       </div>
                     </div>
