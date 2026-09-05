@@ -509,6 +509,65 @@ class ToolDefinitionService:
 
         return tools
 
+    def list_agent_tools(
+        self,
+        db: Session,
+        current_user: User,
+        agent_id: UUID,
+    ) -> list[dict]:
+        agent = self._get_agent(
+            db=db,
+            current_user=current_user,
+            agent_id=agent_id,
+        )
+
+        stmt = (
+            select(
+                AgentTool,
+                ToolDefinition,
+            )
+            .join(
+                ToolDefinition,
+                ToolDefinition.id
+                == AgentTool.tool_id,
+            )
+            .where(
+                AgentTool.agent_id
+                == agent.id,
+                ToolDefinition.tenant_id
+                == current_user.tenant_id,
+            )
+            .order_by(
+                ToolDefinition.name,
+            )
+        )
+
+        rows = db.execute(
+            stmt,
+        ).all()
+
+        return [
+            {
+                "agent_id":
+                    link.agent_id,
+                "tool_id":
+                    tool.id,
+                "name":
+                    tool.name,
+                "description":
+                    tool.description,
+                "tool_type":
+                    tool.tool_type,
+                "risk_level":
+                    tool.risk_level,
+                "execution_policy":
+                    link.execution_policy,
+                "is_active":
+                    tool.is_active,
+            }
+            for link, tool in rows
+        ]
+
     def list_agent_tool_policies(
         self,
         db: Session,

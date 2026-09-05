@@ -14,6 +14,7 @@ from app.auth.permissions import (
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.tool_definition import (
+    AgentAssignedToolResponse,
     AgentToolAssignRequest,
     AgentToolPolicyResponse,
     AgentToolPolicyUpdateRequest,
@@ -119,6 +120,26 @@ def delete_tool(
     return Response(
         status_code=
             status.HTTP_204_NO_CONTENT,
+    )
+
+
+@router.get(
+    "/agents/{agent_id}/tools",
+    response_model=list[
+        AgentAssignedToolResponse
+    ],
+)
+def list_agent_tools(
+    agent_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    return service.list_agent_tools(
+        db=db,
+        current_user=current_user,
+        agent_id=agent_id,
     )
 
 

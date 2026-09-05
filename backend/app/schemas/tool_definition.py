@@ -106,3 +106,19 @@ class AgentToolPolicyResponse(
     agent_id: UUID
     tool_id: UUID
     execution_policy: ToolExecutionPolicy
+
+
+class AgentAssignedToolResponse(
+    BaseModel,
+):
+    agent_id: UUID
+    tool_id: UUID
+
+    name: str
+    description: str
+
+    tool_type: ToolType
+    risk_level: ToolRiskLevel
+    execution_policy: ToolExecutionPolicy
+
+    is_active: bool

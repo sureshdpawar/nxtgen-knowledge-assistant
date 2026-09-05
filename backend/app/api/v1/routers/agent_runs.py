@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import (
     APIRouter,
     Depends,
+    status,
 )
 from sqlalchemy.orm import Session
 
@@ -15,8 +16,15 @@ from app.schemas.agent_run import (
     AgentRunDetailResponse,
     AgentRunListResponse,
 )
+from app.schemas.eval_promotion import (
+    AgentRunEvalPromotionRequest,
+    AgentRunEvalPromotionResponse,
+)
 from app.services.agent_run_service import (
     AgentRunService,
+)
+from app.services.eval_promotion_service import (
+    EvalPromotionService,
 )
 
 
@@ -27,6 +35,10 @@ router = APIRouter(
 
 
 service = AgentRunService()
+
+promotion_service = (
+    EvalPromotionService()
+)
 
 
 @router.get(
@@ -75,4 +87,30 @@ def get_agent_run(
             current_user,
         run_id=
             run_id,
+    )
+
+
+@router.post(
+    "/{run_id}/promote-to-eval",
+    response_model=
+        AgentRunEvalPromotionResponse,
+    status_code=
+        status.HTTP_201_CREATED,
+)
+def promote_agent_run_to_eval(
+    run_id: UUID,
+    payload:
+        AgentRunEvalPromotionRequest,
+    db: Session = Depends(
+        get_db,
+    ),
+    current_user: User = Depends(
+        require_admin,
+    ),
+):
+    return promotion_service.promote(
+        db=db,
+        current_user=current_user,
+        run_id=run_id,
+        payload=payload,
     )

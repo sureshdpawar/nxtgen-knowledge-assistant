@@ -25,6 +25,9 @@ from app.schemas.agent import (
     AgentCreate,
     AgentUpdate,
 )
+from app.services.agent_access_service import (
+    AgentAccessService,
+)
 
 
 class AgentService:
@@ -32,6 +35,9 @@ class AgentService:
     def __init__(self):
         self.repository = (
             AgentRepository()
+        )
+        self.access_service = (
+            AgentAccessService()
         )
 
     def _validate_llm_configuration(
@@ -164,11 +170,10 @@ class AgentService:
     ) -> list[Agent]:
 
         return (
-            self.repository
-            .list_by_tenant(
+            self.access_service
+            .list_accessible_agents(
                 db=db,
-                tenant_id=
-                    current_user.tenant_id,
+                current_user=current_user,
             )
         )
 
@@ -179,27 +184,14 @@ class AgentService:
         agent_id: UUID,
     ) -> Agent:
 
-        agent = (
-            self.repository
-            .get_by_id_and_tenant(
+        return (
+            self.access_service
+            .require_agent_access(
                 db=db,
-                tenant_id=
-                    current_user.tenant_id,
-                agent_id=
-                    agent_id,
+                current_user=current_user,
+                agent_id=agent_id,
             )
         )
-
-        if agent is None:
-            raise HTTPException(
-                status_code=
-                    status.HTTP_404_NOT_FOUND,
-                detail=(
-                    "Agent not found."
-                ),
-            )
-
-        return agent
 
     def create(
         self,
