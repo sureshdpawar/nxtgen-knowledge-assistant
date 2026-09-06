@@ -19,6 +19,9 @@ from app.models.user import User
 from app.services.agent_execution_service import (
     AgentExecutionService,
 )
+from app.services.agent_online_eval_capture_service import (
+    AgentOnlineEvalCaptureService,
+)
 from app.services.conversation_service import (
     ConversationService,
 )
@@ -29,6 +32,9 @@ class AgentActionApprovalService:
     def __init__(self):
         self.execution_service = (
             AgentExecutionService()
+        )
+        self.agent_online_eval_capture_service = (
+            AgentOnlineEvalCaptureService()
         )
         self.conversation_service = (
             ConversationService()
@@ -186,7 +192,7 @@ class AgentActionApprovalService:
     ) -> dict:
         approval = (
             self._get_for_admin(
-                db,
+                db=db,
                 current_user=
                     current_user,
                 approval_id=
@@ -292,6 +298,59 @@ class AgentActionApprovalService:
             token_usage={},
         )
 
+    def _capture_completed_agent_eval(
+        self,
+        db: Session,
+        *,
+        approval: AgentActionApproval,
+        run_result: dict,
+    ) -> None:
+        """
+        Central approval is the completion path for
+        governed Agent Chat runs.
+
+        The normal AgentExecutionService.run() path
+        captures online evaluation only when the run
+        completes without interruption. A governed run
+        that pauses for HUMAN_APPROVAL therefore needs
+        its online-evaluation capture after the final
+        resume completes.
+
+        AgentOnlineEvalCaptureService can reconstruct
+        RAG evidence from persisted AgentRunStep rows,
+        so no LangGraph message payload needs to be
+        passed through the governance API.
+        """
+
+        if (
+            run_result.get("status")
+            != AgentRunStatus.COMPLETED
+            or not run_result.get("answer")
+        ):
+            return
+
+        run = approval.run
+        agent = approval.agent
+
+        configuration = (
+            self.execution_service
+            ._resolve_llm_configuration(
+                db=db,
+                agent=agent,
+            )
+        )
+
+        self.agent_online_eval_capture_service.capture_if_sampled(
+            db=db,
+            agent=agent,
+            run=run,
+            configuration=configuration,
+            messages=[],
+            source_trace_id=None,
+        )
+
+        db.commit()
+
     async def _decide(
         self,
         db: Session,
@@ -372,6 +431,12 @@ class AgentActionApprovalService:
         )
 
         self._sync_agent_chat_conversation(
+            db,
+            approval=approval,
+            run_result=run_result,
+        )
+
+        self._capture_completed_agent_eval(
             db,
             approval=approval,
             run_result=run_result,
