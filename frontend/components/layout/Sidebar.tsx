@@ -36,6 +36,7 @@ type SidebarProps = {
 
 type MenuSection =
   | "main"
+  | "chat"
   | "knowledge"
   | "studio"
   | "evaluation"
@@ -71,6 +72,26 @@ const menu: MenuItem[] = [
   },
 
   {
+    label: "KB Chat",
+    href: "/chat",
+    icon: MessageSquare,
+    roles: [
+      "USER",
+    ],
+    section: "chat",
+  },
+
+  {
+    label: "Agent Chat",
+    href: "/agent-chat",
+    icon: Bot,
+    roles: [
+      "USER",
+    ],
+    section: "chat",
+  },
+
+  {
     label: "Knowledge Bases",
     href: "/knowledge-bases",
     icon: Database,
@@ -97,7 +118,6 @@ const menu: MenuItem[] = [
     icon: MessageSquare,
     roles: [
       "ADMIN",
-      "USER",
     ],
     section: "knowledge",
   },
@@ -106,6 +126,16 @@ const menu: MenuItem[] = [
     label: "Agents",
     href: "/agents",
     icon: Bot,
+    roles: [
+      "ADMIN",
+    ],
+    section: "studio",
+  },
+
+  {
+    label: "Chat",
+    href: "/agent-chat",
+    icon: MessageSquare,
     roles: [
       "ADMIN",
     ],
@@ -219,6 +249,7 @@ const sectionLabels: Record<
   string
 > = {
   main: "",
+  chat: "Chat",
   knowledge: "Knowledge",
   studio: "Agent Studio",
   evaluation: "Evaluation",
@@ -229,6 +260,7 @@ const sectionLabels: Record<
 
 const sectionOrder: MenuSection[] = [
   "main",
+  "chat",
   "knowledge",
   "studio",
   "evaluation",
@@ -525,9 +557,7 @@ export default function Sidebar({
 
                         return (
                           <Link
-                            key={
-                              item.href
-                            }
+                            key={`${item.section}-${item.href}`}
                             href={
                               item.href
                             }
