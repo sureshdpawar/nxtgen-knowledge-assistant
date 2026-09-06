@@ -9,6 +9,7 @@ from pydantic import (
 )
 
 from app.core.enums import (
+    AgentActionApprovalStatus,
     AgentRunStatus,
     AgentRunStepStatus,
     AgentRunStepType,
@@ -68,6 +69,22 @@ class AgentRunStepResponse(BaseModel):
     created_at: datetime
 
 
+class AgentRunApprovalResponse(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+    id: UUID
+    checkpoint_id: str
+    actions: list
+    status: AgentActionApprovalStatus
+
+    requested_at: datetime
+    decided_at: datetime | None
+    decided_by_user_id: UUID | None
+    decision_reason: str | None
+
+
 class AgentRunListResponse(BaseModel):
     model_config = ConfigDict(
         from_attributes=True,
@@ -124,6 +141,12 @@ class AgentRunDetailResponse(
     steps: list[
         AgentRunStepResponse
     ]
+
+    approvals: list[
+        AgentRunApprovalResponse
+    ] = Field(
+        default_factory=list,
+    )
 
 
 class AgentGraphStateResponse(BaseModel):
