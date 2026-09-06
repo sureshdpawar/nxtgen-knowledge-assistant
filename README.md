@@ -1,4 +1,4 @@
-# Knowgentiq - Enterprise GenAI Knowledge & Agents Platform 
+# Knowgentiq - Enterprise Knowledge & Agents Platform 
 
 **A governed enterprise RAG and agent platform for organizational knowledge, controlled tool execution, human approval, access enforcement, and production feedback.**
 
