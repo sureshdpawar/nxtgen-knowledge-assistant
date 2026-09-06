@@ -19,6 +19,15 @@ export type AgentRunStatus =
   (typeof AGENT_RUN_STATUSES)[number];
 
 
+export const AGENT_TOOL_EXECUTION_POLICIES = [
+  "AUTO",
+  "HUMAN_APPROVAL",
+] as const;
+
+export type AgentToolExecutionPolicy =
+  (typeof AGENT_TOOL_EXECUTION_POLICIES)[number];
+
+
 export type AgentRunStepType =
   | "LLM"
   | "TOOL";
@@ -54,7 +63,8 @@ export interface CreateAgentRequest {
   description?: string;
   system_prompt: string;
 
-  llm_configuration_id?: string | null;
+  llm_configuration_id?:
+    string | null;
 
   max_iterations: number;
   status: AgentStatus;
@@ -68,7 +78,8 @@ export interface UpdateAgentRequest {
   description?: string | null;
   system_prompt?: string;
 
-  llm_configuration_id?: string | null;
+  llm_configuration_id?:
+    string | null;
 
   max_iterations?: number;
   status?: AgentStatus;
@@ -82,9 +93,32 @@ export interface AssignAgentToolsRequest {
 }
 
 
+export interface AgentAssignedTool {
+  agent_id: string;
+  tool_id: string;
+
+  name: string;
+  description: string;
+
+  tool_type: string;
+  risk_level: string;
+  execution_policy:
+    AgentToolExecutionPolicy;
+
+  is_active: boolean;
+}
+
+
+export interface AgentToolPolicy {
+  agent_id: string;
+  tool_id: string;
+  execution_policy:
+    AgentToolExecutionPolicy;
+}
+
+
 export interface AgentRunRequest {
   query: string;
-
   thread_id?: string | null;
 }
 
@@ -108,6 +142,7 @@ export interface AgentInterrupt {
       unknown
     >;
     risk_level?: string;
+    execution_policy?: string;
   }>;
 
   [key: string]: unknown;
@@ -163,28 +198,11 @@ export interface AgentRun {
   tenant_id: string;
   agent_id: string;
 
-  /*
-   * Internal Agent Studio runs have a user_id.
-   * Public website visitors do not.
-   */
   user_id: string | null;
 
-  /*
-   * Actor identity is intentionally separate
-   * from the authenticated application user.
-   *
-   * Examples:
-   * USER
-   * WEBSITE_VISITOR
-   */
   actor_type: string;
   actor_id: string;
 
-  /*
-   * Correlation/business metadata.
-   *
-   * Keep this generic at the platform layer.
-   */
   context_metadata:
     | Record<string, unknown>
     | null;
@@ -258,22 +276,21 @@ export interface AgentGraphState {
 
   interrupts: AgentInterrupt[];
 
-  state: {
-    messages?: AgentGraphMessage[];
+  messages?: AgentGraphMessage[];
+}
 
-    message_count?: number;
-    llm_calls?: number;
 
-    active_run_id?:
-      | string
-      | null;
+export interface AgentCheckpoint {
+  checkpoint_id: string | null;
 
-    approval?: unknown;
+  next: string[];
 
-    trace_count?: number;
+  created_at: string | null;
 
-    [key: string]: unknown;
-  };
+  metadata:
+    Record<string, unknown>;
+
+  interrupts: AgentInterrupt[];
 }
 
 
@@ -281,84 +298,52 @@ export interface AgentCheckpointHistory {
   thread_id: string;
 
   checkpoints:
-    AgentGraphState[];
+    AgentCheckpoint[];
 }
 
 
 export type AgentProgressEvent =
   | {
-      type: "run_started";
-      run_id: string;
-      thread_id?: string;
-      agent_id: string;
-      agent_name: string;
-      tools: string[];
-    }
-  | {
-      type: "llm_started";
-      iteration: number;
-    }
-  | {
-      type: "llm_completed";
-      iteration: number;
-      duration_ms: number;
-      has_tool_calls: boolean;
-      tools: string[];
-    }
-  | {
-      type: "tool_started";
-      name: string;
-      args: Record<
-        string,
-        unknown
-      >;
-    }
-  | {
-      type: "tool_completed";
-      name: string;
-      duration_ms: number;
-      output: unknown;
-    }
-  | {
-      type: "approval_required";
-      result: AgentRunResponse;
-    }
-  | {
-      type: "completed";
-      result: AgentRunResponse;
-    }
-  | {
-      type: "failed";
+      type:
+        "agent_started";
       run_id?: string;
-      thread_id?: string;
-      message: string;
+    }
+  | {
+      type:
+        "llm_start";
+      step?: number;
+    }
+  | {
+      type:
+        "llm_end";
+      step?: number;
+    }
+  | {
+      type:
+        "tool_start";
+      tool?: string;
+    }
+  | {
+      type:
+        "tool_end";
+      tool?: string;
+    }
+  | {
+      type:
+        "approval_required";
+      result?: AgentRunResponse;
+    }
+  | {
+      type:
+        "completed";
+      result?: AgentRunResponse;
+    }
+  | {
+      type:
+        "error";
+      message?: string;
+    }
+  | {
+      type: string;
+      [key: string]: unknown;
     };
-
-
-export interface AgentProgressItem {
-  id: string;
-
-  type:
-    | "LLM"
-    | "TOOL";
-
-  name: string;
-
-  status:
-    | "RUNNING"
-    | "COMPLETED";
-
-  duration_ms?: number;
-}
-
-
-export interface ConversationMessage {
-  id: string;
-
-  role:
-    | "user"
-    | "assistant"
-    | "system";
-
-  content: string;
-}

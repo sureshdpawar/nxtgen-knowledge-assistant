@@ -2,6 +2,7 @@
 
 import {
   type FormEvent,
+  useEffect,
   useState,
 } from "react";
 
@@ -37,8 +38,10 @@ import {
 } from "@/features/tools/hooks";
 
 import {
+  useAgentAssignedTools,
   useAssignAgentTools,
   useUpdateAgent,
+  useUpdateAgentToolPolicy,
 } from "../hooks";
 
 import {
@@ -48,12 +51,35 @@ import {
 import type {
   Agent,
   AgentStatus,
+  AgentToolExecutionPolicy,
 } from "../types";
 
 
 type Props = {
   agent: Agent;
 };
+
+
+function defaultPolicy(
+  riskLevel: string,
+): AgentToolExecutionPolicy {
+  return (
+    riskLevel === "WRITE"
+      ? "HUMAN_APPROVAL"
+      : "AUTO"
+  );
+}
+
+
+function parseExecutionPolicy(
+  value: string,
+): AgentToolExecutionPolicy {
+  return (
+    value === "HUMAN_APPROVAL"
+      ? "HUMAN_APPROVAL"
+      : "AUTO"
+  );
+}
 
 
 export default function EditAgentDialog({
@@ -65,6 +91,9 @@ export default function EditAgentDialog({
   const assignToolsMutation =
     useAssignAgentTools();
 
+  const updateToolPolicyMutation =
+    useUpdateAgentToolPolicy();
+
   const llmProfilesQuery =
     useLLMProfiles();
 
@@ -74,11 +103,18 @@ export default function EditAgentDialog({
   const toolsQuery =
     useTools();
 
-
   const [
     open,
     setOpen,
-  ] = useState(false);
+  ] = useState(
+    false,
+  );
+
+  const assignedToolsQuery =
+    useAgentAssignedTools(
+      agent.id,
+      open,
+    );
 
   const [
     name,
@@ -91,7 +127,8 @@ export default function EditAgentDialog({
     description,
     setDescription,
   ] = useState(
-    agent.description ?? "",
+    agent.description
+      ?? "",
   );
 
   const [
@@ -136,8 +173,19 @@ export default function EditAgentDialog({
     toolIds,
     setToolIds,
   ] = useState<string[]>(
-    agent.tool_ids ?? [],
+    agent.tool_ids
+      ?? [],
   );
+
+  const [
+    toolPolicies,
+    setToolPolicies,
+  ] = useState<
+    Record<
+      string,
+      AgentToolExecutionPolicy
+    >
+  >({});
 
   const [
     localError,
@@ -146,11 +194,45 @@ export default function EditAgentDialog({
     string | null
   >(null);
 
+  useEffect(
+    () => {
+      if (
+        !open
+        || !assignedToolsQuery.data
+      ) {
+        return;
+      }
+
+      const policies:
+        Record<
+          string,
+          AgentToolExecutionPolicy
+        > = {};
+
+      for (
+        const tool
+        of assignedToolsQuery.data
+      ) {
+        policies[
+          tool.tool_id
+        ] =
+          tool.execution_policy;
+      }
+
+      setToolPolicies(
+        policies,
+      );
+    },
+    [
+      open,
+      assignedToolsQuery.data,
+    ],
+  );
 
   const isSaving =
     updateMutation.isPending
-    || assignToolsMutation.isPending;
-
+    || assignToolsMutation.isPending
+    || updateToolPolicyMutation.isPending;
 
   function resetForm() {
     setName(
@@ -186,12 +268,18 @@ export default function EditAgentDialog({
     );
 
     setToolIds(
-      agent.tool_ids ?? [],
+      agent.tool_ids
+        ?? [],
     );
 
-    setLocalError(null);
-  }
+    setToolPolicies(
+      {},
+    );
 
+    setLocalError(
+      null,
+    );
+  }
 
   function handleOpenChange(
     nextOpen: boolean,
@@ -200,11 +288,12 @@ export default function EditAgentDialog({
       nextOpen,
     );
 
-    if (nextOpen) {
+    if (
+      nextOpen
+    ) {
       resetForm();
     }
   }
-
 
   function handleStatusChange(
     value: string,
@@ -220,43 +309,54 @@ export default function EditAgentDialog({
     }
   }
 
-
   function toggleKnowledgeBase(
     id: string,
   ) {
     setKnowledgeBaseIds(
-      (current) => {
-        if (
-          current.includes(id)
-        ) {
-          return current.filter(
-            (value) =>
-              value !== id,
-          );
-        }
-
-        return [
-          ...current,
+      (current) =>
+        current.includes(
           id,
-        ];
-      },
+        )
+          ? current.filter(
+              (value) =>
+                value !== id,
+            )
+          : [
+              ...current,
+              id,
+            ],
     );
   }
 
-
   function toggleTool(
     id: string,
+    riskLevel: string,
   ) {
     setToolIds(
       (current) => {
         if (
-          current.includes(id)
+          current.includes(
+            id,
+          )
         ) {
           return current.filter(
             (value) =>
               value !== id,
           );
         }
+
+        setToolPolicies(
+          (
+            currentPolicies,
+          ) => ({
+            ...currentPolicies,
+            [id]:
+              currentPolicies[id]
+              ?? defaultPolicy(
+                riskLevel,
+              ),
+          }),
+        );
 
         return [
           ...current,
@@ -266,6 +366,19 @@ export default function EditAgentDialog({
     );
   }
 
+  function setPolicy(
+    toolId: string,
+    executionPolicy:
+      AgentToolExecutionPolicy,
+  ) {
+    setToolPolicies(
+      (current) => ({
+        ...current,
+        [toolId]:
+          executionPolicy,
+      }),
+    );
+  }
 
   async function submit(
     event:
@@ -273,7 +386,9 @@ export default function EditAgentDialog({
   ) {
     event.preventDefault();
 
-    setLocalError(null);
+    setLocalError(
+      null,
+    );
 
     if (
       !name.trim()
@@ -291,7 +406,8 @@ export default function EditAgentDialog({
       !Number.isFinite(
         parsedMaxIterations,
       )
-      || parsedMaxIterations < 1
+      || parsedMaxIterations
+        < 1
     ) {
       setLocalError(
         "Maximum steps must be at least 1.",
@@ -299,7 +415,6 @@ export default function EditAgentDialog({
 
       return;
     }
-
 
     try {
       await updateMutation.mutateAsync({
@@ -332,23 +447,50 @@ export default function EditAgentDialog({
         },
       });
 
-
       await assignToolsMutation.mutateAsync({
         agentId:
           agent.id,
 
-        toolIds:
-          toolIds,
+        toolIds,
       });
 
+      for (
+        const toolId
+        of toolIds
+      ) {
+        const definition =
+          toolsQuery.data?.find(
+            (tool) =>
+              tool.id
+              === toolId,
+          );
 
-      setOpen(false);
+        const executionPolicy =
+          toolPolicies[
+            toolId
+          ]
+          ?? defaultPolicy(
+            definition?.risk_level
+            ?? "WRITE",
+          );
 
+        await updateToolPolicyMutation.mutateAsync({
+          agentId:
+            agent.id,
+          toolId,
+          executionPolicy,
+        });
+      }
+
+      setOpen(
+        false,
+      );
     } catch {
-      // Mutation errors rendered below.
+      setLocalError(
+        "Failed to save agent configuration.",
+      );
     }
   }
-
 
   return (
     <>
@@ -362,10 +504,8 @@ export default function EditAgentDialog({
         }
       >
         <Pencil className="mr-2 h-4 w-4" />
-
         Edit
       </Button>
-
 
       <Dialog
         open={open}
@@ -374,55 +514,56 @@ export default function EditAgentDialog({
         }
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-
           <DialogHeader>
-
             <DialogTitle>
               Edit Agent
             </DialogTitle>
 
             <DialogDescription>
               Configure agent behavior,
-              knowledge access, and
-              allowed tools.
+              knowledge access, tools,
+              and execution policies.
             </DialogDescription>
-
           </DialogHeader>
 
-
           <form
-            onSubmit={submit}
+            onSubmit={
+              submit
+            }
             className="space-y-6"
           >
-
             <div>
-
               <label className="text-sm font-medium text-slate-700">
                 Name
               </label>
 
               <input
-                value={name}
-                onChange={(event) =>
+                value={
+                  name
+                }
+                onChange={(
+                  event,
+                ) =>
                   setName(
                     event.target.value,
                   )
                 }
                 className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-blue-500"
               />
-
             </div>
 
-
             <div>
-
               <label className="text-sm font-medium text-slate-700">
                 Description
               </label>
 
               <textarea
-                value={description}
-                onChange={(event) =>
+                value={
+                  description
+                }
+                onChange={(
+                  event,
+                ) =>
                   setDescription(
                     event.target.value,
                   )
@@ -430,19 +571,20 @@ export default function EditAgentDialog({
                 rows={3}
                 className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
               />
-
             </div>
 
-
             <div>
-
               <label className="text-sm font-medium text-slate-700">
                 System Instructions
               </label>
 
               <textarea
-                value={systemPrompt}
-                onChange={(event) =>
+                value={
+                  systemPrompt
+                }
+                onChange={(
+                  event,
+                ) =>
                   setSystemPrompt(
                     event.target.value,
                   )
@@ -450,14 +592,10 @@ export default function EditAgentDialog({
                 rows={6}
                 className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
               />
-
             </div>
 
-
             <div className="grid gap-4 md:grid-cols-2">
-
               <div>
-
                 <label className="text-sm font-medium text-slate-700">
                   LLM Profile
                 </label>
@@ -466,18 +604,18 @@ export default function EditAgentDialog({
                   value={
                     llmConfigurationId
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event,
+                  ) =>
                     setLLMConfigurationId(
                       event.target.value,
                     )
                   }
                   className="mt-2 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
                 >
-
                   <option value="">
                     Use Tenant Default
                   </option>
-
 
                   {llmProfilesQuery.data
                     ?.filter(
@@ -500,14 +638,10 @@ export default function EditAgentDialog({
                         </option>
                       ),
                     )}
-
                 </select>
-
               </div>
 
-
               <div>
-
                 <label className="text-sm font-medium text-slate-700">
                   Maximum Steps
                 </label>
@@ -519,21 +653,19 @@ export default function EditAgentDialog({
                   value={
                     maxIterations
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event,
+                  ) =>
                     setMaxIterations(
                       event.target.value,
                     )
                   }
                   className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
                 />
-
               </div>
-
             </div>
 
-
             <div>
-
               <label className="text-sm font-medium text-slate-700">
                 Status
               </label>
@@ -542,14 +674,15 @@ export default function EditAgentDialog({
                 value={
                   agentStatus
                 }
-                onChange={(event) =>
+                onChange={(
+                  event,
+                ) =>
                   handleStatusChange(
                     event.target.value,
                   )
                 }
                 className="mt-2 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
               >
-
                 <option value="DRAFT">
                   Draft
                 </option>
@@ -561,18 +694,12 @@ export default function EditAgentDialog({
                 <option value="INACTIVE">
                   Inactive
                 </option>
-
               </select>
-
             </div>
 
-
             <div>
-
               <div className="flex items-center justify-between">
-
                 <div>
-
                   <label className="text-sm font-medium text-slate-700">
                     Knowledge Bases
                   </label>
@@ -582,20 +709,16 @@ export default function EditAgentDialog({
                     this agent is allowed
                     to search.
                   </p>
-
                 </div>
 
-
                 <span className="text-xs text-slate-400">
-                  {knowledgeBaseIds.length}{" "}
+                  {knowledgeBaseIds.length}
+                  {" "}
                   selected
                 </span>
-
               </div>
 
-
               <div className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-lg border p-3">
-
                 {knowledgeBasesQuery.isLoading && (
                   <p className="text-sm text-slate-500">
                     Loading knowledge
@@ -603,14 +726,12 @@ export default function EditAgentDialog({
                   </p>
                 )}
 
-
                 {knowledgeBasesQuery.isError && (
                   <p className="text-sm text-red-600">
                     Failed to load
                     knowledge bases.
                   </p>
                 )}
-
 
                 {knowledgeBasesQuery.data?.map(
                   (
@@ -622,7 +743,6 @@ export default function EditAgentDialog({
                       }
                       className="flex cursor-pointer items-start gap-3 rounded-md p-2 hover:bg-slate-50"
                     >
-
                       <input
                         type="checkbox"
                         checked={
@@ -638,100 +758,74 @@ export default function EditAgentDialog({
                         className="mt-1"
                       />
 
-
                       <div>
-
                         <p className="text-sm font-medium text-slate-800">
-                          {
-                            knowledgeBase.name
-                          }
+                          {knowledgeBase.name}
                         </p>
 
                         {knowledgeBase.description && (
                           <p className="mt-1 text-xs text-slate-500">
-                            {
-                              knowledgeBase.description
-                            }
+                            {knowledgeBase.description}
                           </p>
                         )}
-
                       </div>
-
                     </label>
                   ),
                 )}
-
               </div>
-
             </div>
 
-
             <div>
-
               <div className="flex items-center justify-between">
-
                 <div>
-
                   <div className="flex items-center gap-2">
-
                     <Wrench className="h-4 w-4 text-violet-600" />
 
                     <label className="text-sm font-medium text-slate-700">
                       Assigned Tools
                     </label>
-
                   </div>
 
                   <p className="mt-1 text-xs text-slate-500">
-                    Capabilities this
-                    agent is permitted
-                    to invoke.
+                    Choose which tools
+                    the agent may invoke
+                    and how each tool is
+                    executed.
                   </p>
 
                   <p className="mt-1 text-xs text-slate-500">
-                    READ / WRITE describes tool risk only.
-                    AUTO / HUMAN_APPROVAL is resolved separately
-                    by the execution context.
+                    Risk describes what
+                    the tool can do.
+                    Execution Policy
+                    independently controls
+                    whether it runs
+                    automatically or waits
+                    for Governance approval.
                   </p>
-
                 </div>
 
-
                 <span className="text-xs text-slate-400">
-                  {toolIds.length}{" "}
+                  {toolIds.length}
+                  {" "}
                   selected
                 </span>
-
               </div>
 
-
-              <div className="mt-3 max-h-64 space-y-2 overflow-y-auto rounded-lg border p-3">
-
-                {toolsQuery.isLoading && (
+              <div className="mt-3 max-h-96 space-y-3 overflow-y-auto rounded-lg border p-3">
+                {(toolsQuery.isLoading
+                  || assignedToolsQuery.isLoading) && (
                   <p className="text-sm text-slate-500">
                     Loading tools...
                   </p>
                 )}
 
-
-                {toolsQuery.isError && (
+                {(toolsQuery.isError
+                  || assignedToolsQuery.isError) && (
                   <p className="text-sm text-red-600">
-                    Failed to load tools.
+                    Failed to load
+                    tool configuration.
                   </p>
                 )}
-
-
-                {toolsQuery.data?.filter(
-                  (tool) =>
-                    tool.is_active,
-                ).length === 0
-                  && !toolsQuery.isLoading && (
-                  <p className="text-sm text-slate-500">
-                    No active tools are
-                    available.
-                  </p>
-                )}
-
 
                 {toolsQuery.data
                   ?.filter(
@@ -739,115 +833,132 @@ export default function EditAgentDialog({
                       tool.is_active,
                   )
                   .map(
-                    (tool) => (
-                      <label
-                        key={
+                    (tool) => {
+                      const selected =
+                        toolIds.includes(
+                          tool.id,
+                        );
+
+                      const executionPolicy =
+                        toolPolicies[
                           tool.id
-                        }
-                        className="flex cursor-pointer items-start gap-3 rounded-md p-3 hover:bg-slate-50"
-                      >
+                        ]
+                        ?? defaultPolicy(
+                          tool.risk_level,
+                        );
 
-                        <input
-                          type="checkbox"
-                          checked={
-                            toolIds.includes(
-                              tool.id,
-                            )
+                      return (
+                        <div
+                          key={
+                            tool.id
                           }
-                          onChange={() =>
-                            toggleTool(
-                              tool.id,
-                            )
-                          }
-                          className="mt-1"
-                        />
-
-
-                        <div className="min-w-0 flex-1">
-
-                          <div className="flex flex-wrap items-center gap-2">
-
-                            <p className="text-sm font-medium text-slate-800">
-                              {
-                                tool.name
+                          className="rounded-md border border-slate-200 p-3"
+                        >
+                          <label className="flex cursor-pointer items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={
+                                selected
                               }
-                            </p>
-
-
-                            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                              {
-                                tool.tool_type
+                              onChange={() =>
+                                toggleTool(
+                                  tool.id,
+                                  tool.risk_level,
+                                )
                               }
-                            </span>
+                              className="mt-1"
+                            />
 
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-medium text-slate-800">
+                                  {tool.name}
+                                </p>
 
-                            <span
-                              className={
-                                tool.risk_level ===
-                                "WRITE"
-                                  ? "rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
-                                  : "rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700"
-                              }
-                            >
-                              {
-                                tool.risk_level
-                              }
-                            </span>
+                                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                                  {tool.tool_type}
+                                </span>
 
-                          </div>
+                                <span
+                                  className={
+                                    tool.risk_level
+                                    === "WRITE"
+                                      ? "rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
+                                      : "rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700"
+                                  }
+                                >
+                                  {tool.risk_level}
+                                </span>
+                              </div>
 
+                              <p className="mt-1 text-xs text-slate-500">
+                                {tool.description}
+                              </p>
+                            </div>
+                          </label>
 
-                          <p className="mt-1 text-xs text-slate-500">
-                            {
-                              tool.description
-                            }
-                          </p>
+                          {selected && (
+                            <div className="mt-3 border-t border-slate-100 pt-3">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <Shield className="h-3.5 w-3.5 text-slate-500" />
 
+                                    <span className="text-xs font-medium text-slate-700">
+                                      Execution Policy
+                                    </span>
+                                  </div>
 
-                          {tool.risk_level ===
-                            "WRITE" && (
-                            <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-700">
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    AUTO executes
+                                    immediately.
+                                    HUMAN_APPROVAL
+                                    pauses the run
+                                    for Governance.
+                                  </p>
+                                </div>
 
-                              <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <select
+                                  value={
+                                    executionPolicy
+                                  }
+                                  onChange={(
+                                    event,
+                                  ) =>
+                                    setPolicy(
+                                      tool.id,
+                                      parseExecutionPolicy(
+                                        event.target.value,
+                                      ),
+                                    )
+                                  }
+                                  className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                                >
+                                  <option value="AUTO">
+                                    Auto
+                                  </option>
 
-                              <span>
-                                Can modify external state.
-                                Approval behavior is configured
-                                separately by execution context.
-                              </span>
-
+                                  <option value="HUMAN_APPROVAL">
+                                    Human Approval
+                                  </option>
+                                </select>
+                              </div>
                             </div>
                           )}
-
                         </div>
-
-                      </label>
-                    ),
+                      );
+                    },
                   )}
-
               </div>
-
             </div>
 
-
             {localError && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 {localError}
               </div>
             )}
 
-
-            {(updateMutation.isError
-              || assignToolsMutation.isError) && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                Failed to save agent
-                configuration.
-              </div>
-            )}
-
-
             <DialogFooter>
-
               <Button
                 type="button"
                 variant="outline"
@@ -863,24 +974,21 @@ export default function EditAgentDialog({
                 Cancel
               </Button>
 
-
               <Button
                 type="submit"
                 disabled={
                   isSaving
                   || !name.trim()
                   || !systemPrompt.trim()
+                  || assignedToolsQuery.isLoading
                 }
               >
                 {isSaving
                   ? "Saving..."
                   : "Save Changes"}
               </Button>
-
             </DialogFooter>
-
           </form>
-
         </DialogContent>
       </Dialog>
     </>
