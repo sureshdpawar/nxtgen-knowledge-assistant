@@ -1,4 +1,4 @@
-# NXTGEN Knowledge Assistant
+# Knowgentiq - Enterprise GenAI Knowledge & Agents Platform 
 
 **A governed enterprise RAG and agent platform for organizational knowledge, controlled tool execution, human approval, access enforcement, and production feedback.**
 
@@ -477,7 +477,7 @@ These are not required to demonstrate the core governed-agent lifecycle and woul
 
 ---
 
-## Interview / architecture discussion
+## Architecture Discussion
 
 A concise description of the project:
 
