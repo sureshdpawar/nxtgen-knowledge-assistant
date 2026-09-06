@@ -1,99 +1,212 @@
 # Knowgentiq - Enterprise Knowledge & Agents Platform 
 
-**A governed enterprise RAG and agent platform for organizational knowledge, controlled tool execution, human approval, access enforcement, and production feedback.**
+> **Enterprise AI agents that can use organizational knowledge, take business actions, operate under explicit policy, pause for human authorization, and leave behind a durable production audit trail.**
 
-NXTGEN started as an enterprise knowledge assistant and evolved into a governed agent platform as soon as the system moved from answering questions to taking actions.
+Knowgentiq is a **governed enterprise agent platform** for organizations that want AI to do more than answer questions.
 
-The core product question is no longer only:
+The platform combines trusted organizational knowledge with controlled agent execution, access enforcement, human-in-the-loop governance, durable runtime state, operational observability, and production quality feedback.
 
-> Can the model answer from trusted organizational knowledge?
+The problem Knowgentiq addresses begins when AI moves from **answering** to **acting**.
 
-It is also:
+A model that retrieves a document is useful.
 
-> Can an agent act safely, under explicit policy, with durable approval and enough evidence to understand what happened in production?
+An agent that can search internal knowledge, call enterprise systems, create or modify business records, and act on behalf of a user introduces a very different class of engineering problems:
 
-## Product at a glance
+- Who is allowed to use the agent?
+- Which organizational knowledge can it access?
+- Which tools is it allowed to invoke?
+- Which actions can run automatically?
+- Which actions require human authorization?
+- Can a paused execution safely resume after the original request is gone?
+- Can operators reconstruct exactly what happened?
+- Can production quality, latency, token usage, and cost be measured?
+- Can useful production behavior become future evaluation data?
 
-NXTGEN provides two distinct user experiences:
+Knowgentiq is designed around those questions.
 
-- **KB Chat** — direct retrieval-augmented chat against a selected knowledge base.
-- **Agent Chat** — conversations with assigned agents that can search configured knowledge bases, invoke business tools, pause for human approval, and resume after a governance decision.
+It is not simply a document chatbot with tool calling layered on top.
 
-Administrators configure agents, tools, execution policies, knowledge access, user access, approvals, operational metrics, and evaluation.
+It is an **enterprise agent control plane** for the full lifecycle of an AI-powered business action:
 
-## Core capabilities
+```text
+Organizational Knowledge
+        ↓
+   Grounded AI Agent
+        ↓
+ Identity & Access Control
+        ↓
+   Tool Execution Policy
+        │
+        ├── AUTO ───────────────→ Execute
+        │
+        └── HUMAN_APPROVAL ─────→ Pause
+                                      ↓
+                              Governance Review
+                                      ↓
+                               Durable Resume
+        ↓
+ Enterprise Systems / APIs
+        ↓
+ Durable Execution Evidence
+        ↓
+ Observability & Evaluation
+```
 
-### Enterprise knowledge and RAG
+---
 
-- Multi-tenant knowledge bases and sources
-- Document ingestion, chunking, embeddings, and semantic retrieval
-- KB Chat with grounded answers and citations
-- Knowledge search for both direct users and agents
+## What Knowgentiq enables
 
-### Governed agents
+### Knowledge-aware enterprise agents
 
-- LangGraph-based agent execution
-- Durable agent threads and checkpoints
-- Configurable knowledge bases and tools per agent
-- Explicit tool execution policy:
-  - `AUTO`
-  - `HUMAN_APPROVAL`
-- Tool risk and execution policy remain separate concepts
-- Durable pause/resume for governed actions
+Agents can reason over configured organizational knowledge rather than relying only on model memory.
 
-### Access control
+The platform supports:
 
-- Tenant isolation
-- Admin and end-user product surfaces
-- User-to-agent assignment
-- Admins can operate all tenant agents
-- End users only see and execute assigned agents
+- multi-tenant knowledge bases,
+- knowledge sources and document ingestion,
+- chunking and embeddings,
+- semantic retrieval,
+- grounded answers,
+- citations,
+- direct knowledge search,
+- knowledge access from agent workflows.
 
-### Human-in-the-loop governance
+### Governed business actions
 
-All governed decisions are centralized under **Governance → Approvals**.
+Agents can invoke business tools under **explicit execution policy**.
 
-Agent Chat never performs inline approval decisions. When a `HUMAN_APPROVAL` tool is requested:
+Each agent-tool assignment can be configured as:
 
-1. the agent run pauses,
-2. an approval record is persisted,
-3. Agent Chat shows a waiting state,
-4. an administrator approves or rejects through Governance → Approvals,
-5. LangGraph resumes from the durable checkpoint,
-6. the final response is synchronized back to the Agent Chat conversation.
+- `AUTO`
+- `HUMAN_APPROVAL`
 
-### Durable run observability
+Risk classification and execution policy are deliberately separate.
 
-Every agent execution is represented by an `AgentRun` with persisted operational evidence such as:
+A tool may be operationally sensitive but explicitly approved for automatic execution in one workflow, while another tool may require a human decision even if its technical risk is low.
 
-- request and final response,
-- run status,
+This makes execution policy a business-control decision rather than an implicit side effect of tool metadata.
+
+### Durable human-in-the-loop execution
+
+Governed actions do not depend on keeping an HTTP request alive.
+
+When a `HUMAN_APPROVAL` action is reached:
+
+1. the agent execution pauses,
+2. a durable approval record is persisted,
+3. the LangGraph checkpoint is retained,
+4. the user sees a waiting state,
+5. an administrator reviews the action in **Governance → Approvals**,
+6. the decision is persisted,
+7. the original execution resumes from the checkpoint,
+8. the final response is written back into the user conversation.
+
+Approval decisions are never performed inline in Agent Chat.
+
+The interaction surface and the governance decision surface remain intentionally separate.
+
+### Tenant and user access enforcement
+
+The runtime enforces who can discover and execute agents.
+
+- Tenant isolation is preserved.
+- Administrators can manage and operate tenant agents.
+- End users only see agents explicitly assigned to them.
+- Agent configuration and governance surfaces remain admin-only.
+- Unauthorized agent access is blocked at the backend, not merely hidden in the UI.
+
+### Durable production execution evidence
+
+Every agent execution is represented as a durable `AgentRun`.
+
+Operational evidence includes:
+
+- user request,
+- final response,
+- execution status,
 - LLM calls,
 - tools used,
-- execution steps,
+- persisted execution steps,
+- tool inputs and outputs,
+- approval checkpoints,
+- governance decisions,
 - duration,
 - token usage,
 - estimated cost,
-- actor and thread correlation,
-- approval checkpoints and decisions.
+- actor identity,
+- thread and checkpoint correlation.
 
-Run Details is an execution audit view, not a chain-of-thought viewer.
+Run Details is an **execution audit**, not a chain-of-thought viewer.
 
-### Production evaluation
+The objective is to answer:
 
-Production RAG interactions can be sampled into Online Evaluation and scored using RAG-appropriate quality dimensions such as:
+> **What did the system actually do?**
+
+### Production quality feedback
+
+Knowgentiq separates execution observability from quality evaluation.
+
+Knowledge-backed production interactions can be sampled into Online Evaluation and scored on RAG-appropriate quality dimensions such as:
 
 - faithfulness,
 - answer relevancy,
 - context relevancy.
 
-Good production runs can be explicitly promoted into reusable evaluation cases.
+Useful production runs can be explicitly promoted into reusable evaluation cases.
 
-Tool-only agent interactions are intentionally not forced through RAG metrics. Agent-specific production evaluation—task completion, tool selection, argument correctness, execution efficiency, and policy compliance—is a natural post-MVP evaluation layer over `AgentRun` evidence.
+Tool-only workflows are intentionally not forced through retrieval metrics when no retrieval context exists.
+
+That distinction matters: successful execution and high-quality reasoning are related, but they are not the same problem.
 
 ---
 
-## Architecture
+# Product model
+
+Knowgentiq exposes two distinct conversational products.
+
+### KB Chat
+
+Direct retrieval-augmented chat against a selected knowledge base.
+
+```text
+User
+  ↓
+Select Knowledge Base
+  ↓
+Question
+  ↓
+Retrieval
+  ↓
+Grounded Answer + Citations
+```
+
+### Agent Chat
+
+Conversation with an assigned AI agent that can combine knowledge retrieval and controlled business actions.
+
+```text
+User
+  ↓
+Assigned Agent
+  ↓
+Conversation
+  ↓
+Agent Runtime
+  ├── Search configured knowledge
+  ├── Execute AUTO tools
+  ├── Pause on HUMAN_APPROVAL tools
+  └── Produce final response
+```
+
+KB Chat and Agent Chat are intentionally separate.
+
+The first is a direct knowledge experience.
+
+The second is a governed agent runtime.
+
+---
+
+# Platform architecture
 
 ```text
                          ┌──────────────────────┐
@@ -109,7 +222,7 @@ Tool-only agent interactions are intentionally not forced through RAG metrics. A
               ┌─────────────────────┼──────────────────────┐
               │                     │                      │
      ┌────────▼────────┐   ┌────────▼────────┐   ┌────────▼────────┐
-     │ Knowledge / RAG │   │ Agent Runtime   │   │   Governance    │
+     │ Knowledge Layer │   │ Agent Runtime   │   │   Governance    │
      │ search/citations│   │    LangGraph    │   │ approvals/policy│
      └────────┬────────┘   └────────┬────────┘   └────────┬────────┘
               │                     │                      │
@@ -136,39 +249,77 @@ Tool-only agent interactions are intentionally not forced through RAG metrics. A
           └───────────────────┘           └─────────────────┘
 ```
 
-## Why the architecture evolved this way
+---
 
-The project intentionally follows the problems introduced by increasing agent capability:
+# Why the architecture evolved this way
+
+Knowgentiq started with enterprise knowledge retrieval.
+
+The architecture changed when the system began taking actions.
 
 ```text
-Enterprise RAG
-      ↓
-Agentic execution
-      ↓
-Tool execution requires governance
-      ↓
-Explicit AUTO vs HUMAN_APPROVAL policy
-      ↓
+Enterprise Knowledge + RAG
+          ↓
+     Agentic execution
+          ↓
+ Business tools become callable
+          ↓
+Tool execution requires explicit policy
+          ↓
 Sensitive actions require durable HITL
-      ↓
+          ↓
 Agents require tenant/user access controls
-      ↓
-Production execution requires durable runs and steps
-      ↓
-Operations require latency/token/cost observability
-      ↓
+          ↓
+Execution requires durable runs and checkpoints
+          ↓
+Operations require latency/token/cost visibility
+          ↓
 Production RAG requires continuous quality evaluation
-      ↓
-Useful production behavior can become golden eval cases
+          ↓
+Useful production behavior becomes evaluation data
 ```
 
-This progression is central to the design: adding agents is not only a prompting problem. It creates authorization, governance, durability, auditability, and evaluation problems.
+The key architectural lesson is:
+
+> **Adding agents is not primarily a prompting problem. It creates authorization, governance, durability, auditability, operational, and evaluation problems.**
+
+Knowgentiq treats those as first-class platform concerns.
 
 ---
 
-## Product surfaces
+# Governed execution model
 
-### Admin
+Execution behavior comes from persisted policy.
+
+```text
+Tool requested
+      ↓
+Read persisted execution policy
+      ↓
+┌───────────────────┬────────────────────────┐
+│ AUTO              │ HUMAN_APPROVAL         │
+│ execute           │ persist approval       │
+│ continue          │ checkpoint + pause     │
+└───────────────────┴────────────┬───────────┘
+                                 ↓
+                       Governance → Approvals
+                                 ↓
+                         approve / reject
+                                 ↓
+                         resume LangGraph
+                                 ↓
+                          final response
+```
+
+A later configuration change does not silently reinterpret an already-paused checkpoint.
+
+The execution semantics attached to the paused action remain the semantics used when that execution resumes.
+
+---
+
+# Product surfaces
+
+## Administrator
 
 ```text
 Dashboard
@@ -198,7 +349,19 @@ Admin
 └── Users
 ```
 
-### End user
+Administrators configure:
+
+- agents,
+- knowledge access,
+- tools,
+- execution policies,
+- user assignments,
+- approvals,
+- LLM profiles,
+- operational metrics,
+- production evaluation.
+
+## End user
 
 ```text
 Chat
@@ -209,51 +372,121 @@ Knowledge
 └── Search
 ```
 
-KB Chat and Agent Chat are deliberately separate products. Agent configuration and operational tooling are admin-only.
+End users interact only with permitted knowledge and assigned agents.
 
 ---
 
-## Governed execution model
+# Execution observability
 
-Risk and execution policy are independent.
+Knowgentiq treats `AgentRun` as the durable execution record.
 
-A tool may be conceptually low risk but still require human approval for a particular agent, or a write tool may be explicitly configured for automatic execution.
+Run History answers:
+
+> **What happened?**
+
+Run Details can show:
+
+- request,
+- response,
+- execution status,
+- agent and actor identity,
+- tools executed,
+- approval activity,
+- persisted execution steps,
+- tool inputs and outputs,
+- LLM calls,
+- token usage,
+- estimated cost,
+- latency,
+- thread and checkpoint correlation.
+
+This creates an operator-facing execution story without exposing private model reasoning.
+
+---
+
+# Evaluation model
+
+Knowgentiq separates **execution evidence** from **quality judgment**.
+
+## Agent Run History
+
+Answers:
+
+> What happened during execution?
+
+It captures operational and governance evidence.
+
+## Production Quality
+
+Answers:
+
+> Was this knowledge-backed interaction good?
+
+For production RAG interactions, the platform can evaluate:
+
+- faithfulness,
+- answer relevancy,
+- context relevancy.
+
+## Production → evaluation feedback loop
+
+High-value production behavior can be promoted into reusable evaluation cases.
 
 ```text
-Tool requested
-      ↓
-Read persisted execution policy
-      ↓
-┌───────────────────┬────────────────────────┐
-│ AUTO              │ HUMAN_APPROVAL         │
-│ execute           │ persist approval       │
-│ continue          │ checkpoint + pause     │
-└───────────────────┴────────────┬───────────┘
-                                 ↓
-                       Governance → Approvals
-                                 ↓
-                         approve / reject
-                                 ↓
-                         resume LangGraph
-                                 ↓
-                          final response
+Production Interaction
+        ↓
+Durable Agent / RAG Evidence
+        ↓
+Operator Review
+        ↓
+Promote to Eval
+        ↓
+Reusable Benchmark Case
 ```
 
-The policy stored for the execution is respected across resume so a later configuration change does not silently rewrite the meaning of an already-paused checkpoint.
+This connects production behavior back into the evaluation lifecycle.
+
+## Future Agent Quality
+
+Agent-specific quality is intentionally treated as a separate evaluation model.
+
+A future `AgentRun`-based evaluator can measure:
+
+- task completion,
+- tool selection,
+- tool argument correctness,
+- unnecessary/repeated actions,
+- execution efficiency,
+- policy compliance,
+- final-response correctness.
+
+Many execution and governance checks can be deterministic.
+
+Subjective workflow-quality questions can use an LLM judge.
+
+A single agent run may eventually have both:
+
+```text
+Agent Quality
++
+RAG Quality
+```
+
+when the same run both takes actions and uses retrieved organizational knowledge.
 
 ---
 
-## Demo scenario
+# Demo scenario
 
-A useful demo agent is an **Academy Assistant** configured with:
+A useful end-to-end demonstration is an **Academy Assistant** with:
 
 - an academy knowledge base,
 - `search_knowledge`,
 - `create_enquiry`,
 - `update_enquiry`,
-- an assigned end user.
+- one assigned normal user.
 
-Suggested policy:
+Suggested execution policy:
 
 ```text
 search_knowledge  → AUTO
@@ -261,9 +494,9 @@ create_enquiry    → AUTO
 update_enquiry    → HUMAN_APPROVAL
 ```
 
-### 1. Demonstrate grounded knowledge
+## 1. Trusted organizational knowledge
 
-As an end user, open Agent Chat and ask:
+As an end user, ask:
 
 > What courses are available at the academy?
 
@@ -272,73 +505,77 @@ Expected behavior:
 - the assigned agent is available,
 - `search_knowledge` executes,
 - the answer is grounded in configured organizational knowledge,
-- the RAG interaction is eligible for production quality sampling.
+- the interaction is eligible for production RAG evaluation.
 
-### 2. Demonstrate automatic business action
+## 2. Automatic business action
 
 Ask the agent to create an enquiry or callback request.
 
 Expected behavior:
 
 - `create_enquiry` executes automatically,
-- the agent reports the business outcome,
+- the business action completes,
 - Agent Run History records the execution.
 
-### 3. Demonstrate governed action
+## 3. Governed action
 
-Trigger an update requiring `update_enquiry`.
+Trigger an action requiring `update_enquiry`.
 
 Expected behavior:
 
 - the agent reaches the governed tool,
 - the run enters `WAITING_FOR_APPROVAL`,
-- Agent Chat displays a waiting state,
-- no approval/rejection controls appear inline.
+- Agent Chat shows a waiting state,
+- no inline decision buttons are shown.
 
-### 4. Demonstrate centralized governance
+## 4. Centralized approval
 
 As an administrator:
 
 - open **Governance → Approvals**,
-- inspect the pending action and arguments,
+- inspect the pending tool call and arguments,
 - approve or reject it.
 
 Expected behavior:
 
-- the persisted decision resumes the LangGraph checkpoint,
-- the run completes,
+- the persisted governance decision resumes the LangGraph checkpoint,
+- the original run completes,
 - Agent Chat receives the final response.
 
-### 5. Demonstrate auditability
+## 5. Audit the execution
 
-Open the completed run in Agent Run History.
+Open the completed Agent Run.
 
-Show:
+Inspect:
 
-- user request,
+- original request,
 - final response,
-- tools executed,
-- governance approval evidence,
-- persisted execution steps,
+- tools used,
+- approval evidence,
+- execution steps,
 - LLM calls,
 - tokens,
-- estimated cost,
+- cost,
 - duration,
-- actor/thread/checkpoint correlation.
+- thread/checkpoint correlation.
 
-### 6. Demonstrate production feedback
+## 6. Inspect production quality
 
-Open Production Quality and show a sampled KB-backed interaction.
+Open Production Quality and inspect a sampled KB-backed interaction.
 
-Explain that RAG metrics are applied only when retrieval evidence exists. Tool-only workflows remain observable through Agent Runs rather than being assigned meaningless retrieval metrics.
+This demonstrates the distinction between:
 
-Optionally promote a useful completed run into an evaluation case.
+```text
+Execution Observability
+        vs
+Quality Evaluation
+```
 
 ---
 
-## Technology
+# Technology
 
-### Backend
+## Backend
 
 - Python
 - FastAPI
@@ -352,7 +589,7 @@ Optionally promote a useful completed run into an evaluation case.
 - Model Context Protocol (MCP)
 - OpenTelemetry
 
-### Frontend
+## Frontend
 
 - Next.js
 - React
@@ -361,7 +598,7 @@ Optionally promote a useful completed run into an evaluation case.
 - Tailwind CSS
 - shadcn/ui
 
-### Runtime / deployment
+## Runtime / deployment
 
 - Docker Compose
 - PostgreSQL + pgvector
@@ -373,9 +610,9 @@ Optionally promote a useful completed run into an evaluation case.
 
 ---
 
-## Production-style deployment
+# Production-style deployment
 
-The repository includes a production-oriented Docker Compose configuration and Makefile targets for lifecycle, migrations, backup, and preflight checks.
+The repository includes a Docker Compose deployment model and Makefile targets for lifecycle management, migrations, backup, and deployment preflight checks.
 
 Create the environment file:
 
@@ -383,7 +620,7 @@ Create the environment file:
 cp .env.prod.example .env.prod
 ```
 
-Set strong secrets and the required LLM/API configuration before starting the stack.
+Set strong credentials and the required LLM/API configuration.
 
 Build and start:
 
@@ -417,88 +654,83 @@ make migration-heads
 make preflight
 ```
 
-The deployment target also supports database backup before migration/deployment:
+Database backup and deployment:
 
 ```bash
 make db-backup
 make deploy
 ```
 
-> The environment example is production-oriented. Review credentials, CORS, public ports, LLM endpoints, and deployment-specific infrastructure before exposing the application outside a controlled environment.
+> The provided environment example is production-oriented but must still be reviewed for deployment-specific secrets, CORS, networking, public exposure, LLM configuration, backup policy, and infrastructure controls.
 
 ---
 
-## Evaluation model
+# Deliberate MVP boundaries
 
-NXTGEN separates **execution observability** from **quality evaluation**.
-
-### Agent Run History
-
-Answers:
-
-> What happened?
-
-It captures durable operational evidence for agent execution.
-
-### Online Evaluation
-
-Answers:
-
-> Was this grounded RAG interaction good?
-
-It evaluates production RAG interactions where retrieved context exists.
-
-### Post-MVP Agent Quality
-
-A future AgentRun-based evaluator can answer:
-
-- Did the agent complete the task?
-- Did it choose the correct tool?
-- Were tool arguments correct?
-- Were unnecessary tool calls avoided?
-- Was execution policy respected?
-- Did the final response accurately describe the actual outcome?
-
-Many governance and execution checks can be deterministic; subjective task-quality dimensions can use an LLM judge.
-
----
-
-## Deliberate MVP boundaries
-
-The MVP intentionally stops before several platform-level capabilities that become valuable at larger operational scale:
+Knowgentiq intentionally stops before several capabilities that become more valuable once organizations operate multiple agent configurations across environments:
 
 - immutable agent configuration versions,
 - environment-based agent promotion,
-- evaluation-gated deployment,
+- evaluation-gated agent deployment,
 - generalized visual workflow authoring,
-- broad agent-quality judging across arbitrary tool workflows.
+- broad production Agent Quality judging.
 
-These are not required to demonstrate the core governed-agent lifecycle and would add substantial operational complexity before the product has multiple production agent versions to manage.
+These are deliberate post-MVP evolutions.
+
+They are not required to demonstrate the core governed-agent lifecycle:
+
+```text
+Knowledge
+→ Agent
+→ Tool
+→ Policy
+→ Approval
+→ Durable Resume
+→ Audit
+→ Observability
+→ Evaluation
+```
 
 ---
 
-## Architecture Discussion
+# Architecture discussion
 
-A concise description of the project:
+A concise way to describe Knowgentiq:
 
-> I designed and built a governed enterprise agent platform around organizational knowledge. It began as RAG, but once agents could take business actions the architecture had to evolve: tool execution needed explicit policies, sensitive actions needed durable human approval, agents needed tenant/user access controls, and production behavior needed durable run observability and evaluation.
+> **I designed and built a governed enterprise AI agent platform around organizational knowledge. The architecture began with RAG, but once agents could take business actions, the system had to solve a different class of problems: explicit execution policy, durable human approval, tenant and user authorization, checkpointed execution, production auditability, cost and latency observability, and continuous quality evaluation.**
 
-Useful design questions this project can demonstrate:
+The project supports deeper architecture discussions such as:
 
 - Why is tool risk different from execution policy?
-- How does a human approval survive beyond the original HTTP request?
-- How is a paused agent resumed safely?
+- How does human approval survive beyond the original HTTP request?
+- How is a paused agent safely resumed?
 - How are users prevented from executing unassigned agents?
 - How are tenant boundaries enforced?
-- What evidence is persisted for production agent execution?
-- How are token usage, cost, and latency observed?
+- How are already-paused actions protected from later policy changes?
+- What evidence is persisted for production execution?
+- How are token consumption, cost, and latency observed?
 - Why should tool-only agent workflows not be scored with RAG faithfulness metrics?
-- How can production behavior feed offline evaluation?
+- How can production behavior become future evaluation data?
 
 ---
 
-## Current MVP positioning
+# Product positioning
 
-**NXTGEN is a governed enterprise RAG agent MVP that can answer from organizational knowledge, invoke tools under explicit execution policies, require human approval for sensitive actions, enforce user access, and provide operational and evaluation feedback.**
+**Knowgentiq is a governed enterprise AI agent platform for organizations that need AI to work with trusted internal knowledge and safely participate in real business processes.**
 
-The product is intended as an MVP and architecture demonstration rather than a claim of feature parity with mature enterprise AI platforms.
+It combines:
+
+```text
+Trusted Knowledge
++ AI Agents
++ Business Tools
++ Identity & Access
++ Explicit Execution Policy
++ Human Governance
++ Durable Runtime State
++ Execution Auditability
++ Operational Observability
++ Production Evaluation
+```
+
+The MVP demonstrates the core technical and product controls required before enterprise AI agents can move from answering questions to participating safely in operational workflows.
