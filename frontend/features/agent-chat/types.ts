@@ -9,15 +9,6 @@ export interface AgentChatStreamRequest {
   query: string;
 }
 
-export interface AgentChatResumeRequest {
-  conversation_id: string;
-  run_id: string;
-  decision:
-    | "approve"
-    | "reject";
-  reason?: string | null;
-}
-
 export interface AgentChatResult {
   conversation_id: string;
   agent_id: string;

@@ -29,7 +29,6 @@ from app.schemas.agent import (
 from app.schemas.agent_run import (
     AgentCheckpointHistoryResponse,
     AgentGraphStateResponse,
-    AgentResumeRequest,
     AgentRunRequest,
     AgentRunResponse,
 )
@@ -194,40 +193,6 @@ async def run_agent(
         query=payload.query,
         thread_id=
             payload.thread_id,
-    )
-
-
-@router.post(
-    "/{agent_id}/runs/{run_id}/resume",
-    response_model=
-        AgentRunResponse,
-)
-async def resume_agent(
-    agent_id: UUID,
-    run_id: UUID,
-    payload: AgentResumeRequest,
-    db: Session = Depends(
-        get_db,
-    ),
-    current_user: User = Depends(
-        require_authenticated_user,
-    ),
-):
-    service.get(
-        db=db,
-        current_user=current_user,
-        agent_id=agent_id,
-    )
-
-    return await execution_service.resume(
-        db=db,
-        current_user=current_user,
-        agent_id=agent_id,
-        run_id=run_id,
-        decision=
-            payload.decision,
-        reason=
-            payload.reason,
     )
 
 

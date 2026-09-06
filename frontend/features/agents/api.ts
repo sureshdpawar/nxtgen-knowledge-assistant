@@ -7,7 +7,6 @@ import type {
   AgentCheckpointHistory,
   AgentGraphState,
   AgentProgressEvent,
-  AgentResumeRequest,
   AgentRun,
   AgentRunDetail,
   AgentRunRequest,
@@ -48,18 +47,6 @@ export async function assignAgentTools(agentId: string, payload: AssignAgentTool
 
 export async function runAgent(id: string, payload: AgentRunRequest) {
   const response = await api.post<AgentRunResponse>(`/agents/${id}/run`, payload);
-  return response.data;
-}
-
-export async function resumeAgent(
-  agentId: string,
-  runId: string,
-  payload: AgentResumeRequest,
-) {
-  const response = await api.post<AgentRunResponse>(
-    `/agents/${agentId}/runs/${runId}/resume`,
-    payload,
-  );
   return response.data;
 }
 

@@ -10,13 +10,11 @@ import {
   getAgentRun,
   getAgentRuns,
   getAgents,
-  resumeAgent,
   runAgent,
   updateAgent,
 } from "./api";
 
 import type {
-  AgentResumeRequest,
   AgentRunRequest,
   AssignAgentToolsRequest,
   CreateAgentRequest,
@@ -88,20 +86,6 @@ export function useRunAgent(agentId: string) {
     mutationFn: (payload: AgentRunRequest) => runAgent(agentId, payload),
     onSuccess() {
       queryClient.invalidateQueries({ queryKey: ["agent-runs", agentId] });
-    },
-  });
-}
-
-export function useResumeAgent(agentId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ runId, payload }: { runId: string; payload: AgentResumeRequest }) =>
-      resumeAgent(agentId, runId, payload),
-    onSuccess(result) {
-      queryClient.invalidateQueries({ queryKey: ["agent-runs", agentId] });
-      queryClient.invalidateQueries({ queryKey: ["agent-run", result.run_id] });
-      queryClient.invalidateQueries({ queryKey: ["agent-graph-state", agentId, result.thread_id] });
-      queryClient.invalidateQueries({ queryKey: ["agent-checkpoints", agentId, result.thread_id] });
     },
   });
 }

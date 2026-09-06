@@ -17,7 +17,7 @@ mcp = FastMCP(
 )
 
 
-@lru_cache(maxsize=1)
+
 def _service() -> AcademyEnquiryService:
     return AcademyEnquiryService(
         AcademyMCPSettings.from_env()

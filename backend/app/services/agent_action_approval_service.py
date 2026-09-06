@@ -7,13 +7,20 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.enums import (
     AgentActionApprovalStatus,
+    AgentRunStatus,
 )
 from app.models.agent_action_approval import (
     AgentActionApproval,
 )
+from app.models.conversation import (
+    Conversation,
+)
 from app.models.user import User
 from app.services.agent_execution_service import (
     AgentExecutionService,
+)
+from app.services.conversation_service import (
+    ConversationService,
 )
 
 
@@ -22,6 +29,9 @@ class AgentActionApprovalService:
     def __init__(self):
         self.execution_service = (
             AgentExecutionService()
+        )
+        self.conversation_service = (
+            ConversationService()
         )
 
     def _query(self):
@@ -224,6 +234,64 @@ class AgentActionApprovalService:
             reason=reason,
         )
 
+    def _sync_agent_chat_conversation(
+        self,
+        db: Session,
+        *,
+        approval: AgentActionApproval,
+        run_result: dict,
+    ) -> None:
+        """
+        If this governed run belongs to the authenticated Agent Chat
+        product, persist the final resumed answer into its user-facing
+        Conversation. This keeps AgentRun/checkpoints as execution state
+        while Conversation remains the durable chat history.
+        """
+        run = approval.run
+
+        if (
+            run.user_id is None
+            or run.thread_id is None
+            or run_result.get("status")
+                != AgentRunStatus.COMPLETED
+            or not run_result.get("answer")
+        ):
+            return
+
+        conversation = db.scalar(
+            select(
+                Conversation
+            )
+            .where(
+                Conversation.tenant_id
+                == approval.tenant_id,
+                Conversation.user_id
+                == run.user_id,
+                Conversation.chat_channel_id
+                .is_(None),
+                Conversation.agent_id
+                == approval.agent_id,
+                Conversation.agent_thread_id
+                == run.thread_id,
+            )
+            .order_by(
+                Conversation.updated_at.desc()
+            )
+        )
+
+        if conversation is None:
+            return
+
+        self.conversation_service.save_assistant_message(
+            db=db,
+            conversation_id=
+                conversation.id,
+            content=
+                run_result["answer"],
+            citations=[],
+            token_usage={},
+        )
+
     async def _decide(
         self,
         db: Session,
@@ -288,7 +356,7 @@ class AgentActionApprovalService:
 
         db.commit()
 
-        await (
+        run_result = await (
             self.execution_service
             .resume_for_action_approval(
                 db=db,
@@ -301,6 +369,12 @@ class AgentActionApprovalService:
                 reason=
                     reason,
             )
+        )
+
+        self._sync_agent_chat_conversation(
+            db,
+            approval=approval,
+            run_result=run_result,
         )
 
         refreshed = (

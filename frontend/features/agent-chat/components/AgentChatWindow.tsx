@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import {
   useEffect,
   useMemo,
@@ -8,6 +10,7 @@ import {
 } from "react";
 
 import {
+  ArrowRight,
   Bot,
   ShieldAlert,
 } from "lucide-react";
@@ -42,18 +45,27 @@ import type {
 } from "@/features/chat/types";
 
 import {
-  resumeAgentChatStream,
+  useAuth,
+} from "@/hooks/useAuth";
+
+import {
   streamAgentChat,
 } from "../api";
 
 import type {
   AgentChatProgressEvent,
   AgentChatResult,
-} from "../types";
+} from "@/features/agent-chat/types";
+
+const APPROVAL_POLL_INTERVAL_MS = 2500;
 
 export default function AgentChatWindow() {
   const queryClient =
     useQueryClient();
+
+  const {
+    user,
+  } = useAuth();
 
   const {
     data: agents,
@@ -162,6 +174,25 @@ export default function AgentChatWindow() {
     return `agent-chat-${messageCounter.current}`;
   }
 
+  function mapConversationMessages(
+    conversation: Awaited<
+      ReturnType<typeof getConversation>
+    >,
+  ): ChatMessage[] {
+    return conversation.messages.map(
+      (message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        sources:
+          message.role
+          === "assistant"
+            ? message.citations
+            : undefined,
+      }),
+    );
+  }
+
   function scrollToBottom(
     behavior: ScrollBehavior =
       "smooth",
@@ -205,6 +236,95 @@ export default function AgentChatWindow() {
     pendingApproval,
     progressText,
     streaming,
+  ]);
+
+  useEffect(() => {
+    if (
+      !pendingApproval
+      || !conversationId
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    let polling = false;
+
+    async function refreshAfterApproval() {
+      if (
+        cancelled
+        || polling
+        || !conversationId
+      ) {
+        return;
+      }
+
+      polling = true;
+
+      try {
+        const conversation =
+          await getConversation(
+            conversationId,
+          );
+
+        if (cancelled) {
+          return;
+        }
+
+        const persistedMessages =
+          mapConversationMessages(
+            conversation,
+          );
+
+        setMessages(
+          persistedMessages,
+        );
+
+        const lastMessage =
+          persistedMessages.at(-1);
+
+        if (
+          lastMessage?.role
+          === "assistant"
+        ) {
+          setPendingApproval(null);
+          setProgressText(null);
+          setError(null);
+
+          await queryClient
+            .invalidateQueries({
+              queryKey: [
+                "conversations",
+              ],
+            });
+        }
+      } catch {
+        // Keep waiting. A transient refresh failure should not
+        // replace the approval state with a chat error.
+      } finally {
+        polling = false;
+      }
+    }
+
+    void refreshAfterApproval();
+
+    const intervalId =
+      window.setInterval(
+        () => {
+          void refreshAfterApproval();
+        },
+        APPROVAL_POLL_INTERVAL_MS,
+      );
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(
+        intervalId,
+      );
+    };
+  }, [
+    conversationId,
+    pendingApproval,
+    queryClient,
   ]);
 
   function changeAgent(
@@ -266,17 +386,8 @@ export default function AgentChatWindow() {
       );
 
       setMessages(
-        conversation.messages.map(
-          (message) => ({
-            id: message.id,
-            role: message.role,
-            content: message.content,
-            sources:
-              message.role
-              === "assistant"
-                ? message.citations
-                : undefined,
-          }),
+        mapConversationMessages(
+          conversation,
         ),
       );
     } catch (err) {
@@ -333,14 +444,14 @@ export default function AgentChatWindow() {
         },
         {
           onProgress(
-            event,
+            event: AgentChatProgressEvent,
           ) {
             handleProgressEvent(
               event,
             );
           },
           onCompleted(
-            result,
+            result: AgentChatResult,
           ) {
             setConversationId(
               result.conversation_id,
@@ -363,7 +474,7 @@ export default function AgentChatWindow() {
             }
           },
           onApprovalRequired(
-            result,
+            result: AgentChatResult,
           ) {
             setConversationId(
               result.conversation_id,
@@ -386,92 +497,6 @@ export default function AgentChatWindow() {
         err instanceof Error
           ? err.message
           : "Agent chat failed.",
-      );
-    } finally {
-      setStreaming(false);
-    }
-  }
-
-  async function handleApprovalDecision(
-    decision:
-      | "approve"
-      | "reject",
-  ) {
-    if (
-      !pendingApproval
-      || streaming
-    ) {
-      return;
-    }
-
-    const approval =
-      pendingApproval;
-
-    setError(null);
-    setProgressText(
-      decision === "approve"
-        ? "Continuing approved action..."
-        : "Continuing after rejection...",
-    );
-    setStreaming(true);
-
-    try {
-      await resumeAgentChatStream(
-        {
-          conversation_id:
-            approval.conversation_id,
-          run_id:
-            approval.run_id,
-          decision,
-        },
-        {
-          onProgress(
-            event,
-          ) {
-            handleProgressEvent(
-              event,
-            );
-          },
-          onCompleted(
-            result,
-          ) {
-            setPendingApproval(null);
-            setProgressText(null);
-
-            if (result.answer) {
-              setMessages(
-                (current) => [
-                  ...current,
-                  {
-                    id: nextMessageId(),
-                    role: "assistant",
-                    content: result.answer,
-                  },
-                ],
-              );
-            }
-          },
-          onApprovalRequired(
-            result,
-          ) {
-            setPendingApproval(result);
-            setProgressText(null);
-          },
-        },
-      );
-
-      await queryClient
-        .invalidateQueries({
-          queryKey: [
-            "conversations",
-          ],
-        });
-    } catch (err) {
-      setProgressText(null);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to resume agent run.",
       );
     } finally {
       setStreaming(false);
@@ -684,18 +709,11 @@ export default function AgentChatWindow() {
                   )}
 
                   {pendingApproval && (
-                    <ApprovalCard
+                    <ApprovalWaitingCard
                       result={pendingApproval}
-                      disabled={streaming}
-                      onApprove={() =>
-                        handleApprovalDecision(
-                          "approve",
-                        )
-                      }
-                      onReject={() =>
-                        handleApprovalDecision(
-                          "reject",
-                        )
+                      isAdmin={
+                        user?.role
+                        === "ADMIN"
                       }
                     />
                   )}
@@ -753,19 +771,15 @@ export default function AgentChatWindow() {
   );
 }
 
-type ApprovalCardProps = {
+type ApprovalWaitingCardProps = {
   result: AgentChatResult;
-  disabled: boolean;
-  onApprove: () => void;
-  onReject: () => void;
+  isAdmin: boolean;
 };
 
-function ApprovalCard({
+function ApprovalWaitingCard({
   result,
-  disabled,
-  onApprove,
-  onReject,
-}: ApprovalCardProps) {
+  isAdmin,
+}: ApprovalWaitingCardProps) {
   const tools =
     approvalTools(
       result.interrupts,
@@ -780,11 +794,11 @@ function ApprovalCard({
 
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-slate-900">
-            Approval required
+            Waiting for approval
           </h3>
 
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            The agent needs your approval before it can continue with this action.
+            This governed action is paused and has not executed. Approval decisions are handled centrally in Governance → Approvals.
           </p>
 
           {tools.length > 0 && (
@@ -818,25 +832,21 @@ function ApprovalCard({
             </div>
           )}
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={onApprove}
-              disabled={disabled}
-              className="inline-flex h-9 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Approve
-            </button>
-
-            <button
-              type="button"
-              onClick={onReject}
-              disabled={disabled}
-              className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Reject
-            </button>
-          </div>
+          {isAdmin
+            ? (
+              <Link
+                href="/approvals"
+                className="mt-4 inline-flex h-9 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition hover:bg-blue-700"
+              >
+                Open Approvals
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            )
+            : (
+              <p className="mt-4 text-xs font-medium text-amber-800">
+                Waiting for an administrator to review this request.
+              </p>
+            )}
         </div>
       </div>
     </div>

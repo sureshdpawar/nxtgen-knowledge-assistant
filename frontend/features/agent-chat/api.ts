@@ -2,39 +2,13 @@ import api from "@/services/api";
 
 import type {
   AgentChatResult,
-  AgentChatResumeRequest,
   AgentChatStreamCallbacks,
   AgentChatStreamRequest,
   AgentChatProgressEvent,
-} from "./types";
+} from "@/features/agent-chat/types";
 
 export async function streamAgentChat(
   payload: AgentChatStreamRequest,
-  callbacks: AgentChatStreamCallbacks,
-) {
-  await streamAgentChatRequest(
-    "/agent-chat/stream",
-    payload,
-    callbacks,
-  );
-}
-
-export async function resumeAgentChatStream(
-  payload: AgentChatResumeRequest,
-  callbacks: AgentChatStreamCallbacks,
-) {
-  await streamAgentChatRequest(
-    "/agent-chat/resume/stream",
-    payload,
-    callbacks,
-  );
-}
-
-async function streamAgentChatRequest(
-  path: string,
-  payload:
-    | AgentChatStreamRequest
-    | AgentChatResumeRequest,
   callbacks: AgentChatStreamCallbacks,
 ) {
   const token =
@@ -44,7 +18,7 @@ async function streamAgentChatRequest(
 
   const url =
     api.getUri({
-      url: path,
+      url: "/agent-chat/stream",
     });
 
   const response =
