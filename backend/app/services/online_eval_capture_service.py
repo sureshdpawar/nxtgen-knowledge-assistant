@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.core.telemetry import (
     get_current_trace_id,
+    get_finished_spans_for_trace,
+    readable_span_to_dict,
 )
 from app.models.online_eval_result import (
     OnlineEvalResult,
@@ -70,6 +72,62 @@ class OnlineEvalCaptureService:
             < sample_rate
         )
 
+    def _source_trace_snapshot(
+        self,
+        *,
+        trace_id: str,
+    ) -> dict | None:
+        """
+        Capture the finished spans currently
+        available for the production trace.
+
+        With the local memory exporter this gives
+        Online Evaluation a durable debugging
+        snapshot that survives backend restarts.
+
+        The outer FastAPI/request span may still be
+        open when capture() is called, so the
+        snapshot intentionally contains the
+        finished application spans available at
+        capture time.
+        """
+
+        spans = get_finished_spans_for_trace(
+            trace_id
+        )
+
+        if not spans:
+            return None
+
+        serialized_spans = [
+            readable_span_to_dict(
+                span
+            )
+            for span in spans
+        ]
+
+        serialized_spans.sort(
+            key=lambda item: (
+                item.get(
+                    "start_time_unix_nano"
+                )
+                or 0
+            )
+        )
+
+        return {
+            "trace_id":
+                trace_id.lower(),
+            "span_count":
+                len(
+                    serialized_spans
+                ),
+            "spans":
+                serialized_spans,
+            "storage":
+                "online_eval_snapshot",
+        }
+
     def capture(
         self,
         db: Session,
@@ -110,6 +168,12 @@ class OnlineEvalCaptureService:
         If source_trace_id is not supplied, the
         current OpenTelemetry trace is used.
 
+        When local in-memory tracing is enabled,
+        finished spans are copied into the
+        evaluation metadata so the Production
+        Trace UI can still inspect them after a
+        backend restart.
+
         The caller owns the transaction and commit.
         """
 
@@ -119,6 +183,15 @@ class OnlineEvalCaptureService:
         )
 
         if not resolved_trace_id:
+            return None
+
+        normalized_trace_id = (
+            resolved_trace_id
+            .strip()
+            .lower()
+        )
+
+        if not normalized_trace_id:
             return None
 
         normalized_question = (
@@ -151,6 +224,23 @@ class OnlineEvalCaptureService:
             if str(context).strip()
         ]
 
+        metadata = dict(
+            evaluation_metadata
+            or {}
+        )
+
+        snapshot = (
+            self._source_trace_snapshot(
+                trace_id=
+                    normalized_trace_id,
+            )
+        )
+
+        if snapshot is not None:
+            metadata[
+                "source_trace_snapshot"
+            ] = snapshot
+
         result = OnlineEvalResult(
             tenant_id=
                 tenant_id,
@@ -165,7 +255,7 @@ class OnlineEvalCaptureService:
                 message_id,
 
             source_trace_id=
-                resolved_trace_id,
+                normalized_trace_id,
 
             status=
                 "pending",
@@ -189,8 +279,7 @@ class OnlineEvalCaptureService:
                 generator_model,
 
             evaluation_metadata=
-                evaluation_metadata
-                or {},
+                metadata,
         )
 
         return (

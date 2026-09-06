@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import json
 
 from fastapi import (
@@ -86,9 +87,39 @@ async def stream_agent_chat(
         require_authenticated_user,
     ),
 ):
+    """
+    Stream an Agent Chat turn.
+
+    Important observability detail:
+
+    StreamingResponse executes its body iterator
+    after the endpoint function has returned.
+
+    Agent execution is also started inside that
+    iterator as an asyncio task. Without explicitly
+    preserving the endpoint's contextvars context,
+    the OpenTelemetry request span may no longer be
+    the current context when Agent execution records
+    LLM usage.
+
+    Online Agent evaluation derives its production
+    source_trace_id from that LLM usage record. A
+    missing trace context therefore causes the
+    otherwise-successful Agent RAG interaction to
+    be skipped by online-evaluation capture.
+
+    Capture the current context while the FastAPI
+    request span is still active and use that exact
+    context for the Agent execution task.
+    """
+
     queue: asyncio.Queue[
         dict | None
     ] = asyncio.Queue()
+
+    request_context = (
+        contextvars.copy_context()
+    )
 
     async def progress_callback(
         event: dict,
@@ -160,7 +191,9 @@ async def stream_agent_chat(
 
     async def event_stream():
         task = asyncio.create_task(
-            execute()
+            execute(),
+            context=
+                request_context,
         )
 
         try:
