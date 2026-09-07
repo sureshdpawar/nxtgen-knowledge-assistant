@@ -133,13 +133,15 @@ class KnowledgeSourceSyncService:
             source.status = KnowledgeSourceStatus.ACTIVE
             sync_run.completed_at = now
 
-            has_warnings = (
-                sync_run.items_failed > 0
-                or not discovery.complete
-                or bool(discovery.warnings)
-            )
-
-            if has_warnings:
+            # Discovery diagnostics describe source/inventory quality and are
+            # intentionally reported through provider_summary. They do not
+            # make an otherwise successful synchronization an error.
+            #
+            # COMPLETED_WITH_ERRORS is reserved for SourceItems that were
+            # discovered successfully but failed during document processing.
+            # Provider/system-level exceptions are handled by the outer
+            # exception block and mark the entire run FAILED.
+            if sync_run.items_failed > 0:
                 sync_run.status = (
                     KnowledgeSourceSyncStatus.COMPLETED_WITH_ERRORS
                 )
