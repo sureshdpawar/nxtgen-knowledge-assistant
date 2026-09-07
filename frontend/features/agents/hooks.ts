@@ -9,15 +9,20 @@ import {
   createAgent,
   deleteAgent,
   getAgent,
+  getAgentAssignedTools,
+  getAgentCheckpointHistory,
+  getAgentGraphState,
   getAgentRun,
   getAgentRuns,
   getAgents,
   runAgent,
   updateAgent,
+  updateAgentToolPolicy,
 } from "./api";
 
 import type {
   AgentRunRequest,
+  AgentToolExecutionPolicy,
   AssignAgentToolsRequest,
   CreateAgentRequest,
   UpdateAgentRequest,
@@ -31,10 +36,8 @@ export function useAgents(
     queryKey: [
       "agents",
     ],
-
     queryFn:
       getAgents,
-
     enabled,
   });
 }
@@ -48,16 +51,12 @@ export function useAgent(
       "agents",
       id,
     ],
-
     queryFn: () =>
       getAgent(
         id!,
       ),
-
     enabled:
-      Boolean(
-        id,
-      ),
+      Boolean(id),
   });
 }
 
@@ -96,7 +95,6 @@ export function useUpdateAgent() {
       data,
     }: {
       id: string;
-
       data:
         UpdateAgentRequest;
     }) =>
@@ -145,6 +143,26 @@ export function useDeleteAgent() {
 }
 
 
+export function useAgentAssignedTools(
+  agentId: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: [
+      "agent-tools",
+      agentId,
+    ],
+    queryFn: () =>
+      getAgentAssignedTools(
+        agentId,
+      ),
+    enabled:
+      Boolean(agentId)
+      && enabled,
+  });
+}
+
+
 export function useAssignAgentTools() {
   const queryClient =
     useQueryClient();
@@ -155,7 +173,6 @@ export function useAssignAgentTools() {
       toolIds,
     }: {
       agentId: string;
-
       toolIds: string[];
     }) => {
       const payload:
@@ -189,7 +206,50 @@ export function useAssignAgentTools() {
 
       queryClient.invalidateQueries({
         queryKey: [
+          "agent-tools",
+          variables.agentId,
+        ],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: [
           "tools",
+        ],
+      });
+    },
+  });
+}
+
+
+export function useUpdateAgentToolPolicy() {
+  const queryClient =
+    useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      agentId,
+      toolId,
+      executionPolicy,
+    }: {
+      agentId: string;
+      toolId: string;
+      executionPolicy:
+        AgentToolExecutionPolicy;
+    }) =>
+      updateAgentToolPolicy(
+        agentId,
+        toolId,
+        executionPolicy,
+      ),
+
+    onSuccess(
+      _updatedPolicy,
+      variables,
+    ) {
+      queryClient.invalidateQueries({
+        queryKey: [
+          "agent-tools",
+          variables.agentId,
         ],
       });
     },
@@ -233,16 +293,12 @@ export function useAgentRuns(
       "agent-runs",
       agentId,
     ],
-
     queryFn: () =>
       getAgentRuns(
         agentId!,
       ),
-
     enabled:
-      Boolean(
-        agentId,
-      ),
+      Boolean(agentId),
   });
 }
 
@@ -255,15 +311,54 @@ export function useAgentRun(
       "agent-run",
       runId,
     ],
-
     queryFn: () =>
       getAgentRun(
         runId!,
       ),
-
     enabled:
-      Boolean(
-        runId,
+      Boolean(runId),
+  });
+}
+
+
+export function useAgentGraphState(
+  agentId: string,
+  threadId: string | null,
+) {
+  return useQuery({
+    queryKey: [
+      "agent-graph-state",
+      agentId,
+      threadId,
+    ],
+    queryFn: () =>
+      getAgentGraphState(
+        agentId,
+        threadId!,
       ),
+    enabled:
+      Boolean(threadId),
+  });
+}
+
+
+export function useAgentCheckpointHistory(
+  agentId: string,
+  threadId: string | null,
+) {
+  return useQuery({
+    queryKey: [
+      "agent-checkpoints",
+      agentId,
+      threadId,
+    ],
+    queryFn: () =>
+      getAgentCheckpointHistory(
+        agentId,
+        threadId!,
+        20,
+      ),
+    enabled:
+      Boolean(threadId),
   });
 }

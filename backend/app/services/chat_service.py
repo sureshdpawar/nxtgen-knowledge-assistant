@@ -15,6 +15,17 @@ from openai import (
 )
 from sqlalchemy.orm import Session
 
+from opentelemetry.trace import (
+    Status,
+    StatusCode,
+)
+
+from app.core.config import (
+    settings,
+)
+from app.core.telemetry import (
+    get_tracer,
+)
 from app.exceptions.llm import (
     LLMAuthenticationError,
     LLMConnectionError,
@@ -37,6 +48,9 @@ from app.services.llm_client_factory import (
 from app.services.llm_usage_service import (
     LLMUsageService,
 )
+from app.services.online_eval_capture_service import (
+    OnlineEvalCaptureService,
+)
 from app.services.prompt_builder_service import (
     PromptBuilderService,
 )
@@ -47,6 +61,10 @@ from app.services.usage_quota_service import (
 
 logger = logging.getLogger(
     "nxtgen.llm"
+)
+
+tracer = get_tracer(
+    __name__
 )
 
 
@@ -76,6 +94,296 @@ class ChatService:
         self.llm_usage_service = (
             LLMUsageService()
         )
+
+        self.online_eval_capture_service = (
+            OnlineEvalCaptureService()
+        )
+
+
+    def _set_llm_span_base_attributes(
+        self,
+        span,
+        *,
+        tenant_id: UUID,
+        knowledge_base_id: UUID,
+        config,
+        streaming: bool,
+    ) -> None:
+        span.set_attribute(
+            "knowgentiq.tenant.id",
+            str(tenant_id),
+        )
+        span.set_attribute(
+            "knowgentiq.knowledge_base.id",
+            str(knowledge_base_id),
+        )
+        span.set_attribute(
+            "gen_ai.system",
+            str(config.provider.value),
+        )
+        span.set_attribute(
+            "gen_ai.request.model",
+            config.model_name,
+        )
+        span.set_attribute(
+            "knowgentiq.llm.streaming",
+            streaming,
+        )
+
+    def _set_llm_usage_attributes(
+        self,
+        span,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        estimated: bool,
+        usage_event=None,
+    ) -> None:
+        span.set_attribute(
+            "gen_ai.usage.input_tokens",
+            input_tokens,
+        )
+        span.set_attribute(
+            "gen_ai.usage.output_tokens",
+            output_tokens,
+        )
+        span.set_attribute(
+            "knowgentiq.llm.total_tokens",
+            input_tokens + output_tokens,
+        )
+        span.set_attribute(
+            "knowgentiq.llm.usage_estimated",
+            estimated,
+        )
+
+        if usage_event is None:
+            return
+
+        metadata = (
+            usage_event.usage_metadata
+            or {}
+        )
+
+        cost = (
+            metadata.get("cost")
+            or {}
+        )
+
+        pricing_found = bool(
+            cost.get(
+                "pricing_found",
+                False,
+            )
+        )
+
+        span.set_attribute(
+            "knowgentiq.cost.pricing_found",
+            pricing_found,
+        )
+
+        if not pricing_found:
+            return
+
+        total_cost = cost.get(
+            "total_cost"
+        )
+
+        if total_cost is not None:
+            span.set_attribute(
+                "knowgentiq.cost.total",
+                float(total_cost),
+            )
+
+        currency = cost.get(
+            "currency"
+        )
+
+        if currency:
+            span.set_attribute(
+                "knowgentiq.cost.currency",
+                str(currency),
+            )
+
+        pricing_version = cost.get(
+            "pricing_version"
+        )
+
+        if pricing_version:
+            span.set_attribute(
+                "knowgentiq.cost.pricing_version",
+                str(pricing_version),
+            )
+
+        pricing_source = cost.get(
+            "pricing_source"
+        )
+
+        if pricing_source:
+            span.set_attribute(
+                "knowgentiq.cost.pricing_source",
+                str(pricing_source),
+            )
+
+    @staticmethod
+    def _mark_span_error(
+        span,
+        exc: Exception,
+    ) -> None:
+        span.record_exception(exc)
+        span.set_status(
+            Status(
+                StatusCode.ERROR,
+                str(exc),
+            )
+        )
+
+    def _capture_online_eval_if_sampled(
+        self,
+        db: Session,
+        *,
+        tenant_id: UUID,
+        knowledge_base_id: UUID,
+        conversation_id: UUID,
+        message_id: UUID,
+        query: str,
+        answer: str,
+        contexts: list[str],
+        config,
+        usage_event,
+    ) -> None:
+        """
+        Persist a production interaction for
+        later asynchronous online evaluation.
+
+        Online evaluation must never make a
+        successful chat request fail.
+        """
+
+        if not settings.ONLINE_EVAL_ENABLED:
+            return
+
+        try:
+            should_sample = (
+                self.online_eval_capture_service
+                .should_sample(
+                    sample_rate=
+                        settings
+                        .ONLINE_EVAL_SAMPLE_RATE,
+                )
+            )
+
+        except Exception:
+            logger.exception(
+                "Online evaluation sampling "
+                "decision failed tenant=%s kb=%s",
+                tenant_id,
+                knowledge_base_id,
+            )
+
+            return
+
+        if not should_sample:
+            return
+
+        usage_metadata = (
+            usage_event.usage_metadata
+            or {}
+        )
+
+        source_trace_id = (
+            usage_metadata.get(
+                "trace_id"
+            )
+        )
+
+        if not source_trace_id:
+            logger.warning(
+                "Online evaluation capture "
+                "skipped because source "
+                "trace_id was unavailable "
+                "tenant=%s kb=%s",
+                tenant_id,
+                knowledge_base_id,
+            )
+
+            return
+
+        try:
+            #
+            # A savepoint isolates optional
+            # evaluation persistence from the
+            # primary chat transaction.
+            #
+            with db.begin_nested():
+                captured = (
+                    self.online_eval_capture_service
+                    .capture(
+                        db=db,
+
+                        tenant_id=
+                            tenant_id,
+
+                        knowledge_base_id=
+                            knowledge_base_id,
+
+                        conversation_id=
+                            conversation_id,
+
+                        message_id=
+                            message_id,
+
+                        question=
+                            query,
+
+                        actual_answer=
+                            answer,
+
+                        retrieval_context=
+                            contexts,
+
+                        generator_provider=
+                            config.provider.value,
+
+                        generator_model=
+                            config.model_name,
+
+                        sample_reason=
+                            "random",
+
+                        source_trace_id=
+                            source_trace_id,
+
+                        evaluation_metadata={
+                            "capture_source":
+                                "chat",
+
+                            "sampling_rate":
+                                settings
+                                .ONLINE_EVAL_SAMPLE_RATE,
+                        },
+                    )
+                )
+
+            if captured is not None:
+                logger.info(
+                    "Online evaluation candidate "
+                    "captured tenant=%s kb=%s "
+                    "conversation=%s trace_id=%s",
+                    tenant_id,
+                    knowledge_base_id,
+                    conversation_id,
+                    source_trace_id,
+                )
+
+        except Exception:
+            logger.exception(
+                "Online evaluation capture "
+                "failed tenant=%s kb=%s "
+                "conversation=%s",
+                tenant_id,
+                knowledge_base_id,
+                conversation_id,
+            )
 
     def _estimate_tokens(
         self,
@@ -468,6 +776,18 @@ class ChatService:
             time.perf_counter()
         )
 
+        llm_span = tracer.start_span(
+            "llm.generate"
+        )
+
+        self._set_llm_span_base_attributes(
+            llm_span,
+            tenant_id=tenant_id,
+            knowledge_base_id=knowledge_base_id,
+            config=config,
+            streaming=False,
+        )
+
         try:
             response = (
                 client.chat.completions
@@ -494,6 +814,12 @@ class ChatService:
             )
 
         except AuthenticationError as exc:
+            self._mark_span_error(
+                llm_span,
+                exc,
+            )
+            llm_span.end()
+
             elapsed_ms = (
                 (
                     time.perf_counter()
@@ -521,6 +847,12 @@ class ChatService:
             ) from exc
 
         except RateLimitError as exc:
+            self._mark_span_error(
+                llm_span,
+                exc,
+            )
+            llm_span.end()
+
             elapsed_ms = (
                 (
                     time.perf_counter()
@@ -548,6 +880,12 @@ class ChatService:
             ) from exc
 
         except APITimeoutError as exc:
+            self._mark_span_error(
+                llm_span,
+                exc,
+            )
+            llm_span.end()
+
             elapsed_ms = (
                 (
                     time.perf_counter()
@@ -575,6 +913,12 @@ class ChatService:
             ) from exc
 
         except APIConnectionError as exc:
+            self._mark_span_error(
+                llm_span,
+                exc,
+            )
+            llm_span.end()
+
             elapsed_ms = (
                 (
                     time.perf_counter()
@@ -602,6 +946,12 @@ class ChatService:
             ) from exc
 
         except APIError as exc:
+            self._mark_span_error(
+                llm_span,
+                exc,
+            )
+            llm_span.end()
+
             elapsed_ms = (
                 (
                     time.perf_counter()
@@ -704,7 +1054,8 @@ class ChatService:
         #
         # Normalized usage record.
         #
-        self.llm_usage_service.record(
+        usage_event = (
+            self.llm_usage_service.record(
             db=db,
             tenant_id=
                 tenant_id,
@@ -741,7 +1092,54 @@ class ChatService:
                 "streaming":
                     False,
             },
+            )
         )
+
+        self._set_llm_usage_attributes(
+            llm_span,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            estimated=bool(usage.get("estimated", False)),
+            usage_event=usage_event,
+        )
+
+        self._capture_online_eval_if_sampled(
+            db=db,
+
+            tenant_id=
+                tenant_id,
+
+            knowledge_base_id=
+                knowledge_base_id,
+
+            conversation_id=
+                conversation.id,
+
+            message_id=
+                assistant_message.id,
+
+            query=
+                query,
+
+            answer=
+                answer,
+
+            contexts=
+                contexts,
+
+            config=
+                config,
+
+            usage_event=
+                usage_event,
+        )
+
+        llm_span.set_status(
+            Status(
+                StatusCode.OK
+            )
+        )
+        llm_span.end()
 
         db.commit()
 
@@ -924,6 +1322,18 @@ class ChatService:
 
         answer = ""
 
+        llm_span = tracer.start_span(
+            "llm.generate"
+        )
+
+        self._set_llm_span_base_attributes(
+            llm_span,
+            tenant_id=tenant_id,
+            knowledge_base_id=knowledge_base_id,
+            config=config,
+            streaming=True,
+        )
+
         try:
             response = (
                 client.chat.completions
@@ -975,7 +1385,13 @@ class ChatService:
                     f"data: {token}\n\n"
                 )
 
-        except AuthenticationError:
+        except AuthenticationError as exc:
+            self._mark_span_error(
+                llm_span,
+                exc,
+            )
+            llm_span.end()
+
             elapsed_ms = (
                 (
                     time.perf_counter()
@@ -1017,7 +1433,13 @@ class ChatService:
 
             return
 
-        except RateLimitError:
+        except RateLimitError as exc:
+            self._mark_span_error(
+                llm_span,
+                exc,
+            )
+            llm_span.end()
+
             elapsed_ms = (
                 (
                     time.perf_counter()
@@ -1060,7 +1482,13 @@ class ChatService:
 
             return
 
-        except APITimeoutError:
+        except APITimeoutError as exc:
+            self._mark_span_error(
+                llm_span,
+                exc,
+            )
+            llm_span.end()
+
             elapsed_ms = (
                 (
                     time.perf_counter()
@@ -1101,7 +1529,13 @@ class ChatService:
 
             return
 
-        except APIConnectionError:
+        except APIConnectionError as exc:
+            self._mark_span_error(
+                llm_span,
+                exc,
+            )
+            llm_span.end()
+
             elapsed_ms = (
                 (
                     time.perf_counter()
@@ -1145,6 +1579,12 @@ class ChatService:
             return
 
         except APIError as exc:
+            self._mark_span_error(
+                llm_span,
+                exc,
+            )
+            llm_span.end()
+
             elapsed_ms = (
                 (
                     time.perf_counter()
@@ -1277,7 +1717,8 @@ class ChatService:
             )
         )
 
-        self.llm_usage_service.record(
+        usage_event = (
+            self.llm_usage_service.record(
             db=db,
             tenant_id=
                 tenant_id,
@@ -1306,7 +1747,54 @@ class ChatService:
                 "streaming":
                     True,
             },
+            )
         )
+
+        self._set_llm_usage_attributes(
+            llm_span,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            estimated=True,
+            usage_event=usage_event,
+        )
+
+        self._capture_online_eval_if_sampled(
+            db=db,
+
+            tenant_id=
+                tenant_id,
+
+            knowledge_base_id=
+                knowledge_base_id,
+
+            conversation_id=
+                conversation.id,
+
+            message_id=
+                assistant_message.id,
+
+            query=
+                query,
+
+            answer=
+                answer,
+
+            contexts=
+                contexts,
+
+            config=
+                config,
+
+            usage_event=
+                usage_event,
+        )
+
+        llm_span.set_status(
+            Status(
+                StatusCode.OK
+            )
+        )
+        llm_span.end()
 
         db.commit()
 

@@ -7,127 +7,117 @@ BACKUP_DIR = backups
 
 
 # ============================================================
+# Validation
+# ============================================================
+
+.PHONY: env-check config
+
+env-check:
+	@test -f .env.prod || (echo "ERROR: .env.prod does not exist."; exit 1)
+	@test -f $$(grep '^GOOGLE_SERVICE_ACCOUNT_HOST_FILE=' .env.prod | cut -d '=' -f2-) || \
+		(echo "ERROR: Google service-account file does not exist."; exit 1)
+	@! grep -Eq 'CHANGE_ME|YOUR_DOMAIN' .env.prod || \
+		(echo "ERROR: .env.prod still contains CHANGE_ME or YOUR_DOMAIN placeholders."; exit 1)
+	@echo "Production environment preflight passed."
+
+config:
+	$(COMPOSE) config
+
+
+# ============================================================
 # Docker
 # ============================================================
 
-.PHONY: \
-	up \
-	down \
-	build \
-	rebuild \
-	restart \
-	ps \
-	logs
-
+.PHONY: up down build rebuild restart ps logs
 
 up:
 	$(COMPOSE) up -d
 
-
 down:
 	$(COMPOSE) down
-
 
 build:
 	$(COMPOSE) build
 
-
 rebuild:
 	$(COMPOSE) build --no-cache
-
 
 restart:
 	$(COMPOSE) restart
 
-
 ps:
 	$(COMPOSE) ps
-
 
 logs:
 	$(COMPOSE) logs -f
 
 
 # ============================================================
-# Backend
+# Backend / frontend
 # ============================================================
 
-.PHONY: \
-	backend-logs \
-	backend-shell
-
+.PHONY: backend-logs backend-shell frontend-logs
 
 backend-logs:
 	$(COMPOSE) logs -f backend
 
-
 backend-shell:
 	$(COMPOSE) exec backend bash
+
+frontend-logs:
+	$(COMPOSE) logs -f frontend
 
 
 # ============================================================
 # Alembic / Database Migrations
 # ============================================================
 
-.PHONY: \
-	migrate \
-	migration-current \
-	migration-heads \
-	migration-history
-
-
-#
-# Use "run --rm" rather than "exec".
-#
-# This ensures migrations are executed using
-# the newly built backend image and do not
-# depend on the currently running backend
-# container.
-#
+.PHONY: migrate migration-current migration-heads migration-history
 
 migrate:
 	$(COMPOSE) run --rm backend alembic upgrade head
 
-
 migration-current:
 	$(COMPOSE) run --rm backend alembic current
 
-
 migration-heads:
 	$(COMPOSE) run --rm backend alembic heads
-
 
 migration-history:
 	$(COMPOSE) run --rm backend alembic history
 
 
 # ============================================================
-# Background Worker
+# Background ingestion worker
 # ============================================================
 
-.PHONY: \
-	worker-logs \
-	worker-shell
-
+.PHONY: worker-logs worker-shell
 
 worker-logs:
 	$(COMPOSE) logs -f backend-worker
-
 
 worker-shell:
 	$(COMPOSE) exec backend-worker bash
 
 
 # ============================================================
+# Academy MCP
+# ============================================================
+
+.PHONY: mcp-logs mcp-shell
+
+mcp-logs:
+	$(COMPOSE) logs -f mcp
+
+mcp-shell:
+	$(COMPOSE) exec mcp bash
+
+
+# ============================================================
 # Database
 # ============================================================
 
-.PHONY: \
-	db-shell \
-	db-status \
-	db-extensions \
-	db-backup
-
+.PHONY: db-shell db-status db-wait db-extensions db-backup
 
 db-shell:
 	$(COMPOSE) exec postgres \
@@ -135,13 +125,21 @@ db-shell:
 		-U $(POSTGRES_USER) \
 		-d $(POSTGRES_DB)
 
-
 db-status:
 	$(COMPOSE) exec postgres \
 		pg_isready \
 		-U $(POSTGRES_USER) \
 		-d $(POSTGRES_DB)
 
+db-wait:
+	@echo "Waiting for PostgreSQL to become ready..."
+	@until $(COMPOSE) exec -T postgres \
+		pg_isready \
+		-U $(POSTGRES_USER) \
+		-d $(POSTGRES_DB) >/dev/null 2>&1; do \
+		sleep 2; \
+	done
+	@echo "PostgreSQL is ready."
 
 db-extensions:
 	$(COMPOSE) exec postgres \
@@ -149,14 +147,6 @@ db-extensions:
 		-U $(POSTGRES_USER) \
 		-d $(POSTGRES_DB) \
 		-c '\dx'
-
-
-#
-# Create a PostgreSQL custom-format backup.
-#
-# Backups are stored on the host machine,
-# not inside the PostgreSQL container.
-#
 
 db-backup:
 	@mkdir -p $(BACKUP_DIR)
@@ -166,60 +156,31 @@ db-backup:
 		-U $(POSTGRES_USER) \
 		-d $(POSTGRES_DB) \
 		-F c \
-		> $(BACKUP_DIR)/nxtgen-$$(date +%Y%m%d-%H%M%S).dump
+		> $(BACKUP_DIR)/knowgentiq-$$(date +%Y%m%d-%H%M%S).dump
 	@echo "Database backup completed."
 	@ls -lh $(BACKUP_DIR) | tail -5
-
-
-# ============================================================
-# MCP
-# ============================================================
-
-.PHONY: \
-	mcp-logs
-
-
-mcp-logs:
-	$(COMPOSE) logs -f mcp
-
-
-# ============================================================
-# Mock REST API
-# ============================================================
-
-.PHONY: \
-	rest-logs
-
-
-rest-logs:
-	$(COMPOSE) logs -f mock-rest
 
 
 # ============================================================
 # Application Bootstrap
 # ============================================================
 
-.PHONY: \
-	superadmin
-
+.PHONY: superadmin
 
 superadmin:
-	$(COMPOSE) exec backend \
-		python create_superadmin.py
+	$(COMPOSE) exec backend python create_superadmin.py
 
 
 # ============================================================
 # Production Preflight
 # ============================================================
 
-.PHONY: \
-	preflight
+.PHONY: preflight
 
-
-preflight:
+preflight: env-check config
 	@echo ""
 	@echo "=========================================="
-	@echo "NXTGEN production preflight"
+	@echo "Knowgentiq production preflight"
 	@echo "=========================================="
 	@echo ""
 
@@ -246,37 +207,22 @@ preflight:
 # Production Deployment
 # ============================================================
 
-.PHONY: \
-	deploy
+.PHONY: deploy
 
-
-#
-# Production deployment order:
-#
-# 1. Build new application images.
-# 2. Verify PostgreSQL is available.
-# 3. Backup the existing production database.
-# 4. Display current DB migration.
-# 5. Display application migration head.
-# 6. Upgrade DB schema.
-# 7. Start/recreate application containers.
-# 8. Display final service status.
-#
-# PostgreSQL volumes are NOT removed.
-#
-
-deploy:
+deploy: env-check config
 	@echo ""
 	@echo "=========================================="
-	@echo "NXTGEN production deployment"
+	@echo "Knowgentiq production deployment"
 	@echo "=========================================="
 	@echo ""
 
-	@echo "Step 1/7 - Building images..."
+	@echo "Step 1/7 - Building application images..."
 	$(COMPOSE) build
 
 	@echo ""
-	@echo "Step 2/7 - Checking PostgreSQL..."
+	@echo "Step 2/7 - Starting PostgreSQL..."
+	$(COMPOSE) up -d postgres
+	$(MAKE) db-wait
 	$(MAKE) db-status
 
 	@echo ""
@@ -288,7 +234,7 @@ deploy:
 	$(MAKE) migration-current
 
 	@echo ""
-	@echo "Step 5/7 - Checking migration head..."
+	@echo "Step 5/7 - Checking application migration head..."
 	$(MAKE) migration-heads
 
 	@echo ""
@@ -296,7 +242,7 @@ deploy:
 	$(MAKE) migrate
 
 	@echo ""
-	@echo "Step 7/7 - Starting application..."
+	@echo "Step 7/7 - Starting application services..."
 	$(COMPOSE) up -d
 
 	@echo ""

@@ -4,16 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import {
+  Activity,
   Bot,
   Building2,
   BrainCircuit,
   Cable,
+  CircleDollarSign,
   ClipboardCheck,
   Database,
   Gauge,
   LayoutDashboard,
   MessageSquare,
   Search,
+  ShieldCheck,
   Users,
   Wrench,
   X,
@@ -31,6 +34,16 @@ type SidebarProps = {
 };
 
 
+type MenuSection =
+  | "main"
+  | "chat"
+  | "knowledge"
+  | "studio"
+  | "evaluation"
+  | "governance"
+  | "administration";
+
+
 type MenuItem = {
   label: string;
 
@@ -42,11 +55,7 @@ type MenuItem = {
 
   roles: UserRole[];
 
-  section:
-    | "main"
-    | "knowledge"
-    | "studio"
-    | "administration";
+  section: MenuSection;
 };
 
 
@@ -63,19 +72,29 @@ const menu: MenuItem[] = [
   },
 
   {
-    label: "Knowledge Bases",
-    href: "/knowledge-bases",
-    icon: Database,
+    label: "KB Chat",
+    href: "/chat",
+    icon: MessageSquare,
     roles: [
-      "ADMIN",
+      "USER",
     ],
-    section: "knowledge",
+    section: "chat",
   },
 
   {
-    label: "Evaluation",
-    href: "/evaluation",
-    icon: ClipboardCheck,
+    label: "Agent Chat",
+    href: "/agent-chat",
+    icon: Bot,
+    roles: [
+      "USER",
+    ],
+    section: "chat",
+  },
+
+  {
+    label: "Knowledge Bases",
+    href: "/knowledge-bases",
+    icon: Database,
     roles: [
       "ADMIN",
     ],
@@ -99,7 +118,6 @@ const menu: MenuItem[] = [
     icon: MessageSquare,
     roles: [
       "ADMIN",
-      "USER",
     ],
     section: "knowledge",
   },
@@ -108,6 +126,26 @@ const menu: MenuItem[] = [
     label: "Agents",
     href: "/agents",
     icon: Bot,
+    roles: [
+      "ADMIN",
+    ],
+    section: "studio",
+  },
+
+  {
+    label: "Chat",
+    href: "/agent-chat",
+    icon: MessageSquare,
+    roles: [
+      "ADMIN",
+    ],
+    section: "studio",
+  },
+
+  {
+    label: "Tools",
+    href: "/tools",
+    icon: Wrench,
     roles: [
       "ADMIN",
     ],
@@ -125,13 +163,63 @@ const menu: MenuItem[] = [
   },
 
   {
-    label: "Tools",
-    href: "/tools",
-    icon: Wrench,
+    label: "Test & Benchmark",
+    href: "/evaluation",
+    icon: ClipboardCheck,
     roles: [
       "ADMIN",
     ],
-    section: "studio",
+    section: "evaluation",
+  },
+
+  {
+    label: "Production Quality",
+    href: "/online-evaluation",
+    icon: Activity,
+    roles: [
+      "ADMIN",
+    ],
+    section: "evaluation",
+  },
+
+  {
+    label: "LLM Profiles",
+    href: "/settings",
+    icon: BrainCircuit,
+    roles: [
+      "ADMIN",
+    ],
+    section: "governance",
+  },
+
+  {
+    label: "Approvals",
+    href: "/approvals",
+    icon: ShieldCheck,
+    roles: [
+      "ADMIN",
+    ],
+    section: "governance",
+  },
+
+  {
+    label: "Usage & Quotas",
+    href: "/usage",
+    icon: Gauge,
+    roles: [
+      "ADMIN",
+    ],
+    section: "governance",
+  },
+
+  {
+    label: "Cost Analytics",
+    href: "/cost-analytics",
+    icon: CircleDollarSign,
+    roles: [
+      "ADMIN",
+    ],
+    section: "governance",
   },
 
   {
@@ -153,44 +241,32 @@ const menu: MenuItem[] = [
     ],
     section: "administration",
   },
-
-  {
-    label: "Usage & Limits",
-    href: "/usage",
-    icon: Gauge,
-    roles: [
-      "ADMIN",
-    ],
-    section: "administration",
-  },
-
-  {
-    label: "LLM Profiles",
-    href: "/settings",
-    icon: BrainCircuit,
-    roles: [
-      "ADMIN",
-    ],
-    section: "administration",
-  },
 ];
 
 
-const sectionLabels = {
+const sectionLabels: Record<
+  MenuSection,
+  string
+> = {
   main: "",
+  chat: "Chat",
   knowledge: "Knowledge",
   studio: "Agent Studio",
-  administration: "Administration",
-} as const;
+  evaluation: "Evaluation",
+  governance: "Governance",
+  administration: "Admin",
+};
 
 
-const sectionOrder:
-  MenuItem["section"][] = [
-    "main",
-    "knowledge",
-    "studio",
-    "administration",
-  ];
+const sectionOrder: MenuSection[] = [
+  "main",
+  "chat",
+  "knowledge",
+  "studio",
+  "evaluation",
+  "governance",
+  "administration",
+];
 
 
 export default function Sidebar({
@@ -264,9 +340,6 @@ export default function Sidebar({
       `}
     >
 
-      {/*
-       * Mobile drawer header
-       */}
       {mobile && (
         <div
           className="
@@ -329,9 +402,6 @@ export default function Sidebar({
       )}
 
 
-      {/*
-       * Signed-in user
-       */}
       <div
         className="
           shrink-0
@@ -415,9 +485,6 @@ export default function Sidebar({
       </div>
 
 
-      {/*
-       * Navigation
-       */}
       <nav
         className="
           min-h-0
@@ -490,9 +557,7 @@ export default function Sidebar({
 
                         return (
                           <Link
-                            key={
-                              item.href
-                            }
+                            key={`${item.section}-${item.href}`}
                             href={
                               item.href
                             }

@@ -2,23 +2,29 @@ from fastapi import APIRouter
 
 from app.api.v1.routers import account
 from app.api.v1.routers import agent
+from app.api.v1.routers import agent_access
+from app.api.v1.routers import agent_action_approval
+from app.api.v1.routers import agent_chat
 from app.api.v1.routers import agent_runs
 from app.api.v1.routers import auth
 from app.api.v1.routers import chat
 from app.api.v1.routers import chat_channel
 from app.api.v1.routers import conversation
+from app.api.v1.routers import cost_analytics
 from app.api.v1.routers import dashboard
 from app.api.v1.routers import document
 from app.api.v1.routers import eval
 from app.api.v1.routers import integration
 from app.api.v1.routers import knowledge_base
 from app.api.v1.routers import knowledge_source
+from app.api.v1.routers import online_eval
 from app.api.v1.routers import search
 from app.api.v1.routers import tenant
 from app.api.v1.routers import (
     tenant_llm_configuration,
 )
 from app.api.v1.routers import tool_definition
+from app.api.v1.routers import trace_debug
 from app.api.v1.routers import usage_limit
 from app.api.v1.routers import user
 
@@ -59,6 +65,10 @@ api_router.include_router(
 )
 
 api_router.include_router(
+    agent_chat.router,
+)
+
+api_router.include_router(
     chat_channel.router,
 )
 
@@ -79,7 +89,15 @@ api_router.include_router(
 )
 
 api_router.include_router(
+    agent_access.router,
+)
+
+api_router.include_router(
     agent_runs.router,
+)
+
+api_router.include_router(
+    agent_action_approval.router,
 )
 
 api_router.include_router(
@@ -99,5 +117,17 @@ api_router.include_router(
 )
 
 api_router.include_router(
+    online_eval.router,
+)
+
+api_router.include_router(
+    trace_debug.router,
+)
+
+api_router.include_router(
     usage_limit.router,
+)
+
+api_router.include_router(
+    cost_analytics.router,
 )

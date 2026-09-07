@@ -26,6 +26,7 @@ from app.agents.tools.knowledge_search import (
     create_knowledge_search_tool,
 )
 from app.core.enums import (
+    ToolRiskLevel,
     ToolType,
 )
 from app.models.tool_definition import (
@@ -48,6 +49,43 @@ class AgentToolRegistry:
         self.mcp_tool_provider = (
             MCPToolProvider()
         )
+
+    def _apply_governance_metadata(
+        self,
+        tool: BaseTool,
+        *,
+        risk_level: ToolRiskLevel,
+        tool_definition_id:
+            UUID | None = None,
+    ) -> BaseTool:
+        metadata = dict(
+            getattr(
+                tool,
+                "metadata",
+                None,
+            )
+            or {}
+        )
+
+        metadata[
+            "knowgentiq"
+        ] = {
+            "risk_level":
+                risk_level.value,
+
+            "tool_definition_id":
+                (
+                    str(
+                        tool_definition_id
+                    )
+                    if tool_definition_id
+                    else None
+                ),
+        }
+
+        tool.metadata = metadata
+
+        return tool
 
     def _get_assigned_tools(
         self,
@@ -102,11 +140,8 @@ class AgentToolRegistry:
             BaseTool
         ] = []
 
-        #
-        # Native NXTGEN tool.
-        #
         if knowledge_base_ids:
-            tools.append(
+            knowledge_tool = (
                 create_knowledge_search_tool(
                     db=db,
                     knowledge_base_ids=
@@ -114,9 +149,14 @@ class AgentToolRegistry:
                 )
             )
 
-        #
-        # Load assigned tenant tools.
-        #
+            tools.append(
+                self._apply_governance_metadata(
+                    knowledge_tool,
+                    risk_level=
+                        ToolRiskLevel.READ,
+                )
+            )
+
         definitions = (
             self._get_assigned_tools(
                 db=db,
@@ -127,11 +167,7 @@ class AgentToolRegistry:
             )
         )
 
-        #
-        # REST tools.
-        #
         for definition in definitions:
-
             if (
                 definition.tool_type
                 != ToolType.REST
@@ -142,29 +178,11 @@ class AgentToolRegistry:
                 definition.integration
             )
 
-            if integration is None:
-                logger.warning(
-                    "REST tool skipped "
-                    "tool=%s "
-                    "reason=no_integration",
-                    definition.id,
-                )
-
-                continue
-
             if (
-                not
+                integration is None
+                or not
                 integration.is_active
             ):
-                logger.warning(
-                    "REST tool skipped "
-                    "tool=%s "
-                    "integration=%s "
-                    "reason=inactive_integration",
-                    definition.id,
-                    integration.id,
-                )
-
                 continue
 
             rest_tool = (
@@ -178,13 +196,15 @@ class AgentToolRegistry:
             )
 
             tools.append(
-                rest_tool,
+                self._apply_governance_metadata(
+                    rest_tool,
+                    risk_level=
+                        definition.risk_level,
+                    tool_definition_id=
+                        definition.id,
+                )
             )
 
-        #
-        # Group MCP tool definitions
-        # by MCP integration.
-        #
         mcp_definitions_by_integration: dict[
             UUID,
             list[ToolDefinition],
@@ -193,7 +213,6 @@ class AgentToolRegistry:
         )
 
         for definition in definitions:
-
             if (
                 definition.tool_type
                 != ToolType.MCP
@@ -204,29 +223,11 @@ class AgentToolRegistry:
                 definition.integration
             )
 
-            if integration is None:
-                logger.warning(
-                    "MCP tool skipped "
-                    "tool=%s "
-                    "reason=no_integration",
-                    definition.id,
-                )
-
-                continue
-
             if (
-                not
+                integration is None
+                or not
                 integration.is_active
             ):
-                logger.warning(
-                    "MCP tool skipped "
-                    "tool=%s "
-                    "integration=%s "
-                    "reason=inactive_integration",
-                    definition.id,
-                    integration.id,
-                )
-
                 continue
 
             mcp_definitions_by_integration[
@@ -235,10 +236,6 @@ class AgentToolRegistry:
                 definition,
             )
 
-        #
-        # Discover MCP tools once
-        # per MCP server.
-        #
         for (
             integration_id,
             mcp_definitions,
@@ -246,7 +243,6 @@ class AgentToolRegistry:
             mcp_definitions_by_integration
             .items()
         ):
-
             integration = (
                 mcp_definitions[
                     0
@@ -268,9 +264,32 @@ class AgentToolRegistry:
                     )
                 )
 
-                tools.extend(
-                    selected_tools
-                )
+                definitions_by_name = {
+                    definition.name:
+                        definition
+                    for definition
+                    in mcp_definitions
+                }
+
+                for tool in selected_tools:
+                    definition = (
+                        definitions_by_name.get(
+                            tool.name
+                        )
+                    )
+
+                    if definition is None:
+                        continue
+
+                    tools.append(
+                        self._apply_governance_metadata(
+                            tool,
+                            risk_level=
+                                definition.risk_level,
+                            tool_definition_id=
+                                definition.id,
+                        )
+                    )
 
             except Exception:
                 logger.exception(

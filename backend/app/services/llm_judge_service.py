@@ -8,15 +8,29 @@ from dataclasses import (
 )
 from uuid import UUID
 
+from opentelemetry.trace import (
+    Status,
+    StatusCode,
+)
 from sqlalchemy.orm import Session
 
+from app.core.telemetry import (
+    get_tracer,
+)
 from app.services.llm_client_factory import (
     LLMClientFactory,
+)
+from app.services.llm_usage_service import (
+    LLMUsageService,
 )
 
 
 logger = logging.getLogger(
     "nxtgen.eval.judge"
+)
+
+tracer = get_tracer(
+    __name__
 )
 
 
@@ -53,6 +67,10 @@ class LLMJudgeService:
     def __init__(self):
         self.client_factory = (
             LLMClientFactory()
+        )
+
+        self.llm_usage_service = (
+            LLMUsageService()
         )
 
     def _estimate_tokens(
@@ -225,6 +243,7 @@ class LLMJudgeService:
             passed = (
                 passed_value
             )
+
         else:
             passed = (
                 score
@@ -236,6 +255,107 @@ class LLMJudgeService:
             passed,
             reason,
         )
+
+    def _set_cost_span_attributes(
+        self,
+        span,
+        usage_event,
+    ) -> None:
+        """
+        Attach cost facts calculated by the
+        central LLMUsageService.
+
+        Pricing logic remains outside tracing.
+        """
+
+        if usage_event is None:
+            return
+
+        metadata = (
+            usage_event.usage_metadata
+            or {}
+        )
+
+        cost = (
+            metadata.get(
+                "cost"
+            )
+            or {}
+        )
+
+        pricing_found = bool(
+            cost.get(
+                "pricing_found",
+                False,
+            )
+        )
+
+        span.set_attribute(
+            "knowgentiq.cost."
+            "pricing_found",
+            pricing_found,
+        )
+
+        if not pricing_found:
+            return
+
+        total_cost = (
+            cost.get(
+                "total_cost"
+            )
+        )
+
+        if total_cost is not None:
+            span.set_attribute(
+                "knowgentiq.cost.total",
+                float(
+                    total_cost
+                ),
+            )
+
+        currency = (
+            cost.get(
+                "currency"
+            )
+        )
+
+        if currency:
+            span.set_attribute(
+                "knowgentiq.cost.currency",
+                str(
+                    currency
+                ),
+            )
+
+        pricing_version = (
+            cost.get(
+                "pricing_version"
+            )
+        )
+
+        if pricing_version:
+            span.set_attribute(
+                "knowgentiq.cost."
+                "pricing_version",
+                str(
+                    pricing_version
+                ),
+            )
+
+        pricing_source = (
+            cost.get(
+                "pricing_source"
+            )
+        )
+
+        if pricing_source:
+            span.set_attribute(
+                "knowgentiq.cost."
+                "pricing_source",
+                str(
+                    pricing_source
+                ),
+            )
 
     def judge(
         self,
@@ -262,6 +382,12 @@ class LLMJudgeService:
 
         - explicit profile -> use that profile
         - None -> use tenant default
+
+        Each actual judge LLM call is:
+
+        - traced as evaluation.judge
+        - metered through LLMUsageService
+        - costed by the central pricing layer
         """
 
         if (
@@ -362,6 +488,7 @@ class LLMJudgeService:
             answerable_text = (
                 "(not provided)"
             )
+
         else:
             answerable_text = (
                 "true"
@@ -416,150 +543,304 @@ Evaluation rules:
 - the reason must be concise and specific
 """.strip()
 
-        started_at = (
-            time.perf_counter()
-        )
-
-        response = (
-            client.chat.completions
-            .create(
-                model=
-                    config.model_name,
-
-                messages=[
-                    {
-                        "role":
-                            "user",
-
-                        "content":
-                            prompt,
-                    }
-                ],
-
-                #
-                # Judge calls should be as
-                # deterministic as possible.
-                #
-                temperature=
-                    0.0,
-
-                #
-                # Judge output should remain
-                # compact.
-                #
-                max_tokens=
-                    min(
-                        config.max_tokens,
-                        700,
-                    ),
-            )
-        )
-
-        latency_ms = (
-            (
-                time.perf_counter()
-                - started_at
-            )
-            * 1000
-        )
-
-        content = ""
-
-        if (
-            response.choices
-            and response
-            .choices[0]
-            .message
-        ):
-            content = (
-                response
-                .choices[0]
-                .message
-                .content
-                or ""
+        with tracer.start_as_current_span(
+            "evaluation.judge"
+        ) as span:
+            span.set_attribute(
+                "knowgentiq.tenant.id",
+                str(
+                    tenant_id
+                ),
             )
 
-        parsed = (
-            self._extract_json(
-                content
+            span.set_attribute(
+                "knowgentiq.evaluation."
+                "metric",
+                metric_name,
             )
-        )
 
-        (
-            score,
-            passed,
-            reason,
-        ) = self._validate_result(
-            payload=
-                parsed,
-
-            threshold=
+            span.set_attribute(
+                "knowgentiq.evaluation."
+                "threshold",
                 threshold,
-        )
-
-        #
-        # Judge usage.
-        #
-        if response.usage:
-            prompt_tokens = int(
-                response
-                .usage
-                .prompt_tokens
-                or 0
             )
 
-            completion_tokens = int(
-                response
-                .usage
-                .completion_tokens
-                or 0
+            span.set_attribute(
+                "gen_ai.system",
+                str(
+                    config.provider.value
+                ),
             )
 
-            total_tokens = int(
-                response
-                .usage
-                .total_tokens
-                or (
-                    prompt_tokens
-                    + completion_tokens
+            span.set_attribute(
+                "gen_ai.request.model",
+                config.model_name,
+            )
+
+            span.set_attribute(
+                "knowgentiq.llm.streaming",
+                False,
+            )
+
+            started_at = (
+                time.perf_counter()
+            )
+
+            try:
+                response = (
+                    client.chat.completions
+                    .create(
+                        model=
+                            config.model_name,
+
+                        messages=[
+                            {
+                                "role":
+                                    "user",
+
+                                "content":
+                                    prompt,
+                            }
+                        ],
+
+                        #
+                        # Judge calls should be
+                        # deterministic.
+                        #
+                        temperature=
+                            0.0,
+
+                        #
+                        # Keep judge output compact.
+                        #
+                        max_tokens=
+                            min(
+                                config.max_tokens,
+                                700,
+                            ),
+                    )
                 )
-            )
 
-            usage_estimated = False
-
-        else:
-            prompt_tokens = (
-                self._estimate_tokens(
-                    prompt
+                latency_ms = (
+                    (
+                        time.perf_counter()
+                        - started_at
+                    )
+                    * 1000
                 )
-            )
 
-            completion_tokens = (
-                self._estimate_tokens(
-                    content
+                content = ""
+
+                if (
+                    response.choices
+                    and response
+                    .choices[0]
+                    .message
+                ):
+                    content = (
+                        response
+                        .choices[0]
+                        .message
+                        .content
+                        or ""
+                    )
+
+                parsed = (
+                    self._extract_json(
+                        content
+                    )
                 )
-            )
 
-            total_tokens = (
-                prompt_tokens
-                + completion_tokens
-            )
+                (
+                    score,
+                    passed,
+                    reason,
+                ) = self._validate_result(
+                    payload=
+                        parsed,
 
-            usage_estimated = True
+                    threshold=
+                        threshold,
+                )
 
-        usage = {
-            "prompt_tokens":
-                prompt_tokens,
+                #
+                # Judge usage.
+                #
+                if response.usage:
+                    prompt_tokens = int(
+                        response
+                        .usage
+                        .prompt_tokens
+                        or 0
+                    )
 
-            "completion_tokens":
-                completion_tokens,
+                    completion_tokens = int(
+                        response
+                        .usage
+                        .completion_tokens
+                        or 0
+                    )
 
-            "total_tokens":
-                total_tokens,
+                    total_tokens = int(
+                        response
+                        .usage
+                        .total_tokens
+                        or (
+                            prompt_tokens
+                            + completion_tokens
+                        )
+                    )
 
-            "estimated":
-                usage_estimated,
-        }
+                    usage_estimated = False
+
+                else:
+                    prompt_tokens = (
+                        self._estimate_tokens(
+                            prompt
+                        )
+                    )
+
+                    completion_tokens = (
+                        self._estimate_tokens(
+                            content
+                        )
+                    )
+
+                    total_tokens = (
+                        prompt_tokens
+                        + completion_tokens
+                    )
+
+                    usage_estimated = True
+
+                usage = {
+                    "prompt_tokens":
+                        prompt_tokens,
+
+                    "completion_tokens":
+                        completion_tokens,
+
+                    "total_tokens":
+                        total_tokens,
+
+                    "estimated":
+                        usage_estimated,
+                }
+
+                #
+                # Persist normalized evaluator
+                # usage and calculate cost using
+                # the same pricing path as chat.
+                #
+                usage_event = (
+                    self.llm_usage_service
+                    .record(
+                        db=db,
+                        tenant_id=
+                            tenant_id,
+                        knowledge_base_id=
+                            None,
+                        chat_channel_id=
+                            None,
+                        conversation_id=
+                            None,
+                        message_id=
+                            None,
+                        provider=
+                            config.provider.value,
+                        model=
+                            config.model_name,
+                        input_tokens=
+                            prompt_tokens,
+                        output_tokens=
+                            completion_tokens,
+                        request_type=
+                            "eval",
+                        usage_metadata={
+                            "estimated":
+                                usage_estimated,
+
+                            "streaming":
+                                False,
+
+                            "evaluation_metric":
+                                metric_name,
+
+                            "evaluation_role":
+                                "judge",
+                        },
+                    )
+                )
+
+                span.set_attribute(
+                    "gen_ai.usage.input_tokens",
+                    prompt_tokens,
+                )
+
+                span.set_attribute(
+                    "gen_ai.usage.output_tokens",
+                    completion_tokens,
+                )
+
+                span.set_attribute(
+                    "knowgentiq.llm."
+                    "total_tokens",
+                    total_tokens,
+                )
+
+                span.set_attribute(
+                    "knowgentiq.llm."
+                    "usage_estimated",
+                    usage_estimated,
+                )
+
+                span.set_attribute(
+                    "knowgentiq.evaluation."
+                    "score",
+                    score,
+                )
+
+                span.set_attribute(
+                    "knowgentiq.evaluation."
+                    "passed",
+                    passed,
+                )
+
+                span.set_attribute(
+                    "knowgentiq.evaluation."
+                    "latency_ms",
+                    round(
+                        latency_ms,
+                        2,
+                    ),
+                )
+
+                self._set_cost_span_attributes(
+                    span,
+                    usage_event,
+                )
+
+                span.set_status(
+                    Status(
+                        StatusCode.OK
+                    )
+                )
+
+            except Exception as exc:
+                span.record_exception(
+                    exc
+                )
+
+                span.set_status(
+                    Status(
+                        StatusCode.ERROR,
+                        str(
+                            exc
+                        ),
+                    )
+                )
+
+                raise
 
         evaluator_metadata = {
             "profile_id":
@@ -582,6 +863,27 @@ Evaluation rules:
             "threshold":
                 threshold,
         }
+
+        #
+        # Surface cost metadata to the
+        # experiment aggregation layer without
+        # duplicating calculation logic.
+        #
+        usage_event_metadata = (
+            usage_event.usage_metadata
+            or {}
+        )
+
+        cost_metadata = (
+            usage_event_metadata.get(
+                "cost"
+            )
+        )
+
+        if cost_metadata:
+            evaluator_metadata[
+                "cost"
+            ] = cost_metadata
 
         logger.info(
             "Evaluation judge completed "

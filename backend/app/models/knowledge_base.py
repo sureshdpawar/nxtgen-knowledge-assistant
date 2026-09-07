@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from sqlalchemy import (
+    Boolean,
     Enum,
     ForeignKey,
     Integer,
@@ -66,7 +67,6 @@ class KnowledgeBase(
         nullable=True,
     )
 
-    
     chunk_size: Mapped[
         int | None
     ] = mapped_column(
@@ -85,6 +85,17 @@ class KnowledgeBase(
         int | None
     ] = mapped_column(
         Integer,
+        nullable=True,
+    )
+
+    #
+    # None means inherit the platform
+    # RERANKING_ENABLED setting.
+    #
+    reranking_enabled: Mapped[
+        bool | None
+    ] = mapped_column(
+        Boolean,
         nullable=True,
     )
 
@@ -145,6 +156,17 @@ class KnowledgeBase(
             if self.top_k
             is not None
             else settings.TOP_K
+        )
+
+    @property
+    def effective_reranking_enabled(
+        self,
+    ) -> bool:
+        return (
+            self.reranking_enabled
+            if self.reranking_enabled
+            is not None
+            else settings.RERANKING_ENABLED
         )
 
     tenant: Mapped["Tenant"] = relationship(

@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     JSON,
+    String,
     Text,
 )
 from sqlalchemy.orm import (
@@ -63,12 +64,54 @@ class AgentRun(
         index=True,
     )
 
-    user_id: Mapped[UUID] = mapped_column(
+    user_id: Mapped[
+        UUID | None
+    ] = mapped_column(
         ForeignKey(
             "app_user.id",
         ),
+        nullable=True,
+        index=True,
+    )
+
+    actor_type: Mapped[str] = mapped_column(
+        String(50),
         nullable=False,
         index=True,
+        default="USER",
+        server_default="USER",
+    )
+
+    actor_id: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        index=True,
+    )
+
+    context_metadata: Mapped[
+        dict | None
+    ] = mapped_column(
+        JSON,
+        nullable=True,
+        default=dict,
+    )
+
+    # Public conversation/thread identifier. LangGraph receives
+    # an internally scoped thread key built from tenant+agent+
+    # user+thread so checkpoint state cannot cross those scopes.
+    thread_id: Mapped[
+        UUID | None
+    ] = mapped_column(
+        nullable=True,
+        index=True,
+    )
+
+    # Latest LangGraph checkpoint associated with this run.
+    checkpoint_id: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
     )
 
     query: Mapped[str] = mapped_column(
@@ -153,7 +196,7 @@ class AgentRun(
     )
 
     user: Mapped[
-        "User"
+        "User | None"
     ] = relationship(
         "User",
     )

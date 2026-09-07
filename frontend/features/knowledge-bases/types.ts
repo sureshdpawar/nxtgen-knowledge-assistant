@@ -33,6 +33,9 @@ export interface KnowledgeBase {
   top_k:
     number | null;
 
+  reranking_enabled:
+    boolean | null;
+
   status: string;
 
   visibility:
@@ -60,6 +63,9 @@ export interface CreateKnowledgeBaseRequest {
 
   top_k?:
     number | null;
+
+  reranking_enabled?:
+    boolean | null;
 }
 
 
@@ -79,6 +85,9 @@ export interface UpdateKnowledgeBaseRequest {
 
   top_k?:
     number | null;
+
+  reranking_enabled?:
+    boolean | null;
 }
 
 

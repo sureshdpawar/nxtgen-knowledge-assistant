@@ -4,7 +4,9 @@ import type {
 
 export interface ConversationSummary {
   id: string;
-  knowledge_base_id: string;
+  knowledge_base_id: string | null;
+  agent_id: string | null;
+  agent_thread_id: string | null;
 
   title: string;
 
@@ -33,7 +35,9 @@ export interface ConversationMessage {
 
 export interface Conversation {
   id: string;
-  knowledge_base_id: string;
+  knowledge_base_id: string | null;
+  agent_id: string | null;
+  agent_thread_id: string | null;
 
   title: string;
 

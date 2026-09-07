@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     JSON,
+    String,
     Text,
 )
 from sqlalchemy.orm import (
@@ -56,6 +57,14 @@ class EvalResult(
             ondelete="CASCADE",
         ),
         nullable=False,
+        index=True,
+    )
+
+    trace_id: Mapped[
+        str | None
+    ] = mapped_column(
+        String(32),
+        nullable=True,
         index=True,
     )
 

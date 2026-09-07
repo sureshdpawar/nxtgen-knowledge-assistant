@@ -1,5 +1,6 @@
 from app.models.tenant import Tenant
 from app.models.user import User
+
 from app.models.knowledge_base import (
     KnowledgeBase,
 )
@@ -19,9 +20,15 @@ from app.models.document_chunk import (
 from app.models.document_embedding import (
     DocumentEmbedding,
 )
+
 from app.models.tenant_llm_configuration import (
     TenantLLMConfiguration,
 )
+
+from app.models.llm_model_pricing import (
+    LLMModelPricing,
+)
+
 from app.models.conversation import (
     Conversation,
 )
@@ -31,6 +38,7 @@ from app.models.conversation_message import (
 from app.models.user_knowledge_base_access import (
     UserKnowledgeBaseAccess,
 )
+
 from app.models.agent import Agent
 from app.models.agent_knowledge_base import (
     AgentKnowledgeBase,
@@ -39,11 +47,19 @@ from app.models.agent_run import AgentRun
 from app.models.agent_run_step import (
     AgentRunStep,
 )
+from app.models.agent_action_approval import (
+    AgentActionApproval,
+)
+from app.models.user_agent_access import (
+    UserAgentAccess,
+)
+
 from app.models.integration import Integration
 from app.models.tool_definition import (
     ToolDefinition,
 )
 from app.models.agent_tool import AgentTool
+
 from app.models.chat_channel import (
     ChatChannel,
 )
@@ -56,6 +72,7 @@ from app.models.chat_channel_slack_credential import (
 from app.models.chat_channel_slack_conversation import (
     ChatChannelSlackConversation,
 )
+
 from app.models.eval_dataset import (
     EvalDataset,
 )
@@ -68,6 +85,7 @@ from app.models.eval_experiment import (
 from app.models.eval_result import (
     EvalResult,
 )
+
 from app.models.usage_limit import (
     UsageLimit,
 )
@@ -75,6 +93,9 @@ from app.models.llm_usage_event import (
     LLMUsageEvent,
 )
 
+from app.models.online_eval_result import (
+    OnlineEvalResult,
+)
 
 __all__ = [
     "Tenant",
@@ -87,6 +108,7 @@ __all__ = [
     "DocumentChunk",
     "DocumentEmbedding",
     "TenantLLMConfiguration",
+    "LLMModelPricing",
     "Conversation",
     "ConversationMessage",
     "UserKnowledgeBaseAccess",
@@ -94,6 +116,8 @@ __all__ = [
     "AgentKnowledgeBase",
     "AgentRun",
     "AgentRunStep",
+    "AgentActionApproval",
+    "UserAgentAccess",
     "Integration",
     "ToolDefinition",
     "AgentTool",
@@ -107,4 +131,5 @@ __all__ = [
     "EvalResult",
     "UsageLimit",
     "LLMUsageEvent",
+    "OnlineEvalResult",
 ]

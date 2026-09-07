@@ -1,3 +1,4 @@
+```ts
 export type ChatChannelType =
   | "PUBLIC_API"
   | "WEBSITE"
@@ -10,6 +11,65 @@ export type ChatChannelStatus =
   | "INACTIVE";
 
 
+export type WebsiteExecutionMode =
+  | "KNOWLEDGE"
+  | "AGENT";
+
+
+export type WebsitePreChatField = {
+  name: string;
+
+  label: string;
+
+  required: boolean;
+
+  input_type:
+    | "text"
+    | "tel"
+    | "email";
+};
+
+
+export type WebsitePreChatConfig = {
+  enabled: boolean;
+
+  fields:
+    WebsitePreChatField[];
+};
+
+
+export type WebsiteSessionStartFieldArgument = {
+  field: string;
+
+  omit_if_empty?: boolean;
+};
+
+
+export type WebsiteSessionStartTemplateArgument = {
+  template: string;
+};
+
+
+export type WebsiteSessionStartArgument =
+  | WebsiteSessionStartFieldArgument
+  | WebsiteSessionStartTemplateArgument;
+
+
+export type WebsiteSessionStartAction = {
+  tool_name: string;
+
+  arguments?: Record<
+    string,
+    WebsiteSessionStartArgument
+  >;
+
+  context?: Record<
+    string,
+    string
+  >;
+};
+
+
 export type ChatChannelConfiguration = {
   allowed_origins?: string[];
 
@@ -20,6 +80,20 @@ export type ChatChannelConfiguration = {
   placeholder?: string;
 
   show_sources?: boolean;
+
+  execution_mode?:
+    WebsiteExecutionMode;
+
+  agent_id?: string;
+
+  pre_chat?:
+    WebsitePreChatConfig;
+
+  session_start_action?:
+    WebsiteSessionStartAction;
+
+  auto_execute_tools?:
+    string[];
 
   respond_to_mentions?: boolean;
 
@@ -125,11 +199,17 @@ export type ChannelConversationMessage = {
   content: string;
 
   citations: Array<
-    Record<string, unknown>
+    Record<
+      string,
+      unknown
+    >
   >;
 
   token_usage:
-    Record<string, unknown>;
+    Record<
+      string,
+      unknown
+    >;
 
   created_at: string;
 };
@@ -217,3 +297,4 @@ export type ConnectChatChannelSlackRequest = {
   allowed_slack_channel_ids:
     string[];
 };
+```

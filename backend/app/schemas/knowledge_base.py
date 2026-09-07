@@ -46,6 +46,8 @@ class KnowledgeBaseCreate(BaseModel):
         le=20,
     )
 
+    reranking_enabled: bool | None = None
+
     @model_validator(
         mode="after",
     )
@@ -107,6 +109,8 @@ class KnowledgeBaseUpdate(BaseModel):
         le=20,
     )
 
+    reranking_enabled: bool | None = None
+
     @model_validator(
         mode="after",
     )
@@ -155,6 +159,7 @@ class KnowledgeBaseResponse(BaseModel):
     chunk_size: int | None
     chunk_overlap: int | None
     top_k: int | None
+    reranking_enabled: bool | None
 
     status: KnowledgeBaseStatus
     visibility: KnowledgeBaseVisibility

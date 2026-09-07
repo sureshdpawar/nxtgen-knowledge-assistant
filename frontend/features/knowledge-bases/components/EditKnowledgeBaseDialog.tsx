@@ -6,6 +6,7 @@ import {
 } from "react";
 
 import {
+  Controller,
   useForm,
 } from "react-hook-form";
 
@@ -17,6 +18,7 @@ import {
   knowledgeBaseSchema,
   PLATFORM_DEFAULT_CHUNK_OVERLAP,
   PLATFORM_DEFAULT_CHUNK_SIZE,
+  PLATFORM_DEFAULT_RERANKING_ENABLED,
   PLATFORM_DEFAULT_TOP_K,
 } from "../schemas";
 
@@ -82,6 +84,7 @@ export default function EditKnowledgeBaseDialog({
   onUpdate,
 }: Props) {
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -152,6 +155,10 @@ export default function EditKnowledgeBaseDialog({
 
       top_k:
         knowledgeBase.top_k,
+
+      reranking_enabled:
+        knowledgeBase
+          .reranking_enabled,
     });
 
     setSelectedProfileId(
@@ -338,9 +345,10 @@ export default function EditKnowledgeBaseDialog({
             </h3>
 
             <p className="mt-1 text-xs text-slate-500">
-              Leave a field blank to
-              inherit the platform
-              default.
+              Leave an override at its
+              platform default unless this
+              knowledge base needs
+              different retrieval behavior.
             </p>
 
 
@@ -477,10 +485,90 @@ export default function EditKnowledgeBaseDialog({
             </div>
 
 
+            <div className="mt-4">
+
+              <Label
+                htmlFor="edit-reranking-enabled"
+              >
+                Reranking
+              </Label>
+
+              <Controller
+                control={
+                  control
+                }
+                name="reranking_enabled"
+                render={({
+                  field,
+                }) => (
+                  <select
+                    id="edit-reranking-enabled"
+                    value={
+                      field.value === null
+                        ? ""
+                        : field.value
+                          ? "true"
+                          : "false"
+                    }
+                    onChange={(
+                      event,
+                    ) => {
+                      const value =
+                        event.target.value;
+
+                      field.onChange(
+                        value === ""
+                          ? null
+                          : value === "true",
+                      );
+                    }}
+                    onBlur={
+                      field.onBlur
+                    }
+                    ref={
+                      field.ref
+                    }
+                    className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                  >
+                    <option value="">
+                      Use Platform Default
+                      {" "}
+                      (
+                      {
+                        PLATFORM_DEFAULT_RERANKING_ENABLED
+                          ? "Enabled"
+                          : "Disabled"
+                      }
+                      )
+                    </option>
+
+                    <option value="true">
+                      Enabled
+                    </option>
+
+                    <option value="false">
+                      Disabled
+                    </option>
+                  </select>
+                )}
+              />
+
+              <p className="mt-1 text-xs text-slate-500">
+                Reranking may improve
+                retrieval quality, but
+                increases latency and
+                compute. The platform
+                default is currently
+                disabled.
+              </p>
+
+            </div>
+
+
             <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
 
-              Changing Top K takes effect
-              immediately.
+              Top K and reranking changes
+              take effect immediately.
 
               {" "}
 

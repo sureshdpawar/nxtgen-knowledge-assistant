@@ -100,6 +100,9 @@ class KnowledgeBaseService:
 
                 top_k=
                     payload.top_k,
+
+                reranking_enabled=
+                    payload.reranking_enabled,
             )
         )
 

@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import (
+    Enum,
     ForeignKey,
     UniqueConstraint,
 )
@@ -11,6 +12,9 @@ from sqlalchemy.orm import (
     relationship,
 )
 
+from app.core.enums import (
+    ToolExecutionPolicy,
+)
 from app.db.base import Base
 from app.db.mixins import (
     TimestampMixin,
@@ -56,6 +60,23 @@ class AgentTool(
         ),
         nullable=False,
         index=True,
+    )
+
+    execution_policy: Mapped[
+        ToolExecutionPolicy
+    ] = mapped_column(
+        Enum(
+            ToolExecutionPolicy,
+        ),
+        default=(
+            ToolExecutionPolicy
+            .HUMAN_APPROVAL
+        ),
+        server_default=(
+            ToolExecutionPolicy
+            .HUMAN_APPROVAL.value
+        ),
+        nullable=False,
     )
 
     agent: Mapped[

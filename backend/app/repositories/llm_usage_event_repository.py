@@ -137,3 +137,43 @@ class LLMUsageEventRepository(
                     or 0
                 ),
         }
+
+    def list_for_agent_run(
+        self,
+        db: Session,
+        tenant_id: UUID,
+        run_id: UUID,
+    ) -> list[LLMUsageEvent]:
+        """
+        Return persisted LLM usage events belonging
+        to one Knowgentiq agent run.
+        """
+
+        stmt = (
+            select(
+                LLMUsageEvent
+            )
+            .where(
+                LLMUsageEvent.tenant_id
+                == tenant_id,
+
+                LLMUsageEvent.request_type
+                == "agent",
+
+                LLMUsageEvent
+                .usage_metadata[
+                    "agent_run_id"
+                ]
+                .as_string()
+                == str(run_id),
+            )
+            .order_by(
+                LLMUsageEvent.created_at.asc()
+            )
+        )
+
+        return list(
+            db.scalars(
+                stmt
+            ).all()
+        )

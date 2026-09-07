@@ -1,33 +1,29 @@
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 import time
 
-from collections.abc import (
-    Awaitable,
-    Callable,
-)
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langchain_core.messages import (
+    AIMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
 )
-from langchain_core.tools import (
-    BaseTool,
-)
-from langgraph.graph import (
-    END,
-    START,
-    StateGraph,
-)
-from langgraph.prebuilt import (
-    ToolNode,
-)
+from langchain_core.tools import BaseTool
+from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt import ToolNode
+from langgraph.types import Command, interrupt
 
-from app.agents.state import (
-    AgentState,
+from app.agents.state import AgentState
+from app.agents.tool_execution_policy import (
+    ToolExecutionPolicy,
+    ToolExecutionPolicyContext,
+    ToolExecutionPolicyResolver,
 )
 
 
@@ -35,9 +31,7 @@ logger = logging.getLogger(
     "nxtgen.agent_runtime"
 )
 
-
 MAX_TRACE_OUTPUT_LENGTH = 4000
-
 
 ProgressCallback = Callable[
     [dict[str, Any]],
@@ -47,62 +41,163 @@ ProgressCallback = Callable[
 
 class AgentRuntime:
 
+    def __init__(self):
+        self.tool_execution_policy_resolver = (
+            ToolExecutionPolicyResolver()
+        )
+
     async def _emit(
         self,
-        callback:
-            ProgressCallback | None,
-        event: dict[
-            str,
-            Any,
-        ],
+        callback: ProgressCallback | None,
+        event: dict[str, Any],
     ) -> None:
         if callback is None:
             return
 
-        result = callback(
-            event,
-        )
+        result = callback(event)
 
-        if inspect.isawaitable(
-            result,
-        ):
+        if inspect.isawaitable(result):
             await result
 
     def _safe_output(
         self,
         value,
     ) -> str:
-        text = str(
-            value,
-        )
+        text = str(value)
 
-        if (
-            len(text)
-            <= MAX_TRACE_OUTPUT_LENGTH
-        ):
+        if len(text) <= MAX_TRACE_OUTPUT_LENGTH:
             return text
 
         return (
-            text[
-                :MAX_TRACE_OUTPUT_LENGTH
-            ]
+            text[:MAX_TRACE_OUTPUT_LENGTH]
             + "...[truncated]"
         )
 
-    async def run(
+    def _tool_risk_level(
+        self,
+        tool: BaseTool,
+    ) -> str:
+        metadata = (
+            getattr(
+                tool,
+                "metadata",
+                None,
+            )
+            or {}
+        )
+
+        governance = (
+            metadata.get(
+                "knowgentiq",
+                {},
+            )
+            or {}
+        )
+
+        return str(
+            governance.get(
+                "risk_level",
+                "READ",
+            )
+        ).upper()
+
+    def _checkpoint_id(
+        self,
+        snapshot,
+    ) -> str | None:
+        if snapshot is None:
+            return None
+
+        config = (
+            getattr(
+                snapshot,
+                "config",
+                None,
+            )
+            or {}
+        )
+
+        configurable = (
+            config.get(
+                "configurable",
+                {},
+            )
+            or {}
+        )
+
+        value = configurable.get(
+            "checkpoint_id"
+        )
+
+        return (
+            str(value)
+            if value
+            else None
+        )
+
+    def _interrupt_payloads(
+        self,
+        snapshot,
+    ) -> list[dict]:
+        payloads: list[dict] = []
+
+        if snapshot is None:
+            return payloads
+
+        for task in (
+            getattr(
+                snapshot,
+                "tasks",
+                (),
+            )
+            or ()
+        ):
+            for item in (
+                getattr(
+                    task,
+                    "interrupts",
+                    (),
+                )
+                or ()
+            ):
+                value = getattr(
+                    item,
+                    "value",
+                    None,
+                )
+
+                if isinstance(
+                    value,
+                    dict,
+                ):
+                    payloads.append(value)
+                else:
+                    payloads.append(
+                        {
+                            "value":
+                                value,
+                        }
+                    )
+
+        return payloads
+
+    async def _build_graph(
         self,
         *,
         model,
-        tools: list[
-            BaseTool
-        ],
+        tools: list[BaseTool],
         system_prompt: str,
-        query: str,
         max_iterations: int,
+        checkpointer,
         progress_callback:
-            ProgressCallback | None = None,
-    ) -> dict:
-
+            ProgressCallback | None,
+        auto_execute_tool_names:
+            set[str] | None = None,
+        human_approval_tool_names:
+            set[str] | None = None,
+        human_approval_supported:
+            bool = True,
+    ):
         if tools:
             model_with_tools = (
                 model.bind_tools(
@@ -115,15 +210,47 @@ class AgentRuntime:
                     tools,
                 )
             )
-
         else:
-            model_with_tools = (
-                model
-            )
+            model_with_tools = model
+            langgraph_tool_node = None
 
-            langgraph_tool_node = (
-                None
+        risk_by_tool_name = {
+            tool.name:
+                self._tool_risk_level(
+                    tool
+                )
+            for tool in tools
+        }
+
+        execution_policy_context = (
+            ToolExecutionPolicyContext
+            .from_tool_policy_names(
+                auto_execute_tool_names=
+                    auto_execute_tool_names,
+                human_approval_tool_names=
+                    human_approval_tool_names,
+                human_approval_supported=
+                    human_approval_supported,
             )
+        )
+
+        policy_by_tool_name = {
+            tool.name:
+                self
+                .tool_execution_policy_resolver
+                .resolve(
+                    tool_name=
+                        tool.name,
+                    risk_level=
+                        risk_by_tool_name.get(
+                            tool.name,
+                            "READ",
+                        ),
+                    context=
+                        execution_policy_context,
+                )
+            for tool in tools
+        }
 
         async def call_model(
             state: AgentState,
@@ -135,15 +262,10 @@ class AgentRuntime:
                 )
             )
 
-            if (
-                llm_calls
-                >= max_iterations
-            ):
+            if llm_calls >= max_iterations:
                 return {
-                    "messages": [],
                     "llm_calls":
                         llm_calls,
-                    "trace": [],
                 }
 
             messages = [
@@ -165,18 +287,9 @@ class AgentRuntime:
                 {
                     "type":
                         "llm_started",
-
                     "iteration":
                         iteration,
                 },
-            )
-
-            logger.info(
-                "Agent LLM invocation "
-                "iteration=%s "
-                "max_iterations=%s",
-                iteration,
-                max_iterations,
             )
 
             started_at = (
@@ -220,6 +333,24 @@ class AgentRuntime:
                             "args",
                             {},
                         ),
+
+                    "risk_level":
+                        risk_by_tool_name.get(
+                            tool_call.get(
+                                "name",
+                                "",
+                            ),
+                            "READ",
+                        ),
+
+                    "execution_policy":
+                        policy_by_tool_name.get(
+                            tool_call.get(
+                                "name",
+                                "",
+                            ),
+                            ToolExecutionPolicy.AUTO,
+                        ).value,
                 }
                 for tool_call
                 in tool_calls
@@ -244,56 +375,13 @@ class AgentRuntime:
 
                     "tools":
                         [
-                            item[
-                                "name"
-                            ]
+                            item["name"]
                             for item
                             in requested_tools
-                            if item[
-                                "name"
-                            ]
+                            if item["name"]
                         ],
                 },
             )
-
-            trace_step = {
-                "step_type":
-                    "LLM",
-
-                "name":
-                    "llm",
-
-                "status":
-                    "COMPLETED",
-
-                "input":
-                    {
-                        "iteration":
-                            iteration,
-
-                        "message_count":
-                            len(
-                                messages,
-                            ),
-                    },
-
-                "output":
-                    {
-                        "response_type":
-                            (
-                                "tool_request"
-                                if tool_calls
-                                else
-                                "final_response"
-                            ),
-
-                        "tool_calls":
-                            requested_tools,
-                    },
-
-                "duration_ms":
-                    duration_ms,
-            }
 
             return {
                 "messages": [
@@ -304,8 +392,159 @@ class AgentRuntime:
                     iteration,
 
                 "trace": [
-                    trace_step,
+                    {
+                        "step_type":
+                            "LLM",
+
+                        "name":
+                            "llm",
+
+                        "status":
+                            "COMPLETED",
+
+                        "input":
+                            {
+                                "iteration":
+                                    iteration,
+
+                                "message_count":
+                                    len(
+                                        messages,
+                                    ),
+                            },
+
+                        "output":
+                            {
+                                "response_type":
+                                    (
+                                        "tool_request"
+                                        if tool_calls
+                                        else
+                                        "final_response"
+                                    ),
+
+                                "tool_calls":
+                                    requested_tools,
+                            },
+
+                        "duration_ms":
+                            duration_ms,
+                    }
                 ],
+            }
+
+        def approval_node(
+            state: AgentState,
+        ):
+            last_message = (
+                state[
+                    "messages"
+                ][-1]
+            )
+
+            tool_calls = (
+                getattr(
+                    last_message,
+                    "tool_calls",
+                    None,
+                )
+                or []
+            )
+
+            approval_calls = [
+                {
+                    "name":
+                        tool_call.get(
+                            "name",
+                        ),
+
+                    "args":
+                        tool_call.get(
+                            "args",
+                            {},
+                        ),
+
+                    "tool_call_id":
+                        tool_call.get(
+                            "id",
+                        ),
+
+                    "risk_level":
+                        risk_by_tool_name.get(
+                            tool_call.get(
+                                "name",
+                                "",
+                            ),
+                            "READ",
+                        ),
+
+                    "execution_policy":
+                        ToolExecutionPolicy
+                        .HUMAN_APPROVAL
+                        .value,
+                }
+                for tool_call
+                in tool_calls
+                if (
+                    policy_by_tool_name.get(
+                        tool_call.get(
+                            "name",
+                            "",
+                        ),
+                        ToolExecutionPolicy.AUTO,
+                    )
+                    ==
+                    ToolExecutionPolicy
+                    .HUMAN_APPROVAL
+                )
+            ]
+
+            if not approval_calls:
+                return {
+                    "approval":
+                        None,
+                }
+
+            if (
+                not execution_policy_context
+                .human_approval_supported
+            ):
+                return {
+                    "approval": {
+                        "decision":
+                            "reject",
+                        "reason":
+                            (
+                                "Human approval is not "
+                                "supported for this "
+                                "execution context. "
+                                "The requested action "
+                                "was not executed."
+                            ),
+                        "source":
+                            "execution_policy",
+                    },
+                }
+
+            decision = interrupt(
+                {
+                    "type":
+                        "tool_approval",
+
+                    "message":
+                        (
+                            "One or more tools "
+                            "require human approval."
+                        ),
+
+                    "tools":
+                        approval_calls,
+                }
+            )
+
+            return {
+                "approval":
+                    decision,
             }
 
         async def execute_tools(
@@ -315,10 +554,7 @@ class AgentRuntime:
                 langgraph_tool_node
                 is None
             ):
-                return {
-                    "messages": [],
-                    "trace": [],
-                }
+                return {}
 
             last_message = (
                 state[
@@ -426,119 +662,189 @@ class AgentRuntime:
                     }
                 )
 
-            for tool_call in (
-                requested_tools
-            ):
-                tool_name = (
-                    tool_call.get(
-                        "name"
-                    )
-                )
-
-                matching_output = next(
-                    (
-                        output
-                        for output
-                        in outputs
-                        if (
-                            output.get(
-                                "name"
-                            )
-                            == tool_name
-                        )
-                    ),
-                    None,
-                )
-
-                await self._emit(
-                    progress_callback,
-                    {
-                        "type":
-                            "tool_completed",
-
-                        "name":
-                            tool_name,
-
-                        "duration_ms":
-                            duration_ms,
-
-                        "output":
-                            matching_output,
-                    },
-                )
-
-            trace_step = {
-                "step_type":
-                    "TOOL",
-
-                "name":
-                    (
-                        requested_tools[
-                            0
-                        ][
-                            "name"
-                        ]
-                        if len(
-                            requested_tools
-                        ) == 1
-                        else
-                        "tools"
-                    ),
-
-                "status":
-                    "COMPLETED",
-
-                "input":
-                    {
-                        "tool_calls":
-                            requested_tools,
-                    },
-
-                "output":
-                    {
-                        "results":
-                            outputs,
-                    },
-
-                "duration_ms":
-                    duration_ms,
-            }
-
-            logger.info(
-                "Agent tool execution "
-                "tools=%s "
-                "duration_ms=%.2f",
-                [
-                    tool[
-                        "name"
-                    ]
-                    for tool
-                    in requested_tools
-                ],
-                duration_ms,
-            )
-
             return {
                 "messages":
                     output_messages,
 
+                "approval":
+                    None,
+
                 "trace": [
-                    trace_step,
+                    {
+                        "step_type":
+                            "TOOL",
+
+                        "name":
+                            (
+                                requested_tools[
+                                    0
+                                ][
+                                    "name"
+                                ]
+                                if len(
+                                    requested_tools
+                                ) == 1
+                                else
+                                "tools"
+                            ),
+
+                        "status":
+                            "COMPLETED",
+
+                        "input":
+                            {
+                                "tool_calls":
+                                    requested_tools,
+                            },
+
+                        "output":
+                            {
+                                "results":
+                                    outputs,
+                            },
+
+                        "duration_ms":
+                            duration_ms,
+                    }
+                ],
+            }
+
+        def reject_tools(
+            state: AgentState,
+        ):
+            last_message = (
+                state[
+                    "messages"
+                ][-1]
+            )
+
+            tool_calls = (
+                getattr(
+                    last_message,
+                    "tool_calls",
+                    None,
+                )
+                or []
+            )
+
+            approval = (
+                state.get(
+                    "approval"
+                )
+                or {}
+            )
+
+            reason = (
+                approval.get(
+                    "reason"
+                )
+                or (
+                    "The requested action "
+                    "was rejected by a human "
+                    "reviewer."
+                )
+            )
+
+            rejection_source = str(
+                approval.get(
+                    "source",
+                    "human",
+                )
+                or "human"
+            ).strip().lower()
+
+            trace_name = (
+                "policy_blocked_tools"
+                if rejection_source
+                == "execution_policy"
+                else
+                "human_rejected_tools"
+            )
+
+            messages = [
+                ToolMessage(
+                    content=json.dumps(
+                        {
+                            "status":
+                                "rejected",
+
+                            "reason":
+                                reason,
+                        }
+                    ),
+                    tool_call_id=
+                        tool_call.get(
+                            "id",
+                            "",
+                        ),
+                    name=
+                        tool_call.get(
+                            "name",
+                        ),
+                )
+                for tool_call
+                in tool_calls
+            ]
+
+            return {
+                "messages":
+                    messages,
+
+                "approval":
+                    None,
+
+                "trace": [
+                    {
+                        "step_type":
+                            "TOOL",
+
+                        "name":
+                            trace_name,
+
+                        "status":
+                            "COMPLETED",
+
+                        "input":
+                            {
+                                "tool_calls":
+                                    [
+                                        {
+                                            "name":
+                                                item.get(
+                                                    "name"
+                                                ),
+
+                                            "args":
+                                                item.get(
+                                                    "args",
+                                                    {},
+                                                ),
+                                        }
+                                        for item
+                                        in tool_calls
+                                    ],
+                            },
+
+                        "output":
+                            {
+                                "decision":
+                                    "reject",
+
+                                "reason":
+                                    reason,
+                            },
+                    }
                 ],
             }
 
         def should_continue(
             state: AgentState,
         ):
-            llm_calls = (
+            if (
                 state.get(
                     "llm_calls",
                     0,
                 )
-            )
-
-            if (
-                llm_calls
                 >= max_iterations
             ):
                 return END
@@ -556,18 +862,36 @@ class AgentRuntime:
                 messages[-1]
             )
 
-            tool_calls = (
+            if (
                 getattr(
                     last_message,
                     "tool_calls",
                     None,
                 )
-            )
-
-            if tool_calls:
-                return "tools"
+            ):
+                return "approval"
 
             return END
+
+        def after_approval(
+            state: AgentState,
+        ):
+            approval = (
+                state.get(
+                    "approval"
+                )
+                or {}
+            )
+
+            if (
+                approval.get(
+                    "decision"
+                )
+                == "reject"
+            ):
+                return "rejected"
+
+            return "tools"
 
         graph_builder = (
             StateGraph(
@@ -578,6 +902,16 @@ class AgentRuntime:
         graph_builder.add_node(
             "agent",
             call_model,
+        )
+
+        graph_builder.add_node(
+            "approval",
+            approval_node,
+        )
+
+        graph_builder.add_node(
+            "rejected",
+            reject_tools,
         )
 
         if tools:
@@ -591,16 +925,28 @@ class AgentRuntime:
             "agent",
         )
 
+        graph_builder.add_conditional_edges(
+            "agent",
+            should_continue,
+            {
+                "approval":
+                    "approval",
+
+                END:
+                    END,
+            },
+        )
+
         if tools:
             graph_builder.add_conditional_edges(
-                "agent",
-                should_continue,
+                "approval",
+                after_approval,
                 {
                     "tools":
                         "tools",
 
-                    END:
-                        END,
+                    "rejected":
+                        "rejected",
                 },
             )
 
@@ -608,33 +954,548 @@ class AgentRuntime:
                 "tools",
                 "agent",
             )
-
         else:
             graph_builder.add_edge(
-                "agent",
+                "approval",
                 END,
             )
 
-        graph = (
-            graph_builder.compile()
+        graph_builder.add_edge(
+            "rejected",
+            "agent",
         )
 
-        result = (
-            await graph.ainvoke(
+        return graph_builder.compile(
+            checkpointer=
+                checkpointer,
+        )
+
+    @staticmethod
+    def _serialize_message(
+        message,
+    ) -> dict:
+        """Return a UI-safe view of a LangChain message."""
+        return {
+            "type":
+                getattr(
+                    message,
+                    "type",
+                    message
+                    .__class__
+                    .__name__,
+                ),
+
+            "id":
+                getattr(
+                    message,
+                    "id",
+                    None,
+                ),
+
+            "content":
+                getattr(
+                    message,
+                    "content",
+                    None,
+                ),
+
+            "name":
+                getattr(
+                    message,
+                    "name",
+                    None,
+                ),
+
+            "tool_calls":
+                getattr(
+                    message,
+                    "tool_calls",
+                    None,
+                ),
+
+            "tool_call_id":
+                getattr(
+                    message,
+                    "tool_call_id",
+                    None,
+                ),
+        }
+
+    def _serialize_snapshot(
+        self,
+        snapshot,
+    ) -> dict:
+        values = (
+            getattr(
+                snapshot,
+                "values",
+                {},
+            )
+            or {}
+        )
+
+        messages = (
+            values.get(
+                "messages",
+                [],
+            )
+            or []
+        )
+
+        return {
+            "checkpoint_id":
+                self._checkpoint_id(
+                    snapshot
+                ),
+
+            "next":
+                list(
+                    getattr(
+                        snapshot,
+                        "next",
+                        (),
+                    )
+                    or ()
+                ),
+
+            "created_at":
+                getattr(
+                    snapshot,
+                    "created_at",
+                    None,
+                ),
+
+            "metadata":
+                getattr(
+                    snapshot,
+                    "metadata",
+                    {},
+                )
+                or {},
+
+            "interrupts":
+                self._interrupt_payloads(
+                    snapshot
+                ),
+
+            "state":
                 {
-                    "messages": [
-                        HumanMessage(
-                            content=
-                                query,
+                    "messages":
+                        [
+                            self._serialize_message(
+                                message
+                            )
+                            for message
+                            in messages
+                        ],
+
+                    "message_count":
+                        len(
+                            messages
                         ),
-                    ],
 
                     "llm_calls":
-                        0,
+                        int(
+                            values.get(
+                                "llm_calls",
+                                0,
+                            )
+                            or 0
+                        ),
 
-                    "trace":
-                        [],
-                }
+                    "active_run_id":
+                        values.get(
+                            "active_run_id"
+                        ),
+
+                    "approval":
+                        values.get(
+                            "approval"
+                        ),
+
+                    "trace_count":
+                        len(
+                            values.get(
+                                "trace",
+                                [],
+                            )
+                            or []
+                        ),
+                },
+        }
+
+    async def inspect_state(
+        self,
+        *,
+        model,
+        tools: list[BaseTool],
+        system_prompt: str,
+        max_iterations: int,
+        checkpointer,
+        thread_id: str,
+    ) -> dict:
+        """
+        Read the current durable state through LangGraph's public graph API.
+        Knowgentiq does not query checkpoint tables directly.
+        """
+        graph = await self._build_graph(
+            model=
+                model,
+            tools=
+                tools,
+            system_prompt=
+                system_prompt,
+            max_iterations=
+                max_iterations,
+            checkpointer=
+                checkpointer,
+            progress_callback=
+                None,
+        )
+
+        config = {
+            "configurable": {
+                "thread_id":
+                    thread_id,
+            }
+        }
+
+        snapshot = (
+            await graph.aget_state(
+                config
+            )
+        )
+
+        return (
+            self._serialize_snapshot(
+                snapshot
+            )
+        )
+
+    async def checkpoint_history(
+        self,
+        *,
+        model,
+        tools: list[BaseTool],
+        system_prompt: str,
+        max_iterations: int,
+        checkpointer,
+        thread_id: str,
+        limit: int = 20,
+    ) -> list[dict]:
+        """
+        Read checkpoint history through LangGraph get_state_history.
+        This is intentionally framework-owned time-travel state.
+        """
+        graph = await self._build_graph(
+            model=
+                model,
+            tools=
+                tools,
+            system_prompt=
+                system_prompt,
+            max_iterations=
+                max_iterations,
+            checkpointer=
+                checkpointer,
+            progress_callback=
+                None,
+        )
+
+        config = {
+            "configurable": {
+                "thread_id":
+                    thread_id,
+            }
+        }
+
+        history: list[dict] = []
+
+        async for snapshot in (
+            graph.aget_state_history(
+                config,
+                limit=
+                    limit,
+            )
+        ):
+            history.append(
+                self._serialize_snapshot(
+                    snapshot
+                )
+            )
+
+        return history
+
+    async def run_turn(
+        self,
+        *,
+        model,
+        tools: list[BaseTool],
+        system_prompt: str,
+        query: str,
+        max_iterations: int,
+        checkpointer,
+        thread_id: str,
+        run_id: str,
+        auto_execute_tool_names:
+            set[str] | None = None,
+        human_approval_tool_names:
+            set[str] | None = None,
+        human_approval_supported:
+            bool = True,
+        progress_callback:
+            ProgressCallback | None = None,
+    ) -> dict:
+        graph = await self._build_graph(
+            model=
+                model,
+            tools=
+                tools,
+            system_prompt=
+                system_prompt,
+            max_iterations=
+                max_iterations,
+            checkpointer=
+                checkpointer,
+            progress_callback=
+                progress_callback,
+            auto_execute_tool_names=
+                auto_execute_tool_names,
+            human_approval_tool_names=
+                human_approval_tool_names,
+            human_approval_supported=
+                human_approval_supported,
+        )
+
+        config = {
+            "configurable": {
+                "thread_id":
+                    thread_id,
+            }
+        }
+
+        before = (
+            await graph.aget_state(
+                config
+            )
+        )
+
+        pending_interrupts = (
+            self._interrupt_payloads(
+                before
+            )
+        )
+
+        if pending_interrupts:
+            raise RuntimeError(
+                "This agent thread is waiting "
+                "for human approval and must "
+                "be resumed before a new user "
+                "message is accepted."
+            )
+
+        before_values = (
+            getattr(
+                before,
+                "values",
+                {},
+            )
+            or {}
+        )
+
+        message_offset = len(
+            before_values.get(
+                "messages",
+                [],
+            )
+        )
+
+        trace_offset = len(
+            before_values.get(
+                "trace",
+                [],
+            )
+        )
+
+        result = await graph.ainvoke(
+            {
+                "messages": [
+                    HumanMessage(
+                        content=
+                            query,
+                    )
+                ],
+
+                "llm_calls":
+                    0,
+
+                "trace":
+                    [],
+
+                "active_run_id":
+                    run_id,
+
+                "approval":
+                    None,
+            },
+            config=
+                config,
+        )
+
+        return await self._result(
+            graph=
+                graph,
+            config=
+                config,
+            result=
+                result,
+            message_offset=
+                message_offset,
+            trace_offset=
+                trace_offset,
+            llm_calls_before=
+                0,
+        )
+
+    async def resume(
+        self,
+        *,
+        model,
+        tools: list[BaseTool],
+        system_prompt: str,
+        max_iterations: int,
+        checkpointer,
+        thread_id: str,
+        decision: dict,
+        auto_execute_tool_names:
+            set[str] | None = None,
+        human_approval_tool_names:
+            set[str] | None = None,
+        human_approval_supported:
+            bool = True,
+        progress_callback:
+            ProgressCallback | None = None,
+    ) -> dict:
+        graph = await self._build_graph(
+            model=
+                model,
+            tools=
+                tools,
+            system_prompt=
+                system_prompt,
+            max_iterations=
+                max_iterations,
+            checkpointer=
+                checkpointer,
+            progress_callback=
+                progress_callback,
+            auto_execute_tool_names=
+                auto_execute_tool_names,
+            human_approval_tool_names=
+                human_approval_tool_names,
+            human_approval_supported=
+                human_approval_supported,
+        )
+
+        config = {
+            "configurable": {
+                "thread_id":
+                    thread_id,
+            }
+        }
+
+        before = (
+            await graph.aget_state(
+                config
+            )
+        )
+
+        interrupts = (
+            self._interrupt_payloads(
+                before
+            )
+        )
+
+        if not interrupts:
+            raise RuntimeError(
+                "This agent thread has no "
+                "pending human approval."
+            )
+
+        before_values = (
+            getattr(
+                before,
+                "values",
+                {},
+            )
+            or {}
+        )
+
+        message_offset = len(
+            before_values.get(
+                "messages",
+                [],
+            )
+        )
+
+        trace_offset = len(
+            before_values.get(
+                "trace",
+                [],
+            )
+        )
+
+        llm_calls_before = int(
+            before_values.get(
+                "llm_calls",
+                0,
+            )
+            or 0
+        )
+
+        result = await graph.ainvoke(
+            Command(
+                resume=
+                    decision,
+            ),
+            config=
+                config,
+        )
+
+        return await self._result(
+            graph=
+                graph,
+            config=
+                config,
+            result=
+                result,
+            message_offset=
+                message_offset,
+            trace_offset=
+                trace_offset,
+            llm_calls_before=
+                llm_calls_before,
+        )
+
+    async def _result(
+        self,
+        *,
+        graph,
+        config: dict,
+        result: dict,
+        message_offset: int,
+        trace_offset: int,
+        llm_calls_before: int,
+    ) -> dict:
+        snapshot = (
+            await graph.aget_state(
+                config
+            )
+        )
+
+        interrupts = (
+            self._interrupt_payloads(
+                snapshot
             )
         )
 
@@ -643,58 +1504,101 @@ class AgentRuntime:
                 "messages",
                 [],
             )
+            or []
         )
 
-        answer = ""
-
-        if messages:
-            last_message = (
-                messages[-1]
+        trace = (
+            result.get(
+                "trace",
+                [],
             )
+            or []
+        )
 
-            content = (
-                getattr(
-                    last_message,
-                    "content",
-                    "",
-                )
+        new_messages = (
+            messages[
+                message_offset:
+            ]
+        )
+
+        new_trace = (
+            trace[
+                trace_offset:
+            ]
+        )
+
+        total_llm_calls = int(
+            result.get(
+                "llm_calls",
+                llm_calls_before,
             )
+            or 0
+        )
 
-            if isinstance(
-                content,
-                str,
+        answer = None
+
+        if not interrupts:
+            for message in reversed(
+                messages
             ):
-                answer = content
+                if isinstance(
+                    message,
+                    AIMessage,
+                ):
+                    content = (
+                        getattr(
+                            message,
+                            "content",
+                            "",
+                        )
+                    )
 
-            else:
-                answer = str(
-                    content,
-                )
+                    answer = (
+                        content
+                        if isinstance(
+                            content,
+                            str,
+                        )
+                        else str(
+                            content
+                        )
+                    )
 
-        if not answer:
-            answer = (
-                "The agent could not "
-                "complete the request "
-                "within the configured "
-                "execution limit."
-            )
+                    break
 
         return {
             "answer":
                 answer,
 
+            "interrupted":
+                bool(
+                    interrupts
+                ),
+
+            "interrupts":
+                interrupts,
+
+            "checkpoint_id":
+                self._checkpoint_id(
+                    snapshot
+                ),
+
             "llm_calls":
-                result.get(
-                    "llm_calls",
+                total_llm_calls,
+
+            "llm_calls_delta":
+                max(
                     0,
+                    total_llm_calls
+                    - llm_calls_before,
                 ),
 
             "messages":
                 messages,
 
+            "new_messages":
+                new_messages,
+
             "trace":
-                result.get(
-                    "trace",
-                    [],
-                ),
+                new_trace,
         }

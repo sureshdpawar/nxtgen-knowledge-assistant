@@ -1,16 +1,19 @@
 import api from "@/services/api";
 
-import type {
-  ToolDefinition,
-} from "@/features/tools/types";
+import type { ToolDefinition } from "@/features/tools/types";
 
 import type {
   Agent,
+  AgentAssignedTool,
+  AgentCheckpointHistory,
+  AgentGraphState,
   AgentProgressEvent,
   AgentRun,
   AgentRunDetail,
   AgentRunRequest,
   AgentRunResponse,
+  AgentToolExecutionPolicy,
+  AgentToolPolicy,
   AssignAgentToolsRequest,
   CreateAgentRequest,
   UpdateAgentRequest,
@@ -18,52 +21,38 @@ import type {
 
 
 export async function getAgents() {
-  const response =
-    await api.get<Agent[]>(
-      "/agents",
-    );
-
+  const response = await api.get<Agent[]>("/agents");
   return response.data;
 }
 
 
-export async function getAgent(
-  id: string,
-) {
-  const response =
-    await api.get<Agent>(
-      `/agents/${id}`,
-    );
-
+export async function getAgent(id: string) {
+  const response = await api.get<Agent>(
+    `/agents/${id}`,
+  );
   return response.data;
 }
 
 
 export async function createAgent(
-  payload:
-    CreateAgentRequest,
+  payload: CreateAgentRequest,
 ) {
-  const response =
-    await api.post<Agent>(
-      "/agents",
-      payload,
-    );
-
+  const response = await api.post<Agent>(
+    "/agents",
+    payload,
+  );
   return response.data;
 }
 
 
 export async function updateAgent(
   id: string,
-  payload:
-    UpdateAgentRequest,
+  payload: UpdateAgentRequest,
 ) {
-  const response =
-    await api.put<Agent>(
-      `/agents/${id}`,
-      payload,
-    );
-
+  const response = await api.put<Agent>(
+    `/agents/${id}`,
+    payload,
+  );
   return response.data;
 }
 
@@ -77,18 +66,62 @@ export async function deleteAgent(
 }
 
 
+export async function getAgentAssignedTools(
+  agentId: string,
+) {
+  const response = await api.get<
+    AgentAssignedTool[]
+  >(
+    `/agents/${agentId}/tools`,
+  );
+
+  return response.data;
+}
+
+
+export async function getAgentToolPolicies(
+  agentId: string,
+) {
+  const response = await api.get<
+    AgentToolPolicy[]
+  >(
+    `/agents/${agentId}/tools/policies`,
+  );
+
+  return response.data;
+}
+
+
 export async function assignAgentTools(
   agentId: string,
-  payload:
-    AssignAgentToolsRequest,
+  payload: AssignAgentToolsRequest,
 ) {
-  const response =
-    await api.put<
-      ToolDefinition[]
-    >(
-      `/agents/${agentId}/tools`,
-      payload,
-    );
+  const response = await api.put<
+    ToolDefinition[]
+  >(
+    `/agents/${agentId}/tools`,
+    payload,
+  );
+
+  return response.data;
+}
+
+
+export async function updateAgentToolPolicy(
+  agentId: string,
+  toolId: string,
+  executionPolicy:
+    AgentToolExecutionPolicy,
+) {
+  const response = await api.put<
+    AgentToolPolicy
+  >(
+    `/agents/${agentId}/tools/${toolId}/policy`,
+    {
+      execution_policy:
+        executionPolicy,
+    },
+  );
 
   return response.data;
 }
@@ -96,16 +129,48 @@ export async function assignAgentTools(
 
 export async function runAgent(
   id: string,
-  payload:
-    AgentRunRequest,
+  payload: AgentRunRequest,
 ) {
-  const response =
-    await api.post<
-      AgentRunResponse
-    >(
-      `/agents/${id}/run`,
-      payload,
-    );
+  const response = await api.post<
+    AgentRunResponse
+  >(
+    `/agents/${id}/run`,
+    payload,
+  );
+
+  return response.data;
+}
+
+
+export async function getAgentGraphState(
+  agentId: string,
+  threadId: string,
+) {
+  const response = await api.get<
+    AgentGraphState
+  >(
+    `/agents/${agentId}/threads/${threadId}/state`,
+  );
+
+  return response.data;
+}
+
+
+export async function getAgentCheckpointHistory(
+  agentId: string,
+  threadId: string,
+  limit = 20,
+) {
+  const response = await api.get<
+    AgentCheckpointHistory
+  >(
+    `/agents/${agentId}/threads/${threadId}/checkpoints`,
+    {
+      params: {
+        limit,
+      },
+    },
+  );
 
   return response.data;
 }
@@ -113,17 +178,13 @@ export async function runAgent(
 
 export async function runAgentStream(
   id: string,
-  payload:
-    AgentRunRequest,
+  payload: AgentRunRequest,
   onEvent: (
-    event:
-      AgentProgressEvent,
+    event: AgentProgressEvent,
   ) => void,
 ) {
   let consumedLength = 0;
-
   let buffer = "";
-
 
   function processBuffer() {
     while (true) {
@@ -149,22 +210,18 @@ export async function runAgentStream(
           boundary + 2,
         );
 
-      const lines =
-        block.split(
-          "\n",
-        );
-
       const dataLines =
-        lines.filter(
-          (line) =>
-            line.startsWith(
-              "data:",
-            ),
-        );
+        block
+          .split("\n")
+          .filter(
+            (line) =>
+              line.startsWith(
+                "data:",
+              ),
+          );
 
       if (
-        dataLines.length ===
-        0
+        dataLines.length === 0
       ) {
         continue;
       }
@@ -174,38 +231,26 @@ export async function runAgentStream(
           .map(
             (line) =>
               line
-                .slice(
-                  5,
-                )
+                .slice(5)
                 .trimStart(),
           )
-          .join(
-            "\n",
-          );
+          .join("\n");
 
       if (!json) {
         continue;
       }
 
       try {
-        const event =
+        onEvent(
           JSON.parse(
             json,
-          ) as AgentProgressEvent;
-
-        onEvent(
-          event,
+          ) as AgentProgressEvent,
         );
-
       } catch {
-        /*
-         * Ignore malformed or
-         * incomplete SSE frames.
-         */
+        // Ignore malformed SSE frames.
       }
     }
   }
-
 
   await api.post(
     `/agents/${id}/run/stream`,
@@ -213,13 +258,9 @@ export async function runAgentStream(
     {
       responseType:
         "text",
-
       transformResponse: [
-        (
-          data,
-        ) => data,
+        (data) => data,
       ],
-
       onDownloadProgress(
         progressEvent,
       ) {
@@ -240,8 +281,10 @@ export async function runAgentStream(
           ?? rawEvent.target;
 
         if (
-          !(xhr instanceof
-            XMLHttpRequest)
+          !(
+            xhr
+            instanceof XMLHttpRequest
+          )
         ) {
           return;
         }
@@ -257,7 +300,7 @@ export async function runAgentStream(
           return;
         }
 
-        const chunk =
+        buffer +=
           responseText.slice(
             consumedLength,
           );
@@ -265,19 +308,11 @@ export async function runAgentStream(
         consumedLength =
           responseText.length;
 
-        buffer += chunk;
-
         processBuffer();
       },
     },
   );
 
-
-  /*
-   * Process any remaining
-   * complete frame after Axios
-   * reports the request finished.
-   */
   processBuffer();
 }
 
@@ -285,12 +320,11 @@ export async function runAgentStream(
 export async function getAgentRuns(
   agentId: string,
 ) {
-  const response =
-    await api.get<
-      AgentRun[]
-    >(
-      `/agent-runs/agent/${agentId}`,
-    );
+  const response = await api.get<
+    AgentRun[]
+  >(
+    `/agent-runs/agent/${agentId}`,
+  );
 
   return response.data;
 }
@@ -299,12 +333,11 @@ export async function getAgentRuns(
 export async function getAgentRun(
   runId: string,
 ) {
-  const response =
-    await api.get<
-      AgentRunDetail
-    >(
-      `/agent-runs/${runId}`,
-    );
+  const response = await api.get<
+    AgentRunDetail
+  >(
+    `/agent-runs/${runId}`,
+  );
 
   return response.data;
 }
