@@ -1,12 +1,29 @@
 "use client";
 
 import {
+  useState,
+} from "react";
+
+import {
   useKnowledgeSourceSyncs,
 } from "../hooks";
 
 import type {
   KnowledgeSourceSync,
 } from "../types";
+
+import {
+  Button,
+} from "@/components/ui/button";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 
 type Props = {
@@ -24,6 +41,14 @@ export default function KnowledgeSourceSyncHistory({
   } =
     useKnowledgeSourceSyncs(
       knowledgeSourceId,
+    );
+
+  const [
+    selectedSync,
+    setSelectedSync,
+  ] =
+    useState<KnowledgeSourceSync | null>(
+      null,
     );
 
 
@@ -117,6 +142,10 @@ export default function KnowledgeSourceSyncHistory({
                   Failed
                 </th>
 
+                <th className="px-4 py-3 text-right">
+                  Details
+                </th>
+
               </tr>
 
             </thead>
@@ -139,6 +168,11 @@ export default function KnowledgeSourceSyncHistory({
                     latest={
                       index === 0
                     }
+                    onViewDetails={() =>
+                      setSelectedSync(
+                        sync,
+                      )
+                    }
                   />
                 ),
               )}
@@ -151,6 +185,19 @@ export default function KnowledgeSourceSyncHistory({
 
       </div>
 
+
+      <SyncDetailsDialog
+        sync={selectedSync}
+        open={selectedSync !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedSync(
+              null,
+            );
+          }
+        }}
+      />
+
     </section>
   );
 }
@@ -159,11 +206,14 @@ export default function KnowledgeSourceSyncHistory({
 function SyncRow({
   sync,
   latest,
+  onViewDetails,
 }: {
   sync:
     KnowledgeSourceSync;
 
   latest: boolean;
+
+  onViewDetails: () => void;
 }) {
   return (
     <tr className="hover:bg-slate-50">
@@ -251,7 +301,267 @@ function SyncRow({
         }
       />
 
+
+      <td className="whitespace-nowrap px-4 py-3 text-right">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={
+            onViewDetails
+          }
+        >
+          View
+        </Button>
+      </td>
+
     </tr>
+  );
+}
+
+
+function SyncDetailsDialog({
+  sync,
+  open,
+  onOpenChange,
+}: {
+  sync: KnowledgeSourceSync | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  if (!sync) {
+    return null;
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={
+        onOpenChange
+      }
+    >
+      <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+
+        <DialogHeader>
+          <DialogTitle>
+            Sync Run Details
+          </DialogTitle>
+
+          <DialogDescription>
+            Synchronization outcome and provider diagnostics for this run.
+          </DialogDescription>
+        </DialogHeader>
+
+
+        <div className="space-y-5">
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+
+            <DetailField
+              label="Status"
+              value={sync.status}
+            />
+
+            <DetailField
+              label="Started"
+              value={
+                formatDateTime(
+                  sync.started_at,
+                )
+              }
+            />
+
+            <DetailField
+              label="Completed"
+              value={
+                formatDateTime(
+                  sync.completed_at,
+                )
+              }
+            />
+
+            <DetailField
+              label="Run ID"
+              value={sync.id}
+              mono
+            />
+
+          </div>
+
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+
+            <Metric
+              label="Discovered"
+              value={
+                sync.items_discovered
+              }
+            />
+
+            <Metric
+              label="New"
+              value={
+                sync.items_new
+              }
+            />
+
+            <Metric
+              label="Changed"
+              value={
+                sync.items_changed
+              }
+            />
+
+            <Metric
+              label="Unchanged"
+              value={
+                sync.items_unchanged
+              }
+            />
+
+            <Metric
+              label="Missing"
+              value={
+                sync.items_missing
+              }
+            />
+
+            <Metric
+              label="Failed"
+              value={
+                sync.items_failed
+              }
+            />
+
+          </div>
+
+
+          <SummaryBlock
+            title="Provider Summary"
+            value={
+              sync.provider_summary
+            }
+            emptyText="No provider diagnostics were recorded for this run."
+          />
+
+
+          {sync.error_message && (
+            <SummaryBlock
+              title="Error"
+              value={
+                sync.error_message
+              }
+              emptyText=""
+              error
+            />
+          )}
+
+        </div>
+
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              onOpenChange(
+                false,
+              )
+            }
+          >
+            Close
+          </Button>
+        </DialogFooter>
+
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+function Metric({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-lg border bg-slate-50 px-3 py-3">
+      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+
+      <div className="mt-1 text-lg font-semibold tabular-nums text-slate-900">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+
+function DetailField({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+
+      <div
+        className={[
+          "mt-1 break-words text-sm text-slate-900",
+          mono
+            ? "font-mono text-xs"
+            : "",
+        ].join(" ")}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+
+function SummaryBlock({
+  title,
+  value,
+  emptyText,
+  error = false,
+}: {
+  title: string;
+  value: string | null;
+  emptyText: string;
+  error?: boolean;
+}) {
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-slate-900">
+        {title}
+      </h3>
+
+      <div
+        className={[
+          "mt-2 whitespace-pre-wrap break-words rounded-lg border p-4 text-sm leading-6",
+          error
+            ? "border-red-200 bg-red-50 text-red-800"
+            : "border-slate-200 bg-slate-50 text-slate-700",
+        ].join(" ")}
+      >
+        {
+          value?.trim()
+            ? value
+            : emptyText
+        }
+      </div>
+    </div>
   );
 }
 
@@ -266,6 +576,19 @@ function NumberCell({
       {value}
     </td>
   );
+}
+
+
+function formatDateTime(
+  value: string | null,
+) {
+  if (!value) {
+    return "—";
+  }
+
+  return new Date(
+    value,
+  ).toLocaleString();
 }
 
 
