@@ -36,8 +36,8 @@ type SidebarProps = {
 
 type MenuSection =
   | "main"
-  | "chat"
   | "knowledge"
+  | "agents"
   | "studio"
   | "evaluation"
   | "governance"
@@ -71,26 +71,51 @@ const menu: MenuItem[] = [
     section: "main",
   },
 
+  /*
+   * =========================================================
+   * END USER — KNOWLEDGE
+   * =========================================================
+   */
   {
-    label: "KB Chat",
+    label: "Chat",
     href: "/chat",
     icon: MessageSquare,
     roles: [
       "USER",
     ],
-    section: "chat",
+    section: "knowledge",
   },
 
   {
-    label: "Agent Chat",
+    label: "Search",
+    href: "/search",
+    icon: Search,
+    roles: [
+      "USER",
+    ],
+    section: "knowledge",
+  },
+
+  /*
+   * =========================================================
+   * END USER — AGENTS
+   * =========================================================
+   */
+  {
+    label: "Chat",
     href: "/agent-chat",
     icon: Bot,
     roles: [
       "USER",
     ],
-    section: "chat",
+    section: "agents",
   },
 
+  /*
+   * =========================================================
+   * ADMIN — KNOWLEDGE
+   * =========================================================
+   */
   {
     label: "Knowledge Bases",
     href: "/knowledge-bases",
@@ -107,7 +132,6 @@ const menu: MenuItem[] = [
     icon: Search,
     roles: [
       "ADMIN",
-      "USER",
     ],
     section: "knowledge",
   },
@@ -122,6 +146,11 @@ const menu: MenuItem[] = [
     section: "knowledge",
   },
 
+  /*
+   * =========================================================
+   * ADMIN — AGENT STUDIO
+   * =========================================================
+   */
   {
     label: "Agents",
     href: "/agents",
@@ -162,6 +191,11 @@ const menu: MenuItem[] = [
     section: "studio",
   },
 
+  /*
+   * =========================================================
+   * ADMIN — EVALUATION
+   * =========================================================
+   */
   {
     label: "Test & Benchmark",
     href: "/evaluation",
@@ -182,6 +216,11 @@ const menu: MenuItem[] = [
     section: "evaluation",
   },
 
+  /*
+   * =========================================================
+   * ADMIN — GOVERNANCE
+   * =========================================================
+   */
   {
     label: "LLM Profiles",
     href: "/settings",
@@ -222,6 +261,11 @@ const menu: MenuItem[] = [
     section: "governance",
   },
 
+  /*
+   * =========================================================
+   * ADMINISTRATION
+   * =========================================================
+   */
   {
     label: "Tenants",
     href: "/tenants",
@@ -249,8 +293,8 @@ const sectionLabels: Record<
   string
 > = {
   main: "",
-  chat: "Chat",
   knowledge: "Knowledge",
+  agents: "Agents",
   studio: "Agent Studio",
   evaluation: "Evaluation",
   governance: "Governance",
@@ -260,8 +304,8 @@ const sectionLabels: Record<
 
 const sectionOrder: MenuSection[] = [
   "main",
-  "chat",
   "knowledge",
+  "agents",
   "studio",
   "evaluation",
   "governance",
