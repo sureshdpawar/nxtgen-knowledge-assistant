@@ -33,7 +33,7 @@ export const knowledgeSourceSchema =
         1,
       )
       .max(
-        200,
+        500,
       ),
 
     maxDepth: z

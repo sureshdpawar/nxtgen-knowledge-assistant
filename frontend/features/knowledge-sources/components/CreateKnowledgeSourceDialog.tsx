@@ -77,7 +77,7 @@ export default function CreateKnowledgeSourceDialog({
       type: "UPLOAD",
 
       baseUrl: "",
-      maxPages: 25,
+      maxPages: 500,
       maxDepth: 2,
 
       driveFolderUrl: "",
@@ -180,7 +180,7 @@ export default function CreateKnowledgeSourceDialog({
       type: "UPLOAD",
 
       baseUrl: "",
-      maxPages: 25,
+      maxPages: 500,
       maxDepth: 2,
 
       driveFolderUrl: "",
@@ -266,7 +266,6 @@ export default function CreateKnowledgeSourceDialog({
             className="space-y-5"
           >
 
-            {/* Name */}
             <div>
 
               <Label
@@ -298,7 +297,6 @@ export default function CreateKnowledgeSourceDialog({
             </div>
 
 
-            {/* Source type */}
             <div>
 
               <Label
@@ -338,7 +336,6 @@ export default function CreateKnowledgeSourceDialog({
             </div>
 
 
-            {/* Website */}
             {sourceType
               === "WEBSITE"
               && (
@@ -396,7 +393,7 @@ export default function CreateKnowledgeSourceDialog({
                           1
                         }
                         max={
-                          200
+                          500
                         }
                         {...register(
                           "maxPages",
@@ -455,7 +452,6 @@ export default function CreateKnowledgeSourceDialog({
               )}
 
 
-            {/* Google Drive */}
             {sourceType
               === "GOOGLE_DRIVE"
               && (
