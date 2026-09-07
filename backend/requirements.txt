@@ -136,3 +136,9 @@ langgraph-checkpoint-postgres>=3.1,<4.0
 # -------------------------
 mcp>=1.0,<2.0
 langchain-mcp-adapters
+
+
+# -------------------------
+# Evaluation / DeepEval
+# -------------------------
+deepeval>=4.2,<4.3
