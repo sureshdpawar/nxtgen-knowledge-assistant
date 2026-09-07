@@ -1,4 +1,4 @@
-```ts
+
 export type ChatChannelType =
   | "PUBLIC_API"
   | "WEBSITE"
@@ -297,4 +297,4 @@ export type ConnectChatChannelSlackRequest = {
   allowed_slack_channel_ids:
     string[];
 };
-```
+
