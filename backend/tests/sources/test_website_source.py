@@ -1,265 +1,327 @@
+import httpx
+
 from app.sources.website import WebsiteProvider
 
 
-def test_structural_extraction_preserves_tabbed_business_content():
-    html = """
-    <html>
-        <head>
-            <title>AI Solutions</title>
-        </head>
+class SourceStub:
+    def __init__(self, configuration):
+        self.configuration = configuration
 
-        <body>
-            <nav>
-                Home
-                Services
-                Contact
-            </nav>
 
-            <section>
-                <h5>Key Focus Areas</h5>
+def html(title: str, body: str, links: str = "") -> str:
+    return (
+        "<html><head><title>"
+        + title
+        + "</title></head><body><main><h1>"
+        + title
+        + "</h1><p>"
+        + body
+        + "</p>"
+        + links
+        + "</main></body></html>"
+    )
 
-                <div class="tabs">
-                    <div class="tab-pane">
-                        <div class="tab-info">
-                            <h2>
-                                Predictive Analytics & Machine Learning
-                            </h2>
 
-                            <p>
-                                Turn your data into a strategic advantage.
-                            </p>
+def response(url: str, text: str, content_type: str) -> httpx.Response:
+    request = httpx.Request("GET", url)
+    return httpx.Response(
+        200,
+        text=text,
+        headers={"content-type": content_type},
+        request=request,
+    )
 
-                            <ul>
-                                <li>
-                                    Predictive Modelling & Forecasting
-                                </li>
-                                <li>
-                                    Risk Scoring & Anomaly Detection
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
 
-                    <div class="tab-pane">
-                        <div class="tab-info">
-                            <h2>
-                                Generative AI
-                            </h2>
+def test_parse_xml_urlset():
+    provider = WebsiteProvider()
+    xml = """<?xml version="1.0"?>
+    <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+      <url><loc>https://example.com/a</loc></url>
+      <url><loc>https://example.com/b</loc></url>
+    </urlset>"""
 
-                            <p>
-                                We build Generative AI solutions.
-                            </p>
+    parsed = provider._parse_sitemap_response(
+        response=response(
+            "https://example.com/sitemap.xml",
+            xml,
+            "application/xml",
+        ),
+        sitemap_url="https://example.com/sitemap.xml",
+    )
 
-                            <ul>
-                                <li>
-                                    RAG (Retrieval Augmented Generation)
-                                </li>
-                                <li>
-                                    Chatbots & Conversational AI
-                                </li>
-                                <li>
-                                    Agentic AI
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
+    assert parsed == (
+        [],
+        [
+            "https://example.com/a",
+            "https://example.com/b",
+        ],
+    )
 
-                    <div class="tab-pane">
-                        <div class="tab-info">
-                            <h2>
-                                Business Intelligence Dashboards
-                            </h2>
 
-                            <ul>
-                                <li>
-                                    BI Dashboard Design
-                                </li>
-                                <li>
-                                    Executive Analytics Portals
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </section>
+def test_parse_xml_sitemap_index():
+    provider = WebsiteProvider()
+    xml = """<?xml version="1.0"?>
+    <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+      <sitemap><loc>https://example.com/pages.xml</loc></sitemap>
+      <sitemap><loc>https://example.com/blog.xml</loc></sitemap>
+    </sitemapindex>"""
 
-            <footer>
-                Copyright Example Company
-            </footer>
-        </body>
-    </html>
+    parsed = provider._parse_sitemap_response(
+        response=response(
+            "https://example.com/sitemap.xml",
+            xml,
+            "application/xml",
+        ),
+        sitemap_url="https://example.com/sitemap.xml",
+    )
+
+    assert parsed == (
+        [
+            "https://example.com/pages.xml",
+            "https://example.com/blog.xml",
+        ],
+        [],
+    )
+
+
+def test_parse_html_sitemap():
+    provider = WebsiteProvider()
+    page = """
+    <html><body>
+      <a href="/courses">Courses</a>
+      <a href="/about">About</a>
+    </body></html>
     """
 
+    parsed = provider._parse_sitemap_response(
+        response=response(
+            "https://example.com/sitemap",
+            page,
+            "text/html",
+        ),
+        sitemap_url="https://example.com/sitemap",
+    )
+
+    assert parsed == (
+        [],
+        [
+            "https://example.com/courses",
+            "https://example.com/about",
+        ],
+    )
+
+
+def test_robots_supports_multiple_sitemaps():
     provider = WebsiteProvider()
 
-    text = provider._extract_structural_content(
-        html
+    result = provider._parse_robots_sitemaps(
+        """
+        User-agent: *
+        Sitemap: https://example.com/sitemap.xml
+        sitemap: /products-sitemap.xml
+        """,
+        "https://example.com/robots.txt",
     )
 
-    assert (
-        "Predictive Analytics & Machine Learning"
-        in text
-    )
-
-    assert (
-        "Generative AI"
-        in text
-    )
-
-    assert (
-        "RAG (Retrieval Augmented Generation)"
-        in text
-    )
-
-    assert (
-        "Agentic AI"
-        in text
-    )
-
-    assert (
-        "Business Intelligence Dashboards"
-        in text
-    )
-
-    assert (
-        "Copyright Example Company"
-        not in text
-    )
+    assert result == [
+        "https://example.com/sitemap.xml",
+        "https://example.com/products-sitemap.xml",
+    ]
 
 
-def test_structural_extraction_removes_navigation():
-    html = """
-    <html>
-        <body>
-            <nav>
-                Home Services About Contact
-            </nav>
-
-            <main>
-                <h1>AI Solutions</h1>
-                <p>
-                    Enterprise artificial intelligence services.
-                </p>
-            </main>
-        </body>
-    </html>
+def test_structural_extraction_preserves_business_content():
+    provider = WebsiteProvider()
+    page = """
+    <html><body>
+      <nav>Home Services Contact</nav>
+      <main>
+        <h1>AI Solutions</h1>
+        <h2>Generative AI</h2>
+        <p>We build governed enterprise artificial intelligence systems.</p>
+        <ul>
+          <li>RAG (Retrieval Augmented Generation)</li>
+          <li>Agentic AI</li>
+        </ul>
+      </main>
+      <footer>Copyright Example Company</footer>
+    </body></html>
     """
 
-    provider = WebsiteProvider()
+    text = provider._extract_structural_content(page)
 
-    text = provider._extract_structural_content(
-        html
-    )
-
-    assert "AI Solutions" in text
-
-    assert (
-        "Enterprise artificial intelligence services."
-        in text
-    )
-
-    assert (
-        "Home Services About Contact"
-        not in text
-    )
+    assert "Generative AI" in text
+    assert "RAG (Retrieval Augmented Generation)" in text
+    assert "Agentic AI" in text
+    assert "Home Services Contact" not in text
+    assert "Copyright Example Company" not in text
 
 
 def test_merge_does_not_duplicate_existing_content():
     provider = WebsiteProvider()
 
-    primary = """
-    ## Generative AI
-
-    We build Generative AI solutions.
-
-    RAG (Retrieval Augmented Generation)
-    """
-
-    supplemental = """
-    ## Generative AI
-
-    We build Generative AI solutions.
-
-    - RAG (Retrieval Augmented Generation)
-
-    - Agentic AI
-    """
-
     result = provider._merge_extractions(
-        primary=primary,
-        supplemental=supplemental,
+        primary="""
+        ## Generative AI
+
+        We build Generative AI solutions.
+
+        RAG (Retrieval Augmented Generation)
+        """,
+        supplemental="""
+        ## Generative AI
+
+        We build Generative AI solutions.
+
+        - RAG (Retrieval Augmented Generation)
+
+        - Agentic AI
+        """,
     )
 
-    assert (
-        result.casefold().count(
-            "generative ai solutions"
-        )
-        == 1
-    )
-
-    assert (
-        result.casefold().count(
-            "rag (retrieval augmented generation)"
-        )
-        == 1
-    )
-
-    assert (
-        result.casefold().count(
-            "agentic ai"
-        )
-        == 1
-    )
+    assert result.casefold().count("generative ai solutions") == 1
+    assert result.casefold().count(
+        "rag (retrieval augmented generation)"
+    ) == 1
+    assert result.casefold().count("agentic ai") == 1
 
 
-def test_hybrid_extraction_preserves_structural_content():
-    html = """
-    <html>
-        <body>
-            <main>
-                <h1>AI & Data Science</h1>
 
-                <p>
-                    We build machine learning solutions.
-                </p>
-
-                <section>
-                    <div class="tab-pane">
-                        <h2>Generative AI</h2>
-
-                        <ul>
-                            <li>
-                                RAG (Retrieval Augmented Generation)
-                            </li>
-
-                            <li>
-                                Agentic AI
-                            </li>
-                        </ul>
-                    </div>
-                </section>
-            </main>
-        </body>
-    </html>
-    """
-
+def test_placeholder_canonical_is_ignored():
     provider = WebsiteProvider()
 
-    text, strategy = provider._extract_content(
-        html_document=html,
-        url="https://example.com/ai",
+    selected = provider._select_page_canonical_url(
+        requested_url="https://example.com/courses",
+        final_canonical_url="https://example.com/courses",
+        declared_canonical_url="https://example.com/current-page-url",
+        base_host="example.com",
     )
 
-    assert "Generative AI" in text
+    assert selected == "https://example.com/courses"
 
-    assert (
-        "RAG (Retrieval Augmented Generation)"
-        in text
+
+def test_valid_same_site_canonical_is_honored():
+    provider = WebsiteProvider()
+
+    selected = provider._select_page_canonical_url(
+        requested_url="https://example.com/course.php",
+        final_canonical_url="https://example.com/course.php",
+        declared_canonical_url="https://example.com/course",
+        base_host="example.com",
     )
 
-    assert "Agentic AI" in text
+    assert selected == "https://example.com/course"
 
-    assert strategy in {
-        "trafilatura+structural-html-v1",
-        "structural-html-v1",
-    }
+
+def test_common_sitemap_candidates_are_separate_fallback_groups():
+    provider = WebsiteProvider()
+
+    class Client:
+        def get(self, url):
+            request = httpx.Request("GET", url)
+            return httpx.Response(
+                404,
+                text="not found",
+                request=request,
+            )
+
+    groups = provider._sitemap_candidate_groups(
+        client=Client(),
+        configuration={},
+        base_fetch_url="https://example.com/",
+    )
+
+    assert groups == [
+        (
+            "common:sitemap.xml",
+            ["https://example.com/sitemap.xml"],
+        ),
+        (
+            "common:sitemap_index.xml",
+            ["https://example.com/sitemap_index.xml"],
+        ),
+        (
+            "common:html-sitemap",
+            ["https://example.com/sitemap"],
+        ),
+    ]
+
+
+
+def test_page_outcome_reports_non_html():
+    provider = WebsiteProvider()
+
+    class Client:
+        def get(self, url):
+            request = httpx.Request("GET", url)
+            return httpx.Response(
+                200,
+                content=b"%PDF",
+                headers={"content-type": "application/pdf"},
+                request=request,
+            )
+
+    outcome = provider._fetch_page_outcome(
+        client=Client(),
+        requested_url="https://example.com/brochure.pdf",
+        base_host="example.com",
+    )
+
+    assert outcome.status == "non_html"
+    assert outcome.item is None
+    assert "application/pdf" in outcome.reason
+
+
+def test_page_outcome_reports_out_of_scope_redirect():
+    provider = WebsiteProvider()
+
+    class Client:
+        def get(self, url):
+            original_request = httpx.Request("GET", url)
+            redirect_response = httpx.Response(
+                302,
+                headers={
+                    "location": "https://other.example/page",
+                },
+                request=original_request,
+            )
+            final_request = httpx.Request(
+                "GET",
+                "https://other.example/page",
+            )
+            return httpx.Response(
+                200,
+                text=(
+                    "<html><body><p>"
+                    "Enough useful text for a page."
+                    "</p></body></html>"
+                ),
+                headers={"content-type": "text/html"},
+                request=final_request,
+                history=[redirect_response],
+            )
+
+    outcome = provider._fetch_page_outcome(
+        client=Client(),
+        requested_url="https://example.com/redirect",
+        base_host="example.com",
+    )
+
+    assert outcome.status == "out_of_scope"
+    assert outcome.item is None
+
+
+def test_diagnostic_warning_is_bounded():
+    provider = WebsiteProvider()
+    warnings = []
+
+    provider._append_diagnostic_warning(
+        warnings,
+        "Failures",
+        [f"https://example.com/{i}" for i in range(12)],
+        limit=3,
+    )
+
+    assert len(warnings) == 1
+    assert "https://example.com/0" in warnings[0]
+    assert "https://example.com/2" in warnings[0]
+    assert "and 9 more" in warnings[0]

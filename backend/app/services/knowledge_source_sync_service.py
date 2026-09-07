@@ -57,24 +57,14 @@ class KnowledgeSourceSyncService:
             started_at=datetime.now(timezone.utc),
         )
 
-        self.sync_repository.create(
-            db,
-            sync_run,
-        )
+        self.sync_repository.create(db, sync_run)
 
         try:
-            provider = provider_registry.get(
-                source.type
-            )
+            provider = provider_registry.get(source.type)
+            discovery = provider.discover_result(source)
+            items = discovery.items
 
-            items = provider.discover(
-                source
-            )
-
-            sync_run.items_discovered = len(
-                items
-            )
-
+            sync_run.items_discovered = len(items)
             seen_external_ids: set[str] = set()
 
             for item in items:
@@ -82,9 +72,7 @@ class KnowledgeSourceSyncService:
                     if item.external_id in seen_external_ids:
                         continue
 
-                    seen_external_ids.add(
-                        item.external_id
-                    )
+                    seen_external_ids.add(item.external_id)
 
                     existing_document = (
                         self.source_document_service.get_existing_document(
@@ -94,9 +82,6 @@ class KnowledgeSourceSyncService:
                         )
                     )
 
-                    #
-                    # NEW
-                    #
                     if existing_document is None:
                         self.source_document_service.create_document(
                             db=db,
@@ -104,18 +89,11 @@ class KnowledgeSourceSyncService:
                             knowledge_source=source,
                             item=item,
                         )
-
                         sync_run.items_new += 1
                         continue
 
-                    #
-                    # UNCHANGED
-                    #
                     if existing_document.checksum == item.checksum:
-                        if (
-                            existing_document.status
-                            == DocumentStatus.FAILED
-                        ):
+                        if existing_document.status == DocumentStatus.FAILED:
                             self.source_document_service.retry_document(
                                 db=db,
                                 document=existing_document,
@@ -124,110 +102,111 @@ class KnowledgeSourceSyncService:
                         sync_run.items_unchanged += 1
                         continue
 
-                    #
-                    # CHANGED
-                    #
                     self.source_document_service.replace_document_content(
                         db=db,
                         document=existing_document,
                         item=item,
                     )
-
                     sync_run.items_changed += 1
 
                 except Exception:
                     sync_run.items_failed += 1
 
-            #
-            # MISSING
-            #
-            # Any previously indexed external document
-            # that is no longer returned by the source
-            # provider is hard-deleted.
-            #
-            existing_documents = list(
-                source.documents
-            )
+            if discovery.allow_missing_reconciliation:
+                existing_documents = list(source.documents)
 
-            for document in existing_documents:
-                if document.external_id is None:
-                    continue
+                for document in existing_documents:
+                    if document.external_id is None:
+                        continue
 
-                if document.external_id in seen_external_ids:
-                    continue
+                    if document.external_id in seen_external_ids:
+                        continue
 
-                self.document_service.delete_document_record(
-                    db=db,
-                    document=document,
-                )
+                    self.document_service.delete_document_record(
+                        db=db,
+                        document=document,
+                    )
+                    sync_run.items_missing += 1
 
-                sync_run.items_missing += 1
-
-            now = datetime.now(
-                timezone.utc
-            )
-
+            now = datetime.now(timezone.utc)
             source.last_sync_at = now
             source.status = KnowledgeSourceStatus.ACTIVE
-
             sync_run.completed_at = now
 
-            if sync_run.items_failed > 0:
+            has_warnings = (
+                sync_run.items_failed > 0
+                or not discovery.complete
+                or bool(discovery.warnings)
+            )
+
+            if has_warnings:
                 sync_run.status = (
                     KnowledgeSourceSyncStatus.COMPLETED_WITH_ERRORS
                 )
-
-                sync_run.provider_summary = (
-                    "Sync completed with "
-                    f"{sync_run.items_failed} item error(s)."
-                )
             else:
-                sync_run.status = (
-                    KnowledgeSourceSyncStatus.COMPLETED
-                )
+                sync_run.status = KnowledgeSourceSyncStatus.COMPLETED
 
-                sync_run.provider_summary = (
-                    "Sync completed successfully."
-                )
-
-            self.source_repository.update(
-                db,
-                source,
+            sync_run.provider_summary = self._build_provider_summary(
+                discovery=discovery,
+                item_errors=sync_run.items_failed,
             )
 
-            self.sync_repository.update(
-                db,
-                sync_run,
-            )
+            self.source_repository.update(db, source)
+            self.sync_repository.update(db, sync_run)
 
             return sync_run
 
         except Exception as exc:
-            sync_run.status = (
-                KnowledgeSourceSyncStatus.FAILED
-            )
-
-            sync_run.completed_at = datetime.now(
-                timezone.utc
-            )
-
+            sync_run.status = KnowledgeSourceSyncStatus.FAILED
+            sync_run.completed_at = datetime.now(timezone.utc)
             sync_run.error_message = (
                 f"{type(exc).__name__}: {exc}"
             )[:4000]
 
             source.status = KnowledgeSourceStatus.ERROR
 
-            self.source_repository.update(
-                db,
-                source,
-            )
-
-            self.sync_repository.update(
-                db,
-                sync_run,
-            )
+            self.source_repository.update(db, source)
+            self.sync_repository.update(db, sync_run)
 
             raise
+
+    def _build_provider_summary(
+        self,
+        *,
+        discovery,
+        item_errors: int,
+    ) -> str:
+        parts = [
+            f"Discovery strategy={discovery.strategy}.",
+            (
+                "Authoritative=yes."
+                if discovery.authoritative
+                else "Authoritative=no."
+            ),
+            (
+                "Complete=yes."
+                if discovery.complete
+                else "Complete=no."
+            ),
+            (
+                f"Inventory URLs={discovery.discovered_url_count}; "
+                f"usable items={len(discovery.items)}; "
+                f"discovery failures={discovery.failed_url_count}; "
+                f"item errors={item_errors}."
+            ),
+        ]
+
+        if discovery.allow_missing_reconciliation:
+            parts.append("Missing reconciliation applied.")
+        else:
+            parts.append(
+                "Missing reconciliation skipped; existing unseen "
+                "documents were preserved."
+            )
+
+        parts.extend(discovery.warnings)
+
+        return " ".join(parts)[:4000]
 
     def list_syncs(
         self,
