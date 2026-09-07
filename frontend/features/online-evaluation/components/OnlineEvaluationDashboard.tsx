@@ -398,7 +398,7 @@ export default function OnlineEvaluationDashboard() {
         <MetricCard
           label="Faithfulness"
           value={summaryLoading ? "…" : formatScore(summary?.average_scores.faithfulness)}
-          subtitle="Average completed score"
+          subtitle="Average scored answerable cases"
           icon={<Gauge className="h-5 w-5" />}
         />
 
@@ -412,7 +412,7 @@ export default function OnlineEvaluationDashboard() {
         <MetricCard
           label="Context relevancy"
           value={summaryLoading ? "…" : formatScore(summary?.average_scores.contextual_relevancy)}
-          subtitle="Average completed score"
+          subtitle="Average scored answerable cases"
           icon={<Gauge className="h-5 w-5" />}
         />
 
