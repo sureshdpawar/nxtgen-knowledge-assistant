@@ -150,6 +150,35 @@ function ScoreCell({ value }: { value: number | null }) {
   );
 }
 
+function SafeAbstentionMetricCell({
+  kind,
+  value,
+}: {
+  kind: "answer_relevancy" | "context_relevancy";
+  value: number | null;
+}) {
+  if (kind === "answer_relevancy") {
+    return (
+      <span className="text-xs font-medium text-slate-500">
+        Not scored
+      </span>
+    );
+  }
+
+  return (
+    <div className="leading-tight">
+      <span className="text-xs font-semibold text-slate-600">
+        Diagnostic
+      </span>
+      {value !== null ? (
+        <span className="ml-1 text-xs text-slate-400">
+          · {formatScore(value)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export default function OnlineEvaluationResults({
   baseFilters = {},
   onSelectResult,
@@ -384,73 +413,92 @@ export default function OnlineEvaluationResults({
                 </td>
               </tr>
             ) : (
-              results.map((result) => (
-                <tr
-                  key={result.id}
-                  onClick={() => onSelectResult?.(result)}
-                  className={`border-b border-slate-100 transition last:border-b-0 ${
-                    onSelectResult ? "cursor-pointer hover:bg-slate-50" : ""
-                  }`}
-                >
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <StatusBadge status={result.status} />
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <OutcomeBadge
-                      outcome={result.evaluation_outcome}
-                      status={result.status}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <WorkloadBadge result={result} />
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4 text-sm">
-                    <ScoreCell value={result.faithfulness_score} />
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4 text-sm">
-                    <ScoreCell value={result.answer_relevancy_score} />
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4 text-sm">
-                    <ScoreCell value={result.contextual_relevancy_score} />
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="max-w-[220px]">
-                      <p className="truncate text-sm font-medium text-slate-800">
-                        {result.generator_model ?? "—"}
-                      </p>
-                      {result.generator_provider ? (
-                        <p className="mt-0.5 truncate text-xs text-slate-500">
-                          {result.generator_provider}
+              results.map((result) => {
+                const safeAbstention =
+                  result.evaluation_outcome === "safe_abstention";
+
+                return (
+                  <tr
+                    key={result.id}
+                    onClick={() => onSelectResult?.(result)}
+                    className={`border-b border-slate-100 transition last:border-b-0 ${
+                      onSelectResult ? "cursor-pointer hover:bg-slate-50" : ""
+                    }`}
+                  >
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <StatusBadge status={result.status} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <OutcomeBadge
+                        outcome={result.evaluation_outcome}
+                        status={result.status}
+                      />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <WorkloadBadge result={result} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 text-sm">
+                      <ScoreCell value={result.faithfulness_score} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 text-sm">
+                      {safeAbstention ? (
+                        <SafeAbstentionMetricCell
+                          kind="answer_relevancy"
+                          value={result.answer_relevancy_score}
+                        />
+                      ) : (
+                        <ScoreCell value={result.answer_relevancy_score} />
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 text-sm">
+                      {safeAbstention ? (
+                        <SafeAbstentionMetricCell
+                          kind="context_relevancy"
+                          value={result.contextual_relevancy_score}
+                        />
+                      ) : (
+                        <ScoreCell value={result.contextual_relevancy_score} />
+                      )}
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="max-w-[220px]">
+                        <p className="truncate text-sm font-medium text-slate-800">
+                          {result.generator_model ?? "—"}
                         </p>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <div className="flex items-center gap-2">
-                      <code
-                        className="text-xs text-slate-600"
-                        title={result.source_trace_id}
-                      >
-                        {shortenTrace(result.source_trace_id)}
-                      </code>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          copyTrace(result.source_trace_id);
-                        }}
-                        className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                        aria-label="Copy source trace ID"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-600">
-                    {formatDateTime(result.created_at)}
-                  </td>
-                </tr>
-              ))
+                        {result.generator_provider ? (
+                          <p className="mt-0.5 truncate text-xs text-slate-500">
+                            {result.generator_provider}
+                          </p>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <div className="flex items-center gap-2">
+                        <code
+                          className="text-xs text-slate-600"
+                          title={result.source_trace_id}
+                        >
+                          {shortenTrace(result.source_trace_id)}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            copyTrace(result.source_trace_id);
+                          }}
+                          className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                          aria-label="Copy source trace ID"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-600">
+                      {formatDateTime(result.created_at)}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

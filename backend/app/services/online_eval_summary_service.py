@@ -17,6 +17,12 @@ class OnlineEvalSummaryService:
     Cost data is derived from each row's persisted
     evaluation_metadata["judge_cost"] snapshot.
     Unknown pricing is never converted to zero.
+
+    Answer-quality averages are calculated only across completed
+    non-safe-abstention outcomes. Safe abstentions remain part of
+    production success/safe-handling metrics, but their deliberately
+    low retrieval-answerability diagnostics do not depress answer
+    quality averages.
     """
 
     def __init__(self):
@@ -246,6 +252,13 @@ class OnlineEvalSummaryService:
             else None
         )
 
+        answer_quality_rows = [
+            row
+            for row
+            in completed_rows
+            if row.evaluation_outcome != "safe_abstention"
+        ]
+
         return {
             "total": len(rows),
             "pending": counts.get("pending", 0),
@@ -264,19 +277,19 @@ class OnlineEvalSummaryService:
             "average_scores": {
                 "faithfulness": self._average(
                     self._score_values(
-                        completed_rows,
+                        answer_quality_rows,
                         "faithfulness_score",
                     )
                 ),
                 "answer_relevancy": self._average(
                     self._score_values(
-                        completed_rows,
+                        answer_quality_rows,
                         "answer_relevancy_score",
                     )
                 ),
                 "contextual_relevancy": self._average(
                     self._score_values(
-                        completed_rows,
+                        answer_quality_rows,
                         "contextual_relevancy_score",
                     )
                 ),
