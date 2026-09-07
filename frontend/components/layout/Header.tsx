@@ -283,7 +283,7 @@ export default function Header({
                 md:text-base
               "
             >
-              Enterprise AI Intelligence Platform
+              Enterprise Knowledge &amp; Agents Platform
             </div>
 
 
@@ -305,7 +305,7 @@ export default function Header({
                 md:text-[10px]
               "
             >
-              KNOWLEDGE • AGENTS • EVALUATION • GOVERNANCE
+              KNOWLEDGE • AGENTS • GOVERNANCE • EVALUATION
             </div>
 
           </div>
