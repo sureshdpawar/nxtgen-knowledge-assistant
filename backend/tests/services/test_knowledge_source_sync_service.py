@@ -36,3 +36,20 @@ def test_html_crawl_blocks_missing_reconciliation():
     )
 
     assert result.allow_missing_reconciliation is False
+
+
+def test_discovery_diagnostics_do_not_imply_item_processing_failure():
+    result = SourceDiscoveryResult(
+        items=[],
+        strategy="sitemap",
+        authoritative=True,
+        complete=False,
+        discovered_url_count=10,
+        failed_url_count=1,
+        warnings=["One source URL could not be fetched."],
+    )
+
+    assert result.complete is False
+    assert result.failed_url_count == 1
+    assert result.warnings
+    assert result.allow_missing_reconciliation is False
