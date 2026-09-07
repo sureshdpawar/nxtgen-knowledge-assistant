@@ -57,7 +57,8 @@ import type {
   AgentChatResult,
 } from "@/features/agent-chat/types";
 
-const APPROVAL_POLL_INTERVAL_MS = 2500;
+const APPROVAL_POLL_INTERVAL_MS =
+  2500;
 
 export default function AgentChatWindow() {
   const queryClient =
@@ -450,6 +451,7 @@ export default function AgentChatWindow() {
               event,
             );
           },
+
           onCompleted(
             result: AgentChatResult,
           ) {
@@ -460,19 +462,23 @@ export default function AgentChatWindow() {
             setPendingApproval(null);
             setProgressText(null);
 
-            if (result.answer) {
+            const answer =
+              result.answer;
+
+            if (answer) {
               setMessages(
                 (current) => [
                   ...current,
                   {
                     id: nextMessageId(),
                     role: "assistant",
-                    content: result.answer,
+                    content: answer,
                   },
                 ],
               );
             }
           },
+
           onApprovalRequired(
             result: AgentChatResult,
           ) {
