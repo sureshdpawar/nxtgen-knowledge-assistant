@@ -186,6 +186,9 @@ export default function OnlineEvaluationDashboard() {
 
   const pricedEvaluations = summary?.evaluation_cost.priced_evaluations ?? 0;
   const unpricedEvaluations = summary?.evaluation_cost.unpriced_evaluations ?? 0;
+  const successfulOutcomes = summary
+    ? summary.outcomes.answered_successfully + summary.outcomes.safe_abstentions
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -325,25 +328,25 @@ export default function OnlineEvaluationDashboard() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard
-          label="Answer success rate"
-          value={summaryLoading ? "…" : formatScore(summary?.answer_success_rate)}
+          label="Production success rate"
+          value={summaryLoading ? "…" : formatScore(summary?.safe_handling_rate)}
           subtitle={
             summary
-              ? `${summary.outcomes.answered_successfully} answered / ${summary.completed} completed`
-              : "Successfully answered questions"
+              ? `${successfulOutcomes} successful outcomes / ${summary.completed} completed`
+              : "Answered successfully or safely abstained"
           }
           icon={<CheckCircle2 className="h-5 w-5" />}
         />
 
         <MetricCard
-          label="Safe handling rate"
-          value={summaryLoading ? "…" : formatScore(summary?.safe_handling_rate)}
-          subtitle={
-            summary
-              ? `${summary.outcomes.answered_successfully + summary.outcomes.safe_abstentions} safely handled / ${summary.completed} completed`
-              : "Answered or safely abstained"
+          label="Answered successfully"
+          value={
+            summaryLoading
+              ? "…"
+              : (summary?.outcomes.answered_successfully ?? 0).toLocaleString()
           }
-          icon={<ShieldCheck className="h-5 w-5" />}
+          subtitle="Completed evaluations with a successful answer"
+          icon={<CheckCircle2 className="h-5 w-5" />}
         />
 
         <MetricCard
