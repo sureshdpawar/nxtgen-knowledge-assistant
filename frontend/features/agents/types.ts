@@ -25,9 +25,18 @@ export const AGENT_TOOL_EXECUTION_POLICIES = [
 export type AgentToolExecutionPolicy =
   (typeof AGENT_TOOL_EXECUTION_POLICIES)[number];
 
-export type AgentRunStepType = "LLM" | "TOOL";
-export type AgentRunStepStatus = "COMPLETED" | "FAILED";
-export type AgentRunApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type AgentRunStepType =
+  | "LLM"
+  | "TOOL";
+
+export type AgentRunStepStatus =
+  | "COMPLETED"
+  | "FAILED";
+
+export type AgentRunApprovalStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED";
 
 export interface Agent {
   id: string;
@@ -125,8 +134,14 @@ export interface AgentRunStep {
   step_type: AgentRunStepType;
   status: AgentRunStepStatus;
   name: string;
-  input_data: Record<string, unknown> | unknown[] | null;
-  output_data: Record<string, unknown> | unknown[] | null;
+  input_data:
+    | Record<string, unknown>
+    | unknown[]
+    | null;
+  output_data:
+    | Record<string, unknown>
+    | unknown[]
+    | null;
   duration_ms: number | null;
   created_at: string;
 }
@@ -157,7 +172,9 @@ export interface AgentRun {
   user_id: string | null;
   actor_type: string;
   actor_id: string;
-  context_metadata: Record<string, unknown> | null;
+  context_metadata:
+    | Record<string, unknown>
+    | null;
   thread_id: string | null;
   checkpoint_id: string | null;
   query: string;
@@ -181,7 +198,8 @@ export interface AgentRunUsage {
   pricing_complete: boolean;
 }
 
-export interface AgentRunDetail extends AgentRun {
+export interface AgentRunDetail
+  extends AgentRun {
   error_message: string | null;
   usage: AgentRunUsage;
   steps: AgentRunStep[];
@@ -219,13 +237,83 @@ export interface AgentCheckpointHistory {
   checkpoints: AgentCheckpoint[];
 }
 
+export interface AgentProgressItem {
+  id: string;
+  type: "LLM" | "TOOL";
+  name: string;
+  status: "RUNNING" | "COMPLETED";
+  duration_ms?: number;
+}
+
+export interface ConversationMessage {
+  id: string;
+  role:
+    | "user"
+    | "assistant"
+    | "system";
+  content: string;
+}
+
 export type AgentProgressEvent =
-  | { type: "agent_started"; run_id?: string }
-  | { type: "llm_start"; step?: number }
-  | { type: "llm_end"; step?: number }
-  | { type: "tool_start"; tool?: string }
-  | { type: "tool_end"; tool?: string }
-  | { type: "approval_required"; result?: AgentRunResponse }
-  | { type: "completed"; result?: AgentRunResponse }
-  | { type: "error"; message?: string }
-  | { type: string; [key: string]: unknown };
+  | {
+      type: "run_started";
+      run_id: string;
+      thread_id?: string | null;
+    }
+  | {
+      type: "agent_started";
+      run_id?: string;
+      thread_id?: string | null;
+    }
+  | {
+      type: "llm_started";
+      iteration: number;
+    }
+  | {
+      type: "llm_start";
+      step?: number;
+    }
+  | {
+      type: "llm_completed";
+      iteration?: number;
+      duration_ms: number;
+    }
+  | {
+      type: "llm_end";
+      step?: number;
+      duration_ms?: number;
+    }
+  | {
+      type: "tool_started";
+      name: string;
+    }
+  | {
+      type: "tool_start";
+      tool?: string;
+    }
+  | {
+      type: "tool_completed";
+      name: string;
+      duration_ms: number;
+    }
+  | {
+      type: "tool_end";
+      tool?: string;
+      duration_ms?: number;
+    }
+  | {
+      type: "approval_required";
+      result: AgentRunResponse;
+    }
+  | {
+      type: "completed";
+      result: AgentRunResponse;
+    }
+  | {
+      type: "failed";
+      message: string;
+    }
+  | {
+      type: "error";
+      message: string;
+    };
