@@ -20,6 +20,12 @@ import type {
 } from "./types";
 
 
+export interface AgentUserAccessResponse {
+  agent_id: string;
+  user_ids: string[];
+}
+
+
 export async function getAgents() {
   const response = await api.get<Agent[]>("/agents");
   return response.data;
@@ -63,6 +69,36 @@ export async function deleteAgent(
   await api.delete(
     `/agents/${id}`,
   );
+}
+
+
+export async function getAgentAccess(
+  agentId: string,
+) {
+  const response = await api.get<
+    AgentUserAccessResponse
+  >(
+    `/agents/${agentId}/access`,
+  );
+
+  return response.data;
+}
+
+
+export async function replaceAgentAccess(
+  agentId: string,
+  userIds: string[],
+) {
+  const response = await api.put<
+    AgentUserAccessResponse
+  >(
+    `/agents/${agentId}/access`,
+    {
+      user_ids: userIds,
+    },
+  );
+
+  return response.data;
 }
 
 

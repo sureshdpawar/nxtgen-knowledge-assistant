@@ -9,6 +9,7 @@ import type {
 } from "../types";
 
 import EditUserDialog from "./EditUserDialog";
+import ManageAgentAccess from "./ManageAgentAccess";
 import ManageKnowledgeBaseAccess from "./ManageKnowledgeBaseAccess";
 
 
@@ -76,6 +77,10 @@ export default function UserCard({
           {user.role === "USER" && (
             <>
               <ManageKnowledgeBaseAccess
+                user={user}
+              />
+
+              <ManageAgentAccess
                 user={user}
               />
 

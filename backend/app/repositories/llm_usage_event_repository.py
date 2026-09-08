@@ -102,11 +102,37 @@ class LLMUsageEventRepository(
             )
 
         if request_type is not None:
-            stmt = stmt.where(
-                LLMUsageEvent
-                .request_type
-                == request_type
-            )
+            #
+            # "chat" is the conversational usage bucket used by
+            # Usage Status and Usage Quota services.
+            #
+            # Agent Chat persists one LLMUsageEvent per model call
+            # with request_type="agent". Those calls are part of
+            # the same tenant conversational usage/cost envelope,
+            # so include them whenever the caller asks for the
+            # conversational "chat" bucket.
+            #
+            # Other workload types (evaluation, judge, etc.) remain
+            # excluded unless explicitly requested or request_type
+            # is None.
+            #
+            if request_type == "chat":
+                stmt = stmt.where(
+                    LLMUsageEvent
+                    .request_type
+                    .in_(
+                        (
+                            "chat",
+                            "agent",
+                        )
+                    )
+                )
+            else:
+                stmt = stmt.where(
+                    LLMUsageEvent
+                    .request_type
+                    == request_type
+                )
 
         row = db.execute(
             stmt
