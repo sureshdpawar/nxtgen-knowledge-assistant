@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from functools import lru_cache
-
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -15,6 +13,25 @@ mcp = FastMCP(
     "NXTGEN Academy MCP",
     stateless_http=True,
     json_response=True,
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[
+            "mcp",
+            "mcp:9000",
+            "localhost",
+            "localhost:9000",
+            "127.0.0.1",
+            "127.0.0.1:9000",
+        ],
+        allowed_origins=[
+            "http://mcp",
+            "http://mcp:9000",
+            "http://localhost",
+            "http://localhost:9000",
+            "http://127.0.0.1",
+            "http://127.0.0.1:9000",
+        ],
+    ),
 )
 
 
@@ -66,19 +83,4 @@ def schedule_consultation(
     )
 
 
-transport_security = TransportSecuritySettings(
-    enable_dns_rebinding_protection=True,
-    allowed_hosts=[
-        "mcp",
-        "mcp:9000",
-        "localhost",
-        "localhost:9000",
-        "127.0.0.1",
-        "127.0.0.1:9000",
-    ],
-)
-
-
-app = mcp.streamable_http_app(
-    transport_security=transport_security,
-)
+app = mcp.streamable_http_app()
