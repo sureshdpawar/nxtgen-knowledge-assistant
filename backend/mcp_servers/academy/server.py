@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from mcp_servers.academy.config import AcademyMCPSettings
 from mcp_servers.academy.services.enquiry_service import (
@@ -15,7 +16,6 @@ mcp = FastMCP(
     stateless_http=True,
     json_response=True,
 )
-
 
 
 def _service() -> AcademyEnquiryService:
@@ -66,4 +66,19 @@ def schedule_consultation(
     )
 
 
-app = mcp.streamable_http_app()
+transport_security = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=[
+        "mcp",
+        "mcp:9000",
+        "localhost",
+        "localhost:9000",
+        "127.0.0.1",
+        "127.0.0.1:9000",
+    ],
+)
+
+
+app = mcp.streamable_http_app(
+    transport_security=transport_security,
+)
