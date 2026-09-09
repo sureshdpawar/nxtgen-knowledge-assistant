@@ -81,11 +81,7 @@ def resolve_user(db, agent):
                 "KNOWGENTIQ_EVAL_USER_ID must be a valid UUID."
             ) from exc
         user = db.get(User, user_id)
-        if (
-            user is None
-            or user.tenant_id != agent.tenant_id
-            or not user.is_active
-        ):
+        if user is None or user.tenant_id != agent.tenant_id or not user.is_active:
             raise RuntimeError(
                 "Evaluation user must be active and belong to the agent tenant."
             )
@@ -184,13 +180,24 @@ def assert_range(score):
     assert -EPSILON <= float(score) <= 1.0 + EPSILON
 
 
+def assert_no_forbidden_tools(case, tools_called):
+    forbidden = set(case.get("forbidden_tools", []) or [])
+    called = [tool.name for tool in tools_called]
+    violations = sorted(forbidden.intersection(called))
+    assert not violations, (
+        f"Case {case['id']} executed forbidden tool(s): {violations}. "
+        f"Actual tools: {called}"
+    )
+
+
 @pytest.mark.asyncio
 async def test_real_knowgentiq_agent_evaluation():
     """
-    Slice 1B: execute the real Knowgentiq agent, then evaluate its durable
-    AgentRun/AgentRunStep evidence. This is still a learning lab, not a
-    CI quality gate: low metric scores are reported, while runtime failures
-    still fail the test.
+    Slice 1C: small real-runtime evaluation suite.
+
+    Semantic behavior uses DeepEval. Unsupported-action safety uses a
+    deterministic forbidden-tool assertion. This is still a learning lab,
+    not the CI threshold gate.
     """
     configure_judge()
     config = load_yaml(CONFIG_PATH)
@@ -219,49 +226,63 @@ async def test_real_knowgentiq_agent_evaluation():
             status = enum_value(run.status)
             if status == "WAITING_FOR_APPROVAL":
                 pytest.fail(
-                    "Case reached HUMAN_APPROVAL. Slice 1B never auto-approves "
-                    "governed actions; use an AUTO tool case for this slice."
+                    "Case reached HUMAN_APPROVAL. Slice 1C never auto-approves "
+                    "governed actions."
                 )
             if status != "COMPLETED":
                 pytest.fail(
                     f"Agent run status={status}; error={run.error_message}"
                 )
 
+            tools_called = actual_tool_calls(run)
+            expected_tools = expected_tool_calls(case)
             test_case = LLMTestCase(
                 input=case["input"],
                 actual_output=run.answer or "",
                 expected_output=case["expected_outcome"],
-                tools_called=actual_tool_calls(run),
-                expected_tools=expected_tool_calls(case),
+                tools_called=tools_called,
+                expected_tools=expected_tools,
             )
             outcome, tool, arguments = make_metrics(config)
-
             outcome.measure(test_case)
-            tool.measure(test_case)
+
+            tool_score = None
+            tool_reason = "N/A: case does not declare expected_tools."
+            if "expected_tools" in case:
+                tool.measure(test_case)
+                tool_score = float(tool.score)
+                tool_reason = tool.reason
+
             argument_score = None
-            argument_reason = "N/A: no tool executed."
-            if test_case.tools_called:
+            argument_reason = "N/A: no expected tool call to evaluate."
+            if expected_tools and tools_called:
                 arguments.measure(test_case)
                 argument_score = float(arguments.score)
                 argument_reason = arguments.reason
+
+            assert_no_forbidden_tools(case, tools_called)
 
             print(f"Run ID: {run.id}")
             print(
                 "Actual tools:",
                 [
                     {"name": c.name, "input_parameters": c.input_parameters}
-                    for c in test_case.tools_called
+                    for c in tools_called
                 ],
             )
             print("Actual output:", run.answer)
             print("Outcome Correctness:", float(outcome.score))
             print("  Reason:", outcome.reason)
-            print("Tool Correctness:", float(tool.score))
-            print("  Reason:", tool.reason)
+            print("Tool Correctness:", tool_score)
+            print("  Reason:", tool_reason)
             print("Argument Correctness:", argument_score)
             print("  Reason:", argument_reason)
+            if case.get("forbidden_tools"):
+                print("Forbidden Tool Check: PASS")
+                print("  Forbidden:", case["forbidden_tools"])
 
             assert_range(outcome.score)
-            assert_range(tool.score)
+            if tool_score is not None:
+                assert_range(tool_score)
             if argument_score is not None:
                 assert_range(argument_score)

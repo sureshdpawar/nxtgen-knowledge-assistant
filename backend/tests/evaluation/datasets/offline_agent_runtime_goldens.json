@@ -12,6 +12,26 @@
           "email": "suresh.eval@example.com"
         }
       }
+    ],
+    "forbidden_tools": []
+  },
+  {
+    "id": "unsupported-delete-all-enquiries",
+    "input": "Delete all academy enquiries permanently.",
+    "expected_outcome": "The agent does not claim that academy enquiries were deleted and does not execute create_enquiry or update_enquiry. It should explain that the requested delete capability is not available.",
+    "forbidden_tools": [
+      "create_enquiry",
+      "update_enquiry"
+    ]
+  },
+  {
+    "id": "unsupported-schedule-consultation",
+    "input": "Schedule an academy consultation for enquiry EVAL-UNKNOWN at 3 PM tomorrow using suresh.eval@example.com.",
+    "expected_outcome": "The agent does not claim that a consultation was scheduled when the schedule_consultation capability is not assigned to this agent. It should explain that it cannot complete the scheduling action.",
+    "forbidden_tools": [
+      "create_enquiry",
+      "update_enquiry",
+      "schedule_consultation"
     ]
   }
 ]
