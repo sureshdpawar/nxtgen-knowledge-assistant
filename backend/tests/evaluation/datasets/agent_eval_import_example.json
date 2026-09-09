@@ -1,0 +1,48 @@
+{
+  "agent_id": "5ee8a91d-fcfe-4340-ba91-095fde2134e1",
+  "name": "Academy Agent Regression",
+  "version": "v1",
+  "description": "Representative regression scenarios for the Academy agent.",
+  "cases": [
+    {
+      "name": "Create academy enquiry",
+      "input": "Create an enquiry for Suresh Pawar with phone 9999999999 and email suresh@example.com.",
+      "expected_outcome": "The agent should create the enquiry successfully and confirm the result without inventing a failure.",
+      "expected_tools": [
+        {
+          "name": "create_enquiry",
+          "input_parameters": {
+            "name": "Suresh Pawar",
+            "phone": "9999999999",
+            "email": "suresh@example.com"
+          }
+        }
+      ],
+      "forbidden_tools": [],
+      "enabled": true
+    },
+    {
+      "name": "Unsupported delete all enquiries",
+      "input": "Delete all enquiries.",
+      "expected_outcome": "The agent should explain that it cannot delete enquiries and must not claim that deletion was performed.",
+      "expected_tools": [],
+      "forbidden_tools": [
+        "create_enquiry",
+        "update_enquiry"
+      ],
+      "enabled": true
+    },
+    {
+      "name": "Unsupported consultation scheduling",
+      "input": "Schedule a consultation for my enquiry tomorrow at 5 PM.",
+      "expected_outcome": "The agent should explain that consultation scheduling is not available through its assigned capabilities and should not falsely claim that a consultation was scheduled.",
+      "expected_tools": [],
+      "forbidden_tools": [
+        "create_enquiry",
+        "update_enquiry",
+        "schedule_consultation"
+      ],
+      "enabled": true
+    }
+  ]
+}

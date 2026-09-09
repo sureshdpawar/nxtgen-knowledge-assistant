@@ -1,6 +1,16 @@
+import json
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.auth.permissions import require_admin
@@ -10,9 +20,14 @@ from app.schemas.agent_eval import (
     AgentEvalCaseCreate,
     AgentEvalCaseRead,
     AgentEvalDatasetCreate,
+    AgentEvalDatasetImportPayload,
+    AgentEvalDatasetImportRead,
     AgentEvalDatasetRead,
 )
 from app.services.agent_eval_case_service import AgentEvalCaseService
+from app.services.agent_eval_dataset_import_service import (
+    AgentEvalDatasetImportService,
+)
 from app.services.agent_eval_dataset_service import AgentEvalDatasetService
 
 
@@ -22,10 +37,11 @@ router = APIRouter(
 )
 
 dataset_service = AgentEvalDatasetService()
+dataset_import_service = AgentEvalDatasetImportService()
 case_service = AgentEvalCaseService()
 
 
-def bad_request(exc: ValueError) -> HTTPException:
+def bad_request(exc: Exception) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=str(exc),
@@ -48,6 +64,73 @@ def create_dataset(
             current_user=current_user,
             payload=payload,
         )
+    except ValueError as exc:
+        raise bad_request(exc) from exc
+
+
+@router.post(
+    "/datasets/import",
+    response_model=AgentEvalDatasetImportRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_dataset(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    filename = file.filename or ""
+
+    if not filename.lower().endswith(".json"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Agent Evaluation dataset must be a JSON file.",
+        )
+
+    try:
+        raw_content = await file.read()
+
+        if not raw_content:
+            raise ValueError("Uploaded JSON file is empty.")
+
+        try:
+            json_content = raw_content.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError(
+                "Agent Evaluation dataset must be UTF-8 encoded."
+            ) from exc
+
+        try:
+            data = json.loads(json_content)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Invalid JSON: {exc.msg}."
+            ) from exc
+
+        if not isinstance(data, dict):
+            raise ValueError(
+                "Agent Evaluation dataset JSON must contain one object."
+            )
+
+        try:
+            payload = AgentEvalDatasetImportPayload.model_validate(data)
+        except ValidationError as exc:
+            raise ValueError(
+                f"Invalid Agent Evaluation dataset: {exc}"
+            ) from exc
+
+        dataset, case_count = (
+            dataset_import_service.import_dataset(
+                db=db,
+                current_user=current_user,
+                payload=payload,
+            )
+        )
+
+        return AgentEvalDatasetImportRead(
+            dataset=AgentEvalDatasetRead.model_validate(dataset),
+            case_count=case_count,
+        )
+
     except ValueError as exc:
         raise bad_request(exc) from exc
 

@@ -52,3 +52,12 @@ class AgentEvalCaseRead(BaseModel):
     source_agent_run_id: UUID | None
     created_at: datetime
     updated_at: datetime
+
+
+class AgentEvalDatasetImportPayload(AgentEvalDatasetCreate):
+    cases: list[AgentEvalCaseCreate] = Field(min_length=1)
+
+
+class AgentEvalDatasetImportRead(BaseModel):
+    dataset: AgentEvalDatasetRead
+    case_count: int
