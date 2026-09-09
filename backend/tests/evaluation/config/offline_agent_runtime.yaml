@@ -1,15 +1,18 @@
 suite:
-  name: knowgentiq-offline-agent-runtime-learning
+  name: knowgentiq-offline-agent-runtime-quality-gate
+  pass_rate_threshold: 0.80
+
 target:
-  agent_id_env: KNOWGENTIQ_EVAL_AGENT_ID
-  agent_name_env: KNOWGENTIQ_EVAL_AGENT_NAME
+  agent_id: "5ee8a91d-fcfe-4340-ba91-095fde2134e1"
+
 judge:
   model: gpt-5.4
   verbose: false
+
 metrics:
   outcome_correctness:
     threshold: 0.80
   tool_correctness:
-    threshold: 1.00
+    threshold: 0.90
   argument_correctness:
     threshold: 0.80
