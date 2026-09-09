@@ -1,0 +1,17 @@
+[
+  {
+    "id": "academy-create-enquiry",
+    "input": "Create an academy enquiry for Suresh Pawar. Phone: +919876543210. Email: suresh.eval@example.com.",
+    "expected_outcome": "An academy enquiry is created for Suresh Pawar using the supplied phone number and email address, and the response must not claim success if creation failed.",
+    "expected_tools": [
+      {
+        "name": "create_enquiry",
+        "input_parameters": {
+          "name": "Suresh Pawar",
+          "phone": "+919876543210",
+          "email": "suresh.eval@example.com"
+        }
+      }
+    ]
+  }
+]

@@ -1,0 +1,14 @@
+suite:
+  name: generic-offline-agent-learning
+
+judge:
+  model: gpt-5.4
+  verbose: false
+
+metrics:
+  outcome_correctness:
+    threshold: 0.80
+  tool_correctness:
+    threshold: 1.00
+  argument_correctness:
+    threshold: 0.80

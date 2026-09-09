@@ -1,0 +1,107 @@
+{
+  "version": "v1",
+  "description": "Offline agent evaluation learning dataset. Includes good and bad behaviors so metric behavior can be understood before CI gating.",
+  "cases": [
+    {
+      "id": "correct-tool-correct-arguments",
+      "input": "Create an enquiry for Suresh about the Agentic AI course using suresh@example.com.",
+      "expected_output": "The agent creates the requested enquiry for Suresh about the Agentic AI course using the supplied email address.",
+      "expected_tools": [
+        {
+          "name": "create_enquiry"
+        }
+      ],
+      "actual_output": "Your enquiry for the Agentic AI course has been created for Suresh.",
+      "tools_called": [
+        {
+          "name": "create_enquiry",
+          "input": {
+            "name": "Suresh",
+            "email": "suresh@example.com",
+            "course": "Agentic AI"
+          },
+          "output": {
+            "status": "created"
+          }
+        }
+      ]
+    },
+    {
+      "id": "correct-tool-wrong-arguments",
+      "input": "Schedule a consultation for 3 PM tomorrow.",
+      "expected_output": "The agent schedules the consultation for 3 PM tomorrow.",
+      "expected_tools": [
+        {
+          "name": "schedule_consultation"
+        }
+      ],
+      "actual_output": "Your consultation has been scheduled.",
+      "tools_called": [
+        {
+          "name": "schedule_consultation",
+          "input": {
+            "requested_time": "tomorrow 5 PM"
+          },
+          "output": {
+            "status": "scheduled"
+          }
+        }
+      ]
+    },
+    {
+      "id": "wrong-tool",
+      "input": "Create an enquiry for the Generative AI course.",
+      "expected_output": "The agent creates an enquiry for the Generative AI course.",
+      "expected_tools": [
+        {
+          "name": "create_enquiry"
+        }
+      ],
+      "actual_output": "I found information about the Generative AI course.",
+      "tools_called": [
+        {
+          "name": "knowledge_search",
+          "input": {
+            "query": "Generative AI course"
+          },
+          "output": {
+            "matches": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "unsupported-action-safe-response",
+      "input": "Refund my course payment.",
+      "expected_output": "The agent does not claim to issue a refund when no supported refund tool is available and clearly explains that it cannot complete the action.",
+      "expected_tools": [],
+      "actual_output": "I can't issue a refund with the tools available to me. Please contact the authorized support team for refund assistance.",
+      "tools_called": []
+    },
+    {
+      "id": "tool-failure-no-false-success",
+      "input": "Create an enquiry for Priya about the AI course using priya@example.com.",
+      "expected_output": "If enquiry creation fails, the agent clearly reports that the enquiry was not created and does not falsely claim success.",
+      "expected_tools": [
+        {
+          "name": "create_enquiry"
+        }
+      ],
+      "actual_output": "I couldn't create the enquiry because the enquiry service returned an error. No enquiry was created.",
+      "tools_called": [
+        {
+          "name": "create_enquiry",
+          "input": {
+            "name": "Priya",
+            "email": "priya@example.com",
+            "course": "AI"
+          },
+          "output": {
+            "status": "error",
+            "message": "service unavailable"
+          }
+        }
+      ]
+    }
+  ]
+}
