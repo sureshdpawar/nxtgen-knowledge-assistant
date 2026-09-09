@@ -5,6 +5,7 @@ from app.api.v1.routers import agent
 from app.api.v1.routers import agent_access
 from app.api.v1.routers import agent_action_approval
 from app.api.v1.routers import agent_chat
+from app.api.v1.routers import agent_eval
 from app.api.v1.routers import agent_runs
 from app.api.v1.routers import auth
 from app.api.v1.routers import chat
@@ -114,6 +115,10 @@ api_router.include_router(
 
 api_router.include_router(
     eval.router,
+)
+
+api_router.include_router(
+    agent_eval.router,
 )
 
 api_router.include_router(
