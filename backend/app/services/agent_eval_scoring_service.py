@@ -121,11 +121,27 @@ class AgentEvalScoringService:
         calls = []
 
         for item in case.expected_tools or []:
+            if not isinstance(item, dict):
+                continue
+
             name = str(
                 item.get("name") or ""
             ).strip()
 
-            if name:
+            if not name:
+                continue
+
+            if (
+                "input" in item
+                and item.get("input") is not None
+            ):
+                calls.append(
+                    ToolCall(
+                        name=name,
+                        input=item.get("input"),
+                    )
+                )
+            else:
                 calls.append(
                     ToolCall(
                         name=name,
@@ -133,6 +149,42 @@ class AgentEvalScoringService:
                 )
 
         return calls
+
+    @staticmethod
+    def _expected_arguments_specified(
+        case: AgentEvalCase,
+    ) -> bool:
+        """
+        Return True only when every valid expected tool includes explicit
+        expected input.
+
+        Tool-name-only expectations are sufficient for Tool Correctness, but
+        they do not provide a gold standard for Argument Correctness. In that
+        case argument scoring must be N/A rather than a failing zero.
+        """
+        expected_items = []
+
+        for item in case.expected_tools or []:
+            if not isinstance(item, dict):
+                continue
+
+            name = str(
+                item.get("name") or ""
+            ).strip()
+
+            if name:
+                expected_items.append(item)
+
+        if not expected_items:
+            return False
+
+        return all(
+            (
+                "input" in item
+                and item.get("input") is not None
+            )
+            for item in expected_items
+        )
 
     @staticmethod
     async def _measure(
@@ -181,6 +233,12 @@ class AgentEvalScoringService:
 
         expected_tools = (
             self._expected_tool_calls(
+                case
+            )
+        )
+
+        expected_arguments_specified = (
+            self._expected_arguments_specified(
                 case
             )
         )
@@ -255,16 +313,27 @@ class AgentEvalScoringService:
                 test_case,
             )
 
-        if actual_tools:
+        if (
+            actual_tools
+            and expected_arguments_specified
+        ):
             arguments = await self._measure(
                 argument_metric,
                 test_case,
             )
-        else:
+        elif not actual_tools:
             arguments = {
                 "score": None,
                 "reason": (
                     "No tool call was made."
+                ),
+                "passed": None,
+            }
+        else:
+            arguments = {
+                "score": None,
+                "reason": (
+                    "No expected tool arguments were specified."
                 ),
                 "passed": None,
             }
