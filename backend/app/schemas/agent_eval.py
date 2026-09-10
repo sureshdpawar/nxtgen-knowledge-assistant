@@ -52,6 +52,15 @@ class AgentEvalCaseRead(BaseModel):
     updated_at: datetime
 
 
+class AgentEvalCasePromoteRunCreate(BaseModel):
+    agent_run_id: UUID
+    name: str = Field(min_length=1, max_length=255)
+    expected_outcome: str = Field(min_length=1)
+    expected_tools: list[AgentEvalToolExpectation] = Field(default_factory=list)
+    forbidden_tools: list[str] = Field(default_factory=list)
+    enabled: bool = True
+
+
 class AgentEvalDatasetImportPayload(AgentEvalDatasetCreate):
     cases: list[AgentEvalCaseCreate] = Field(min_length=1)
 
