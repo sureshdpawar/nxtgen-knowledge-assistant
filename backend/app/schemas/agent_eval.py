@@ -64,7 +64,11 @@ class AgentEvalDatasetImportRead(BaseModel):
 class AgentEvalExperimentCreate(BaseModel):
     dataset_id: UUID
     name: str = Field(min_length=1, max_length=255)
+    judge_model: str = Field(default="gpt-5.4", min_length=1, max_length=255)
     pass_rate_threshold: float = Field(default=0.80, ge=0.0, le=1.0)
+    outcome_threshold: float = Field(default=0.80, ge=0.0, le=1.0)
+    tool_threshold: float = Field(default=1.00, ge=0.0, le=1.0)
+    argument_threshold: float = Field(default=0.80, ge=0.0, le=1.0)
 
 
 class AgentEvalExperimentRead(BaseModel):
