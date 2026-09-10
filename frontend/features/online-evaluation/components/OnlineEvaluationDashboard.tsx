@@ -197,9 +197,12 @@ export default function OnlineEvaluationDashboard() {
           <div className="flex items-center gap-2">
             <Activity className="h-6 w-6 text-slate-700" />
             <h1 className="text-2xl font-bold text-slate-900">
-              Online Evaluation
+              RAG Monitoring
             </h1>
           </div>
+          <p className="mt-2 max-w-3xl text-sm font-medium text-slate-700">
+            Production RAG Quality
+          </p>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">
             Monitor sampled production RAG responses using outcome-aware reference-free evaluation linked to the original request trace.
           </p>

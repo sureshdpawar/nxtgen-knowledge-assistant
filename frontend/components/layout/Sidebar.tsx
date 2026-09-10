@@ -140,7 +140,7 @@ const menu: MenuItem[] = [
   },
 
   {
-    label: "RAG Test & Benchmark",
+    label: "RAG Evaluation",
     href: "/evaluation",
     icon: ClipboardCheck,
     roles: ["ADMIN"],
@@ -154,14 +154,14 @@ const menu: MenuItem[] = [
     section: "evaluation",
   },
   {
-    label: "Production Quality",
+    label: "RAG Monitoring",
     href: "/online-evaluation",
     icon: Activity,
     roles: ["ADMIN"],
     section: "evaluation",
   },
   {
-    label: "Agent Production Quality",
+    label: "Agent Monitoring",
     href: "/agent-production-quality",
     icon: Sparkles,
     roles: ["ADMIN"],

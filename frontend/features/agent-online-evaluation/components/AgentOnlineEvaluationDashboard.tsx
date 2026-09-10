@@ -142,14 +142,16 @@ export default function AgentOnlineEvaluationDashboard() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 
         <div>
-          <div className="flex items-center gap-2 text-sm font-medium text-blue-700">
-            <Activity className="h-4 w-4" />
-            Agent Online Evaluation
+          <div className="flex items-center gap-2">
+            <Activity className="h-6 w-6 text-blue-600" />
+            <h1 className="text-2xl font-semibold text-slate-900">
+              Agent Monitoring
+            </h1>
           </div>
 
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-            Agent Production Quality
-          </h1>
+          <p className="mt-2 max-w-3xl text-sm font-medium text-slate-700">
+            Production Agent Quality
+          </p>
 
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
             Evaluate sampled production and staging AgentRuns without

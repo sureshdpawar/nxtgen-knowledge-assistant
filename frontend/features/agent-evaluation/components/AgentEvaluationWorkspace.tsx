@@ -33,7 +33,11 @@ export default function AgentEvaluationWorkspace() {
           </h1>
         </div>
 
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+        <p className="mt-2 max-w-3xl text-sm font-medium text-slate-700">
+          Regression Testing
+        </p>
+
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
           Build regression datasets, execute real agent experiments,
           compare candidate behavior against a baseline, and measure
           outcome, tool, argument, and governance quality before
