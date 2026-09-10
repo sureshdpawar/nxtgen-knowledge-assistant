@@ -4,8 +4,11 @@ import type {
   AgentEvalCase,
   AgentEvalDataset,
   AgentEvalDatasetImportResponse,
+  AgentEvalExperiment,
+  AgentEvalResult,
   CreateAgentEvalCaseRequest,
   CreateAgentEvalDatasetRequest,
+  CreateAgentEvalExperimentRequest,
 } from "./types";
 
 
@@ -89,4 +92,54 @@ export async function deleteAgentEvalCase(
   await api.delete(
     `/agent-eval/datasets/${datasetId}/cases/${caseId}`,
   );
+}
+
+
+export async function getAgentEvalExperiments(
+  datasetId?: string,
+) {
+  const response = await api.get<AgentEvalExperiment[]>(
+    "/agent-eval/experiments",
+    {
+      params: datasetId
+        ? { dataset_id: datasetId }
+        : undefined,
+    },
+  );
+
+  return response.data;
+}
+
+
+export async function createAgentEvalExperiment(
+  payload: CreateAgentEvalExperimentRequest,
+) {
+  const response = await api.post<AgentEvalExperiment>(
+    "/agent-eval/experiments",
+    payload,
+  );
+
+  return response.data;
+}
+
+
+export async function runAgentEvalExperiment(
+  experimentId: string,
+) {
+  const response = await api.post<AgentEvalExperiment>(
+    `/agent-eval/experiments/${experimentId}/run`,
+  );
+
+  return response.data;
+}
+
+
+export async function getAgentEvalResults(
+  experimentId: string,
+) {
+  const response = await api.get<AgentEvalResult[]>(
+    `/agent-eval/experiments/${experimentId}/results`,
+  );
+
+  return response.data;
 }

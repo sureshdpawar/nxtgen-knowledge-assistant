@@ -1,8 +1,8 @@
-import AgentEvaluationDatasets from "@/features/agent-evaluation/components/AgentEvaluationDatasets";
+import AgentEvaluationWorkspace from "@/features/agent-evaluation/components/AgentEvaluationWorkspace";
 
 
 export default function AgentEvaluationPage() {
   return (
-    <AgentEvaluationDatasets />
+    <AgentEvaluationWorkspace />
   );
 }
