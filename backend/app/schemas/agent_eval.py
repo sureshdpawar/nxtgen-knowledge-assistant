@@ -109,3 +109,43 @@ class AgentEvalResultRead(BaseModel):
     judge_metadata: dict
     created_at: datetime
     updated_at: datetime
+
+
+class AgentEvalExperimentCompareRequest(BaseModel):
+    baseline_experiment_id: UUID
+    candidate_experiment_id: UUID
+
+
+class AgentEvalMetricDelta(BaseModel):
+    baseline: float | None
+    candidate: float | None
+    delta: float | None
+
+
+class AgentEvalCaseComparison(BaseModel):
+    eval_case_id: UUID
+    case_name: str
+    baseline_result_id: UUID | None
+    candidate_result_id: UUID | None
+    baseline_passed: bool | None
+    candidate_passed: bool | None
+    classification: str
+    outcome_correctness: AgentEvalMetricDelta
+    tool_correctness: AgentEvalMetricDelta
+    argument_correctness: AgentEvalMetricDelta
+    baseline_forbidden_tool_violations: list[str]
+    candidate_forbidden_tool_violations: list[str]
+
+
+class AgentEvalExperimentCompareRead(BaseModel):
+    baseline_experiment: AgentEvalExperimentRead
+    candidate_experiment: AgentEvalExperimentRead
+    pass_rate: AgentEvalMetricDelta
+    outcome_correctness: AgentEvalMetricDelta
+    tool_correctness: AgentEvalMetricDelta
+    argument_correctness: AgentEvalMetricDelta
+    regressions: int
+    improvements: int
+    unchanged: int
+    missing_results: int
+    cases: list[AgentEvalCaseComparison]
