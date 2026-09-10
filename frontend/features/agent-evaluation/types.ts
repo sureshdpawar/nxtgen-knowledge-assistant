@@ -111,3 +111,50 @@ export interface AgentEvalResult {
   created_at: string;
   updated_at: string;
 }
+
+export interface AgentEvalExperimentCompareRequest {
+  baseline_experiment_id: string;
+  candidate_experiment_id: string;
+}
+
+export interface AgentEvalMetricDelta {
+  baseline: number | null;
+  candidate: number | null;
+  delta: number | null;
+}
+
+export type AgentEvalCaseClassification =
+  | "regression"
+  | "improvement"
+  | "unchanged"
+  | "missing_result"
+  | string;
+
+export interface AgentEvalCaseComparison {
+  eval_case_id: string;
+  case_name: string;
+  baseline_result_id: string | null;
+  candidate_result_id: string | null;
+  baseline_passed: boolean | null;
+  candidate_passed: boolean | null;
+  classification: AgentEvalCaseClassification;
+  outcome_correctness: AgentEvalMetricDelta;
+  tool_correctness: AgentEvalMetricDelta;
+  argument_correctness: AgentEvalMetricDelta;
+  baseline_forbidden_tool_violations: string[];
+  candidate_forbidden_tool_violations: string[];
+}
+
+export interface AgentEvalExperimentComparison {
+  baseline_experiment: AgentEvalExperiment;
+  candidate_experiment: AgentEvalExperiment;
+  pass_rate: AgentEvalMetricDelta;
+  outcome_correctness: AgentEvalMetricDelta;
+  tool_correctness: AgentEvalMetricDelta;
+  argument_correctness: AgentEvalMetricDelta;
+  regressions: number;
+  improvements: number;
+  unchanged: number;
+  missing_results: number;
+  cases: AgentEvalCaseComparison[];
+}

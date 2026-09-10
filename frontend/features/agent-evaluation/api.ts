@@ -5,6 +5,8 @@ import type {
   AgentEvalDataset,
   AgentEvalDatasetImportResponse,
   AgentEvalExperiment,
+  AgentEvalExperimentCompareRequest,
+  AgentEvalExperimentComparison,
   AgentEvalResult,
   CreateAgentEvalCaseRequest,
   CreateAgentEvalDatasetRequest,
@@ -140,6 +142,19 @@ export async function getAgentEvalResults(
   const response = await api.get<AgentEvalResult[]>(
     `/agent-eval/experiments/${experimentId}/results`,
   );
+
+  return response.data;
+}
+
+
+export async function compareAgentEvalExperiments(
+  payload: AgentEvalExperimentCompareRequest,
+) {
+  const response =
+    await api.post<AgentEvalExperimentComparison>(
+      "/agent-eval/experiments/compare",
+      payload,
+    );
 
   return response.data;
 }
