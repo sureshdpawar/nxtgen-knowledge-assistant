@@ -12,6 +12,7 @@ import {
   CircleDollarSign,
   ClipboardCheck,
   Database,
+  FlaskConical,
   Gauge,
   LayoutDashboard,
   MessageSquare,
@@ -23,7 +24,6 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
-
 import type { UserRole } from "@/types/auth";
 
 
@@ -32,7 +32,6 @@ type SidebarProps = {
   onNavigate?: () => void;
   onClose?: () => void;
 };
-
 
 type MenuSection =
   | "main"
@@ -43,18 +42,13 @@ type MenuSection =
   | "governance"
   | "administration";
 
-
 type MenuItem = {
   label: string;
-
   href: string;
-
   icon: React.ComponentType<{
     className?: string;
   }>;
-
   roles: UserRole[];
-
   section: MenuSection;
 };
 
@@ -71,218 +65,142 @@ const menu: MenuItem[] = [
     section: "main",
   },
 
-  /*
-   * =========================================================
-   * END USER — KNOWLEDGE
-   * =========================================================
-   */
   {
     label: "Chat",
     href: "/chat",
     icon: MessageSquare,
-    roles: [
-      "USER",
-    ],
+    roles: ["USER"],
     section: "knowledge",
   },
-
   {
     label: "Search",
     href: "/search",
     icon: Search,
-    roles: [
-      "USER",
-    ],
+    roles: ["USER"],
     section: "knowledge",
   },
-
-  /*
-   * =========================================================
-   * END USER — AGENTS
-   * =========================================================
-   */
   {
     label: "Chat",
     href: "/agent-chat",
     icon: Bot,
-    roles: [
-      "USER",
-    ],
+    roles: ["USER"],
     section: "agents",
   },
 
-  /*
-   * =========================================================
-   * ADMIN — KNOWLEDGE
-   * =========================================================
-   */
   {
     label: "Knowledge Bases",
     href: "/knowledge-bases",
     icon: Database,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "knowledge",
   },
-
   {
     label: "Search",
     href: "/search",
     icon: Search,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "knowledge",
   },
-
   {
     label: "Chat",
     href: "/chat",
     icon: MessageSquare,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "knowledge",
   },
 
-  /*
-   * =========================================================
-   * ADMIN — AGENT STUDIO
-   * =========================================================
-   */
   {
     label: "Agents",
     href: "/agents",
     icon: Bot,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "studio",
   },
-
   {
     label: "Chat",
     href: "/agent-chat",
     icon: MessageSquare,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "studio",
   },
-
   {
     label: "Tools",
     href: "/tools",
     icon: Wrench,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "studio",
   },
-
   {
     label: "Integrations",
     href: "/integrations",
     icon: Cable,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "studio",
   },
 
-  /*
-   * =========================================================
-   * ADMIN — EVALUATION
-   * =========================================================
-   */
   {
-    label: "Test & Benchmark",
+    label: "RAG Test & Benchmark",
     href: "/evaluation",
     icon: ClipboardCheck,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "evaluation",
   },
-
+  {
+    label: "Agent Evaluation",
+    href: "/agent-evaluation",
+    icon: FlaskConical,
+    roles: ["ADMIN"],
+    section: "evaluation",
+  },
   {
     label: "Production Quality",
     href: "/online-evaluation",
     icon: Activity,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "evaluation",
   },
 
-  /*
-   * =========================================================
-   * ADMIN — GOVERNANCE
-   * =========================================================
-   */
   {
     label: "LLM Profiles",
     href: "/settings",
     icon: BrainCircuit,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "governance",
   },
-
   {
     label: "Approvals",
     href: "/approvals",
     icon: ShieldCheck,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "governance",
   },
-
   {
     label: "Usage & Quotas",
     href: "/usage",
     icon: Gauge,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "governance",
   },
-
   {
     label: "Cost Analytics",
     href: "/cost-analytics",
     icon: CircleDollarSign,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "governance",
   },
 
-  /*
-   * =========================================================
-   * ADMINISTRATION
-   * =========================================================
-   */
   {
     label: "Tenants",
     href: "/tenants",
     icon: Building2,
-    roles: [
-      "SUPERADMIN",
-    ],
+    roles: ["SUPERADMIN"],
     section: "administration",
   },
-
   {
     label: "Users",
     href: "/users",
     icon: Users,
-    roles: [
-      "ADMIN",
-    ],
+    roles: ["ADMIN"],
     section: "administration",
   },
 ];
@@ -301,7 +219,6 @@ const sectionLabels: Record<
   administration: "Admin",
 };
 
-
 const sectionOrder: MenuSection[] = [
   "main",
   "knowledge",
@@ -318,56 +235,37 @@ export default function Sidebar({
   onNavigate,
   onClose,
 }: SidebarProps) {
-  const pathname =
-    usePathname();
-
-  const {
-    user,
-  } = useAuth();
-
+  const pathname = usePathname();
+  const { user } = useAuth();
 
   if (!user) {
     return null;
   }
 
-
   const visibleMenu =
-    menu.filter(
-      (item) =>
-        item.roles.includes(
-          user.role,
-        ),
+    menu.filter((item) =>
+      item.roles.includes(user.role),
     );
-
 
   const showTenant =
     (
       user.role === "ADMIN"
       || user.role === "USER"
     )
-    && Boolean(
-      user.tenant_name,
-    );
+    && Boolean(user.tenant_name);
 
-
-  function isActive(
-    href: string,
-  ) {
+  function isActive(href: string) {
     return (
       pathname === href
-      || pathname.startsWith(
-        `${href}/`,
-      )
+      || pathname.startsWith(`${href}/`)
     );
   }
-
 
   function handleNavigate() {
     if (mobile) {
       onNavigate?.();
     }
   }
-
 
   return (
     <aside
@@ -383,38 +281,13 @@ export default function Sidebar({
         }
       `}
     >
-
       {mobile && (
-        <div
-          className="
-            flex
-            h-16
-            shrink-0
-            items-center
-            justify-between
-            border-b
-            border-slate-200
-            px-4
-          "
-        >
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 px-4">
           <div className="min-w-0">
-            <p
-              className="
-                truncate
-                text-base
-                font-semibold
-                text-slate-900
-              "
-            >
+            <p className="truncate text-base font-semibold text-slate-900">
               Knowgentiq
             </p>
-
-            <p
-              className="
-                text-xs
-                text-slate-500
-              "
-            >
+            <p className="text-xs text-slate-500">
               Navigation
             </p>
           </div>
@@ -423,245 +296,109 @@ export default function Sidebar({
             type="button"
             onClick={onClose}
             aria-label="Close navigation menu"
-            className="
-              inline-flex
-              h-10
-              w-10
-              shrink-0
-              items-center
-              justify-center
-              rounded-lg
-              text-slate-600
-              transition
-              hover:bg-slate-100
-              hover:text-slate-900
-              focus:outline-none
-              focus:ring-2
-              focus:ring-slate-300
-            "
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
       )}
 
-
-      <div
-        className="
-          shrink-0
-          border-b
-          border-slate-200
-          px-4
-          py-3
-        "
-      >
-
-        <p
-          className="
-            text-[11px]
-            font-medium
-            uppercase
-            tracking-wide
-            text-slate-400
-          "
-        >
+      <div className="shrink-0 border-b border-slate-200 px-4 py-3">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
           Signed in as
         </p>
 
-
-        <p
-          className="
-            mt-1
-            truncate
-            text-sm
-            font-semibold
-            text-slate-800
-          "
-        >
+        <p className="mt-1 truncate text-sm font-semibold text-slate-800">
           {user.first_name}{" "}
           {user.last_name}
         </p>
 
-
-        <div
-          className="
-            mt-1
-            flex
-            min-w-0
-            items-center
-            gap-1.5
-            text-xs
-          "
-        >
-
-          <span
-            className="
-              shrink-0
-              font-semibold
-              text-slate-600
-            "
-          >
+        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs">
+          <span className="shrink-0 font-semibold text-slate-600">
             {user.role}
           </span>
-
 
           {showTenant && (
             <>
               <span className="text-slate-300">
                 ·
               </span>
-
-              <span
-                className="
-                  min-w-0
-                  truncate
-                  font-medium
-                  text-slate-500
-                "
-              >
+              <span className="min-w-0 truncate font-medium text-slate-500">
                 {user.tenant_name}
               </span>
             </>
           )}
-
         </div>
-
       </div>
 
-
-      <nav
-        className="
-          min-h-0
-          flex-1
-          overflow-y-auto
-          overscroll-contain
-          p-4
-        "
-      >
-
+      <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
         <div className="space-y-6">
-
-          {sectionOrder.map(
-            (section) => {
-              const items =
-                visibleMenu.filter(
-                  (item) =>
-                    item.section
-                    === section,
-                );
-
-
-              if (
-                items.length === 0
-              ) {
-                return null;
-              }
-
-
-              return (
-                <div
-                  key={section}
-                >
-
-                  {sectionLabels[
-                    section
-                  ] && (
-                    <p
-                      className="
-                        mb-2
-                        px-3
-                        text-xs
-                        font-semibold
-                        uppercase
-                        tracking-wider
-                        text-slate-400
-                      "
-                    >
-                      {
-                        sectionLabels[
-                          section
-                        ]
-                      }
-                    </p>
-                  )}
-
-
-                  <div className="space-y-1">
-
-                    {items.map(
-                      (item) => {
-                        const Icon =
-                          item.icon;
-
-                        const active =
-                          isActive(
-                            item.href,
-                          );
-
-
-                        return (
-                          <Link
-                            key={`${item.section}-${item.href}`}
-                            href={
-                              item.href
-                            }
-                            onClick={
-                              handleNavigate
-                            }
-                            aria-current={
-                              active
-                                ? "page"
-                                : undefined
-                            }
-                            className={`
-                              flex
-                              min-h-11
-                              items-center
-                              gap-3
-                              rounded-lg
-                              px-3
-                              py-2.5
-                              text-sm
-                              font-medium
-                              transition
-                              ${
-                                active
-                                  ? "bg-blue-600 text-white shadow-sm"
-                                  : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
-                              }
-                            `}
-                          >
-
-                            <Icon
-                              className="
-                                h-5
-                                w-5
-                                shrink-0
-                              "
-                            />
-
-                            <span className="truncate">
-                              {
-                                item.label
-                              }
-                            </span>
-
-                          </Link>
-                        );
-                      },
-                    )}
-
-                  </div>
-
-                </div>
+          {sectionOrder.map((section) => {
+            const items =
+              visibleMenu.filter(
+                (item) =>
+                  item.section === section,
               );
-            },
-          )}
 
+            if (items.length === 0) {
+              return null;
+            }
+
+            return (
+              <div key={section}>
+                {sectionLabels[section] && (
+                  <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    {sectionLabels[section]}
+                  </p>
+                )}
+
+                <div className="space-y-1">
+                  {items.map((item) => {
+                    const Icon = item.icon;
+                    const active =
+                      isActive(item.href);
+
+                    return (
+                      <Link
+                        key={`${item.section}-${item.href}`}
+                        href={item.href}
+                        onClick={handleNavigate}
+                        aria-current={
+                          active
+                            ? "page"
+                            : undefined
+                        }
+                        className={`
+                          flex
+                          min-h-11
+                          items-center
+                          gap-3
+                          rounded-lg
+                          px-3
+                          py-2.5
+                          text-sm
+                          font-medium
+                          transition
+                          ${
+                            active
+                              ? "bg-blue-600 text-white shadow-sm"
+                              : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                          }
+                        `}
+                      >
+                        <Icon className="h-5 w-5 shrink-0" />
+                        <span className="truncate">
+                          {item.label}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
-
       </nav>
-
     </aside>
   );
 }
