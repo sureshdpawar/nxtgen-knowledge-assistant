@@ -139,6 +139,12 @@ langchain-mcp-adapters
 
 
 # -------------------------
+# Guardrails / NeMo
+# -------------------------
+nemoguardrails[sdd]>=0.24,<0.25
+
+
+# -------------------------
 # Evaluation / DeepEval
 # -------------------------
 deepeval>=4.2,<4.3

@@ -27,6 +27,10 @@ from app.schemas.chat import (
 from app.services.chat_service import (
     ChatService,
 )
+from app.services.guardrails_service import (
+    GuardrailBlockedError,
+    GuardrailsService,
+)
 from app.services.knowledge_base_access_service import (
     KnowledgeBaseAccessService,
 )
@@ -44,6 +48,10 @@ service = (
 
 access_service = (
     KnowledgeBaseAccessService()
+)
+
+guardrails_service = (
+    GuardrailsService()
 )
 
 
@@ -72,6 +80,38 @@ def _require_chat_access(
         required_level=
             KnowledgeBaseAccessLevel.READ,
     )
+
+
+def _guard_input(
+    query: str,
+) -> str:
+    try:
+        return (
+            guardrails_service
+            .check_input(
+                query
+            )
+        )
+    except GuardrailBlockedError as exc:
+        raise HTTPException(
+            status_code=
+                status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+def _guard_output(
+    answer: str,
+) -> str:
+    try:
+        return (
+            guardrails_service
+            .check_output(
+                answer
+            )
+        )
+    except GuardrailBlockedError as exc:
+        return str(exc)
 
 
 @router.post(
@@ -107,6 +147,12 @@ def chat(
             payload.knowledge_base_id,
     )
 
+    guarded_query = (
+        _guard_input(
+            payload.query
+        )
+    )
+
     try:
         result = (
             service.chat(
@@ -122,7 +168,7 @@ def chat(
                     payload
                     .conversation_id,
                 query=
-                    payload.query,
+                    guarded_query,
             )
         )
 
@@ -134,6 +180,14 @@ def chat(
                 exc.to_dict(),
         ) from exc
 
+    answer = (
+        _guard_output(
+            result[
+                "answer"
+            ]
+        )
+    )
+
     return ChatResponse(
         conversation_id=
             result[
@@ -141,9 +195,7 @@ def chat(
             ],
 
         answer=
-            result[
-                "answer"
-            ],
+            answer,
 
         sources=
             result[
@@ -173,6 +225,11 @@ def chat_stream(
     Authorization happens before creating
     the generator so unauthorized requests
     never begin retrieval or LLM execution.
+
+    The lightweight guardrails slice applies
+    input rails before streaming starts.
+    Output rails remain on the non-streaming
+    path so existing SSE behavior is unchanged.
     """
 
     _require_chat_access(
@@ -180,6 +237,12 @@ def chat_stream(
         current_user=current_user,
         knowledge_base_id=
             payload.knowledge_base_id,
+    )
+
+    guarded_query = (
+        _guard_input(
+            payload.query
+        )
     )
 
     generator = (
@@ -196,7 +259,7 @@ def chat_stream(
                 payload
                 .conversation_id,
             query=
-                payload.query,
+                guarded_query,
         )
     )
 
