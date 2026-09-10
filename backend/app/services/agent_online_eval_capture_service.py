@@ -11,6 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.agent import Agent
+from app.models.agent_online_eval_result import (
+    AgentOnlineEvalResult,
+)
 from app.models.agent_run import AgentRun
 from app.models.agent_run_step import (
     AgentRunStep,
@@ -30,24 +33,25 @@ logger = logging.getLogger(
 
 class AgentOnlineEvalCaptureService:
     """
-    Capture eligible Agent RAG interactions into
-    the centralized Online Evaluation pipeline.
+    Capture sampled AgentRuns for two independent
+    production-quality pipelines.
 
-    Agent online-evaluation capture must not depend
-    on OpenTelemetry being available.
+    1. Generic Agent Online Evaluation
+       - applies to completed AgentRuns with or
+         without RAG
+       - persists a pending AgentOnlineEvalResult
+       - never runs a judge in the request path
+       - never replays the agent
+       - never executes tools
 
-    Preferred evidence:
-    - raw search_knowledge ToolMessage content
+    2. Existing RAG Online Evaluation
+       - applies only when search_knowledge
+         evidence exists
+       - continues to use the centralized RAG
+         Online Evaluation pipeline
 
-    Durable fallback evidence:
-    - persisted AgentRunStep TOOL output
-
-    Preferred correlation:
-    - production OpenTelemetry trace ID
-
-    Durable fallback correlation:
-    - AgentRun UUID hex, explicitly identified in
-      evaluation_metadata as agent_run correlation.
+    The same sampling decision is shared so one
+    production request is sampled consistently.
     """
 
     def __init__(self):
@@ -182,11 +186,6 @@ class AgentOnlineEvalCaptureService:
         UUID | None,
         list[str],
     ]:
-        """
-        Extract retrieval evidence from the raw
-        search_knowledge ToolMessage.
-        """
-
         knowledge_base_id: (
             UUID | None
         ) = None
@@ -252,27 +251,6 @@ class AgentOnlineEvalCaptureService:
         UUID | None,
         list[str],
     ]:
-        """
-        Durable fallback for Agent Chat.
-
-        AgentExecutionService persists TOOL trace
-        output into AgentRunStep.output_data. A
-        search_knowledge step stores output as:
-
-        {
-            "results": [
-                {
-                    "name": "search_knowledge",
-                    "content": "<json payload>"
-                }
-            ]
-        }
-
-        Flush first so newly added run steps from
-        the current transaction can be queried
-        before the outer transaction commits.
-        """
-
         db.flush()
 
         steps = list(
@@ -374,6 +352,82 @@ class AgentOnlineEvalCaptureService:
             contexts,
         )
 
+    def _capture_agent_quality_candidate(
+        self,
+        db: Session,
+        *,
+        agent: Agent,
+        run: AgentRun,
+    ) -> AgentOnlineEvalResult:
+        """
+        Persist a pending generic Agent-quality row.
+
+        Idempotent by agent_run_id.
+        """
+
+        existing = db.scalar(
+            select(
+                AgentOnlineEvalResult
+            ).where(
+                AgentOnlineEvalResult
+                .agent_run_id
+                == run.id,
+                AgentOnlineEvalResult
+                .tenant_id
+                == agent.tenant_id,
+            )
+        )
+
+        if existing is not None:
+            return existing
+
+        candidate = (
+            AgentOnlineEvalResult(
+                tenant_id=
+                    agent.tenant_id,
+                agent_id=
+                    agent.id,
+                agent_run_id=
+                    run.id,
+                status=
+                    "pending",
+                sample_reason=
+                    "random",
+                question=
+                    run.query,
+                actual_answer=
+                    run.answer,
+                tools_used=list(
+                    run.tools_used
+                    or []
+                ),
+                metrics={},
+                evaluation_metadata={
+                    "evaluation_kind":
+                        "agent_online",
+                    "evaluation_mode":
+                        "existing_run_no_replay",
+                    "capture_source":
+                        "agent_execution",
+                    "actor_type":
+                        run.actor_type,
+                    "actor_id":
+                        run.actor_id,
+                    "side_effect_free":
+                        True,
+                    "replayed":
+                        False,
+                },
+            )
+        )
+
+        db.add(
+            candidate
+        )
+        db.flush()
+
+        return candidate
+
     def capture_if_sampled(
         self,
         db: Session,
@@ -387,15 +441,13 @@ class AgentOnlineEvalCaptureService:
             str | None = None,
     ) -> None:
         """
-        Capture a completed Agent RAG interaction.
+        Capture a completed Agent interaction.
 
         Capture failure must never fail the
         successful Agent run.
 
-        Online evaluation is an application feature,
-        so an otherwise eligible Agent RAG sample is
-        no longer discarded merely because an OTEL
-        trace ID is unavailable.
+        Judge execution is deliberately excluded
+        from this method.
         """
 
         if not settings.ONLINE_EVAL_ENABLED:
@@ -408,9 +460,73 @@ class AgentOnlineEvalCaptureService:
             )
             return
 
-        if not run.answer:
+        try:
+            should_sample = (
+                self.capture_service
+                .should_sample(
+                    sample_rate=
+                        settings
+                        .ONLINE_EVAL_SAMPLE_RATE,
+                )
+            )
+
+        except Exception:
+            logger.exception(
+                "Agent online evaluation sampling "
+                "decision failed "
+                "tenant=%s agent=%s run=%s",
+                agent.tenant_id,
+                agent.id,
+                run.id,
+            )
+            return
+
+        if not should_sample:
             logger.info(
                 "Agent online evaluation skipped: "
+                "sampling tenant=%s agent=%s run=%s "
+                "rate=%s",
+                agent.tenant_id,
+                agent.id,
+                run.id,
+                settings
+                .ONLINE_EVAL_SAMPLE_RATE,
+            )
+            return
+
+        try:
+            generic_candidate = (
+                self
+                ._capture_agent_quality_candidate(
+                    db,
+                    agent=agent,
+                    run=run,
+                )
+            )
+
+            logger.info(
+                "Agent online quality candidate "
+                "captured tenant=%s agent=%s "
+                "run=%s eval=%s",
+                agent.tenant_id,
+                agent.id,
+                run.id,
+                generic_candidate.id,
+            )
+
+        except Exception:
+            logger.exception(
+                "Generic Agent online evaluation "
+                "capture failed tenant=%s "
+                "agent=%s run=%s",
+                agent.tenant_id,
+                agent.id,
+                run.id,
+            )
+
+        if not run.answer:
+            logger.info(
+                "Agent RAG online evaluation skipped: "
                 "no answer tenant=%s agent=%s run=%s",
                 agent.tenant_id,
                 agent.id,
@@ -454,7 +570,7 @@ class AgentOnlineEvalCaptureService:
             or not contexts
         ):
             logger.info(
-                "Agent online evaluation skipped: "
+                "Agent RAG online evaluation skipped: "
                 "no RAG evidence "
                 "tenant=%s agent=%s run=%s "
                 "tools=%s",
@@ -462,40 +578,6 @@ class AgentOnlineEvalCaptureService:
                 agent.id,
                 run.id,
                 run.tools_used,
-            )
-            return
-
-        try:
-            should_sample = (
-                self.capture_service
-                .should_sample(
-                    sample_rate=
-                        settings
-                        .ONLINE_EVAL_SAMPLE_RATE,
-                )
-            )
-
-        except Exception:
-            logger.exception(
-                "Agent online evaluation sampling "
-                "decision failed "
-                "tenant=%s agent=%s run=%s",
-                agent.tenant_id,
-                agent.id,
-                run.id,
-            )
-            return
-
-        if not should_sample:
-            logger.info(
-                "Agent online evaluation skipped: "
-                "sampling tenant=%s agent=%s run=%s "
-                "rate=%s",
-                agent.tenant_id,
-                agent.id,
-                run.id,
-                settings
-                .ONLINE_EVAL_SAMPLE_RATE,
             )
             return
 
@@ -524,7 +606,7 @@ class AgentOnlineEvalCaptureService:
             )
 
             logger.info(
-                "Agent online evaluation using "
+                "Agent RAG online evaluation using "
                 "AgentRun correlation because "
                 "OTEL trace is unavailable "
                 "tenant=%s agent=%s run=%s "
@@ -611,8 +693,8 @@ class AgentOnlineEvalCaptureService:
 
             if captured is None:
                 logger.warning(
-                    "Agent online evaluation capture "
-                    "returned no result "
+                    "Agent RAG online evaluation "
+                    "capture returned no result "
                     "tenant=%s agent=%s run=%s "
                     "trace=%s",
                     agent.tenant_id,
@@ -623,7 +705,7 @@ class AgentOnlineEvalCaptureService:
                 return
 
             logger.info(
-                "Agent online evaluation candidate "
+                "Agent RAG online evaluation candidate "
                 "captured "
                 "tenant=%s agent=%s run=%s "
                 "kb=%s eval=%s trace=%s "
@@ -640,8 +722,8 @@ class AgentOnlineEvalCaptureService:
 
         except Exception:
             logger.exception(
-                "Agent online evaluation capture failed "
-                "tenant=%s agent=%s run=%s "
+                "Agent RAG online evaluation capture "
+                "failed tenant=%s agent=%s run=%s "
                 "trace=%s",
                 agent.tenant_id,
                 agent.id,
