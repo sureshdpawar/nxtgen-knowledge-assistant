@@ -12,6 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 
+from app.models.agent import Agent
 from app.models.agent_online_eval_result import (
     AgentOnlineEvalResult,
 )
@@ -38,29 +39,42 @@ class AgentOnlineEvalService:
     """
 
     TASK_QUALITY_RUBRIC = """
-Evaluate how well the Agent's Actual Answer handles the user's request,
-using only the user request and the answer shown here.
+Evaluate how well the Agent's Actual Answer handled the user's request
+given the authoritative runtime capability context supplied below.
+
+The runtime capability list represents the actions this Agent was configured
+to execute for the sampled run. Treat it as the capability boundary.
 
 A high score means:
 - the answer directly addresses the user's request
 - the answer is coherent and useful
-- limitations or inability are communicated clearly when applicable
-- the answer does not claim that an external action succeeded unless the
-  answer itself provides a clear basis for that claim
-- the answer avoids misleading capability claims
+- if the request requires an external action, that action is supported by an
+  available runtime capability
+- when the requested action is unavailable, the answer clearly communicates
+  that limitation
+- supported alternatives may be offered, but they must be clearly presented
+  as alternatives rather than fulfillment of the original request
+- the answer does not claim an action succeeded unless the persisted executed
+  tools support that claim
 
 A low score means:
-- the answer misunderstands or avoids the request
-- the answer is materially irrelevant
-- the answer misleadingly claims an unsupported or unverified action
-- the answer is contradictory or unusable
+- the answer claims, promises, initiates, or implies an external action that
+  is not supported by the available runtime capabilities
+- the answer substitutes a different available action and presents it as if
+  it fulfills the user's requested action
+- the answer asks for fields needed for a proxy action before the user has
+  chosen that alternative
+- the answer claims an action succeeded although the corresponding tool did
+  not execute
+- the answer materially misunderstands or avoids the request
 
 Important:
 - Do NOT use outside knowledge.
-- Do NOT infer factual correctness that cannot be established from the
-  request and answer.
-- Do NOT assume an unavailable expected/gold answer.
-- Judge task handling quality, not hidden business truth.
+- Do NOT invent capabilities.
+- Tool risk does NOT determine execution permission.
+- Explicit execution policy is separate from risk.
+- If no gold answer exists, judge correct capability-grounded task handling,
+  not hidden business truth.
 """.strip()
 
     def __init__(self):
@@ -227,6 +241,323 @@ Important:
             },
         )
 
+    def _configured_capabilities(
+        self,
+        *,
+        agent: Agent,
+    ) -> list[dict]:
+        capabilities: list[dict] = []
+
+        if agent.knowledge_base_links:
+            capabilities.append(
+                {
+                    "name":
+                        "search_knowledge",
+                    "description": (
+                        "Search the knowledge bases "
+                        "assigned to this Agent."
+                    ),
+                    "kind":
+                        "knowledge",
+                    "risk_level":
+                        "READ",
+                    "execution_policy":
+                        "AUTO",
+                }
+            )
+
+        for link in agent.tool_links:
+            tool = getattr(
+                link,
+                "tool",
+                None,
+            )
+
+            if tool is None:
+                continue
+
+            if not bool(
+                getattr(
+                    tool,
+                    "is_active",
+                    False,
+                )
+            ):
+                continue
+
+            integration = getattr(
+                tool,
+                "integration",
+                None,
+            )
+
+            if (
+                integration is not None
+                and not bool(
+                    getattr(
+                        integration,
+                        "is_active",
+                        False,
+                    )
+                )
+            ):
+                continue
+
+            name = str(
+                getattr(
+                    tool,
+                    "name",
+                    "",
+                )
+                or ""
+            ).strip()
+
+            if not name:
+                continue
+
+            capabilities.append(
+                {
+                    "name":
+                        name,
+                    "description":
+                        str(
+                            getattr(
+                                tool,
+                                "description",
+                                "",
+                            )
+                            or ""
+                        ).strip(),
+                    "kind":
+                        str(
+                            getattr(
+                                getattr(
+                                    tool,
+                                    "tool_type",
+                                    None,
+                                ),
+                                "value",
+                                getattr(
+                                    tool,
+                                    "tool_type",
+                                    "",
+                                ),
+                            )
+                            or ""
+                        ),
+                    "risk_level":
+                        str(
+                            getattr(
+                                getattr(
+                                    tool,
+                                    "risk_level",
+                                    None,
+                                ),
+                                "value",
+                                getattr(
+                                    tool,
+                                    "risk_level",
+                                    "",
+                                ),
+                            )
+                            or ""
+                        ),
+                    "execution_policy":
+                        str(
+                            getattr(
+                                getattr(
+                                    link,
+                                    "execution_policy",
+                                    None,
+                                ),
+                                "value",
+                                getattr(
+                                    link,
+                                    "execution_policy",
+                                    "",
+                                ),
+                            )
+                            or ""
+                        ),
+                }
+            )
+
+        return capabilities
+
+    def _capability_context(
+        self,
+        db: Session,
+        *,
+        run: AgentRun,
+        result: AgentOnlineEvalResult,
+    ) -> tuple[
+        list[dict],
+        str,
+    ]:
+        metadata = (
+            result.evaluation_metadata
+            or {}
+        )
+
+        captured = metadata.get(
+            "runtime_capabilities"
+        )
+
+        if isinstance(
+            captured,
+            list,
+        ):
+            return (
+                [
+                    item
+                    for item in captured
+                    if isinstance(
+                        item,
+                        dict,
+                    )
+                ],
+                str(
+                    metadata.get(
+                        "capability_snapshot_source",
+                        "capture_time",
+                    )
+                ),
+            )
+
+        agent = db.get(
+            Agent,
+            run.agent_id,
+        )
+
+        if agent is None:
+            return (
+                [],
+                "unavailable",
+            )
+
+        return (
+            self._configured_capabilities(
+                agent=agent,
+            ),
+            "current_agent_configuration_fallback",
+        )
+
+    def _format_capability_context(
+        self,
+        *,
+        capabilities: list[dict],
+        tools_used: list[str],
+    ) -> str:
+        lines = [
+            "AUTHORITATIVE AGENT CAPABILITY CONTEXT",
+            "",
+            "AVAILABLE RUNTIME CAPABILITIES:",
+        ]
+
+        if capabilities:
+            for item in capabilities:
+                name = str(
+                    item.get(
+                        "name",
+                        "",
+                    )
+                ).strip()
+
+                if not name:
+                    continue
+
+                description = str(
+                    item.get(
+                        "description",
+                        "",
+                    )
+                    or ""
+                ).strip()
+
+                execution_policy = str(
+                    item.get(
+                        "execution_policy",
+                        "",
+                    )
+                    or ""
+                ).strip()
+
+                risk_level = str(
+                    item.get(
+                        "risk_level",
+                        "",
+                    )
+                    or ""
+                ).strip()
+
+                details: list[str] = []
+
+                if description:
+                    details.append(
+                        description
+                    )
+
+                if execution_policy:
+                    details.append(
+                        "execution_policy="
+                        + execution_policy
+                    )
+
+                if risk_level:
+                    details.append(
+                        "risk_level="
+                        + risk_level
+                    )
+
+                suffix = (
+                    " — "
+                    + "; ".join(
+                        details
+                    )
+                    if details
+                    else ""
+                )
+
+                lines.append(
+                    f"- {name}{suffix}"
+                )
+        else:
+            lines.append(
+                "- None recorded"
+            )
+
+        lines.extend(
+            [
+                "",
+                "TOOLS ACTUALLY EXECUTED:",
+            ]
+        )
+
+        if tools_used:
+            lines.extend(
+                f"- {name}"
+                for name in tools_used
+            )
+        else:
+            lines.append(
+                "- None"
+            )
+
+        lines.extend(
+            [
+                "",
+                (
+                    "Use this capability context only to "
+                    "judge whether the response truthfully "
+                    "handled what the Agent could execute."
+                ),
+            ]
+        )
+
+        return "\n".join(
+            lines
+        )
+
     def evaluate_run(
         self,
         db: Session,
@@ -330,9 +661,40 @@ Important:
             execution_health_score
         )
 
+        (
+            runtime_capabilities,
+            capability_snapshot_source,
+        ) = self._capability_context(
+            db,
+            run=run,
+            result=result,
+        )
+
+        capability_context = (
+            self._format_capability_context(
+                capabilities=
+                    runtime_capabilities,
+                tools_used=list(
+                    run.tools_used
+                    or []
+                ),
+            )
+        )
+
         metrics = {
             "execution_health":
                 execution_health_metadata,
+            "capability_grounding": {
+                "runtime_capabilities":
+                    runtime_capabilities,
+                "tools_executed":
+                    list(
+                        run.tools_used
+                        or []
+                    ),
+                "snapshot_source":
+                    capability_snapshot_source,
+            },
         }
 
         try:
@@ -352,7 +714,9 @@ Important:
                         ),
                         question=run.query,
                         actual_answer=run.answer,
-                        retrieved_context=[],
+                        retrieved_context=[
+                            capability_context
+                        ],
                         expected_answer=None,
                         answerable=None,
                         threshold=(
@@ -460,6 +824,10 @@ Important:
                     ),
                     "task_quality_threshold":
                         task_quality_threshold,
+                    "runtime_capabilities":
+                        runtime_capabilities,
+                    "capability_snapshot_source":
+                        capability_snapshot_source,
                     "side_effect_free":
                         True,
                     "replayed":

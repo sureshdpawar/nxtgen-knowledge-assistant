@@ -352,6 +352,184 @@ class AgentOnlineEvalCaptureService:
             contexts,
         )
 
+    def _configured_capability_snapshot(
+        self,
+        *,
+        agent: Agent,
+    ) -> list[dict]:
+        """
+        Snapshot the Agent's configured executable
+        capability boundary at capture time.
+
+        This uses assigned active tool definitions
+        plus search_knowledge when the Agent has KBs.
+        It is deliberately persisted so future Agent
+        configuration changes do not silently rewrite
+        evaluation context for the sampled run.
+        """
+
+        capabilities: list[dict] = []
+
+        if agent.knowledge_base_links:
+            capabilities.append(
+                {
+                    "name":
+                        "search_knowledge",
+                    "description": (
+                        "Search the knowledge bases "
+                        "assigned to this Agent."
+                    ),
+                    "kind":
+                        "knowledge",
+                    "risk_level":
+                        "READ",
+                    "execution_policy":
+                        "AUTO",
+                }
+            )
+
+        for link in agent.tool_links:
+            tool = getattr(
+                link,
+                "tool",
+                None,
+            )
+
+            if tool is None:
+                continue
+
+            if not bool(
+                getattr(
+                    tool,
+                    "is_active",
+                    False,
+                )
+            ):
+                continue
+
+            integration = getattr(
+                tool,
+                "integration",
+                None,
+            )
+
+            if (
+                integration is not None
+                and not bool(
+                    getattr(
+                        integration,
+                        "is_active",
+                        False,
+                    )
+                )
+            ):
+                continue
+
+            name = str(
+                getattr(
+                    tool,
+                    "name",
+                    "",
+                )
+                or ""
+            ).strip()
+
+            if not name:
+                continue
+
+            capabilities.append(
+                {
+                    "name":
+                        name,
+                    "description":
+                        str(
+                            getattr(
+                                tool,
+                                "description",
+                                "",
+                            )
+                            or ""
+                        ).strip(),
+                    "kind":
+                        str(
+                            getattr(
+                                getattr(
+                                    tool,
+                                    "tool_type",
+                                    None,
+                                ),
+                                "value",
+                                getattr(
+                                    tool,
+                                    "tool_type",
+                                    "",
+                                ),
+                            )
+                            or ""
+                        ),
+                    "risk_level":
+                        str(
+                            getattr(
+                                getattr(
+                                    tool,
+                                    "risk_level",
+                                    None,
+                                ),
+                                "value",
+                                getattr(
+                                    tool,
+                                    "risk_level",
+                                    "",
+                                ),
+                            )
+                            or ""
+                        ),
+                    "execution_policy":
+                        str(
+                            getattr(
+                                getattr(
+                                    link,
+                                    "execution_policy",
+                                    None,
+                                ),
+                                "value",
+                                getattr(
+                                    link,
+                                    "execution_policy",
+                                    "",
+                                ),
+                            )
+                            or ""
+                        ),
+                }
+            )
+
+        deduplicated: list[dict] = []
+        seen: set[str] = set()
+
+        for capability in capabilities:
+            name = str(
+                capability.get(
+                    "name",
+                    "",
+                )
+            ).strip()
+
+            if (
+                not name
+                or name in seen
+            ):
+                continue
+
+            seen.add(
+                name
+            )
+            deduplicated.append(
+                capability
+            )
+
+        return deduplicated
+
     def _capture_agent_quality_candidate(
         self,
         db: Session,
@@ -405,6 +583,13 @@ class AgentOnlineEvalCaptureService:
                 evaluation_metadata={
                     "evaluation_kind":
                         "agent_online",
+                    "runtime_capabilities":
+                        self
+                        ._configured_capability_snapshot(
+                            agent=agent,
+                        ),
+                    "capability_snapshot_source":
+                        "capture_time_agent_configuration",
                     "evaluation_mode":
                         "existing_run_no_replay",
                     "capture_source":

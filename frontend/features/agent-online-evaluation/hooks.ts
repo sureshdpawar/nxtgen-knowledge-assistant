@@ -6,6 +6,7 @@ import {
 
 import {
   evaluateAgentRunQuality,
+  getAgentOnlineEvalResult,
   getAgentOnlineEvalResults,
   getAgentOnlineEvalSummary,
   processPendingAgentOnlineEvals,
@@ -25,6 +26,14 @@ export const agentOnlineEvalQueryKeys = {
   results: [
     "agent-online-evaluation",
     "results",
+  ] as const,
+
+  result: (
+    resultId: string | null,
+  ) => [
+    "agent-online-evaluation",
+    "result",
+    resultId,
   ] as const,
 };
 
@@ -47,6 +56,29 @@ export function useAgentOnlineEvalResults() {
 
     queryFn:
       getAgentOnlineEvalResults,
+  });
+}
+
+
+export function useAgentOnlineEvalResult(
+  resultId: string | null,
+) {
+  return useQuery({
+    queryKey:
+      agentOnlineEvalQueryKeys
+        .result(
+          resultId,
+        ),
+
+    queryFn: () =>
+      getAgentOnlineEvalResult(
+        resultId!,
+      ),
+
+    enabled:
+      Boolean(
+        resultId,
+      ),
   });
 }
 

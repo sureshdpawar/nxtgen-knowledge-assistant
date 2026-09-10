@@ -17,6 +17,8 @@ import {
   Button,
 } from "@/components/ui/button";
 
+import AgentOnlineEvaluationDetails from "./AgentOnlineEvaluationDetails";
+
 import {
   useAgentOnlineEvalResults,
   useAgentOnlineEvalSummary,
@@ -70,6 +72,32 @@ export default function AgentOnlineEvaluationDashboard() {
   ] = useState<
     string | null
   >(null);
+
+
+  const [
+    selectedResultId,
+    setSelectedResultId,
+  ] = useState<
+    string | null
+  >(null);
+
+  const [
+    detailsOpen,
+    setDetailsOpen,
+  ] = useState(false);
+
+
+  function openDetails(
+    resultId: string,
+  ) {
+    setSelectedResultId(
+      resultId,
+    );
+
+    setDetailsOpen(
+      true,
+    );
+  }
 
 
   async function processPending() {
@@ -343,6 +371,7 @@ export default function AgentOnlineEvaluationDashboard() {
                   <th className="px-4 py-3 font-medium">
                     Evaluated
                   </th>
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
 
@@ -414,6 +443,22 @@ export default function AgentOnlineEvaluationDashboard() {
                             ).toLocaleString()
                           : "—"}
                       </td>
+
+
+                      <td className="px-4 py-4 text-right">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            openDetails(
+                              result.id,
+                            )
+                          }
+                        >
+                          View
+                        </Button>
+                      </td>
                     </tr>
                   ),
                 )}
@@ -426,6 +471,19 @@ export default function AgentOnlineEvaluationDashboard() {
         )}
 
       </div>
+
+
+      <AgentOnlineEvaluationDetails
+        resultId={
+          selectedResultId
+        }
+        open={
+          detailsOpen
+        }
+        onOpenChange={
+          setDetailsOpen
+        }
+      />
 
     </div>
   );

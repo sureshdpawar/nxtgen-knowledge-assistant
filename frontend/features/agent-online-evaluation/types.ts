@@ -1,3 +1,38 @@
+export type AgentOnlineEvalCapability = {
+  name?: string;
+  description?: string;
+  kind?: string;
+  risk_level?: string;
+  execution_policy?: string;
+};
+
+export type AgentOnlineEvalTaskQualityMetric = {
+  score?: number | null;
+  passed?: boolean;
+  reason?: string;
+  usage?: Record<string, unknown>;
+  latency_ms?: number;
+  evaluator?: Record<string, unknown>;
+  threshold?: number;
+};
+
+export type AgentOnlineEvalCapabilityGroundingMetric = {
+  runtime_capabilities?:
+    AgentOnlineEvalCapability[];
+  tools_executed?: string[];
+  snapshot_source?: string;
+};
+
+export type AgentOnlineEvalMetrics = {
+  task_quality?:
+    AgentOnlineEvalTaskQualityMetric;
+  capability_grounding?:
+    AgentOnlineEvalCapabilityGroundingMetric;
+  execution_health?:
+    Record<string, unknown>;
+  [key: string]: unknown;
+};
+
 export type AgentOnlineEvalResult = {
   id: string;
   tenant_id: string;
@@ -19,8 +54,9 @@ export type AgentOnlineEvalResult = {
   evaluated_at: string | null;
   error_message: string | null;
 
-  metrics: Record<string, unknown>;
-  evaluation_metadata: Record<string, unknown>;
+  metrics: AgentOnlineEvalMetrics;
+  evaluation_metadata:
+    Record<string, unknown>;
 
   created_at: string;
   updated_at: string;

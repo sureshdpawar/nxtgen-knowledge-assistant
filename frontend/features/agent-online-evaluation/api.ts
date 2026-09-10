@@ -38,6 +38,20 @@ export async function getAgentOnlineEvalResults() {
 }
 
 
+export async function getAgentOnlineEvalResult(
+  resultId: string,
+) {
+  const response =
+    await api.get<
+      AgentOnlineEvalResult
+    >(
+      `/agent-eval/online/results/${resultId}`,
+    );
+
+  return response.data;
+}
+
+
 export async function processPendingAgentOnlineEvals(
   payload:
     AgentOnlineEvalProcessRequest,
