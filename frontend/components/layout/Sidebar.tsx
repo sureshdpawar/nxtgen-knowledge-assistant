@@ -40,6 +40,7 @@ type MenuSection =
   | "agents"
   | "studio"
   | "evaluation"
+  | "monitoring"
   | "governance"
   | "administration";
 
@@ -158,14 +159,14 @@ const menu: MenuItem[] = [
     href: "/online-evaluation",
     icon: Activity,
     roles: ["ADMIN"],
-    section: "evaluation",
+    section: "monitoring",
   },
   {
     label: "Agent Monitoring",
     href: "/agent-production-quality",
     icon: Sparkles,
     roles: ["ADMIN"],
-    section: "evaluation",
+    section: "monitoring",
   },
 
   {
@@ -223,6 +224,7 @@ const sectionLabels: Record<
   agents: "Agents",
   studio: "Agent Studio",
   evaluation: "Evaluation",
+  monitoring: "Monitoring",
   governance: "Governance",
   administration: "Admin",
 };
@@ -233,6 +235,7 @@ const sectionOrder: MenuSection[] = [
   "agents",
   "studio",
   "evaluation",
+  "monitoring",
   "governance",
   "administration",
 ];

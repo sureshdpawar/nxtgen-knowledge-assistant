@@ -794,7 +794,7 @@ export default function EvaluationDashboard() {
             <ClipboardCheck className="h-6 w-6 text-blue-600" />
 
             <h1 className="text-2xl font-bold text-slate-900">
-              Evaluation
+              RAG Evaluation
             </h1>
           </div>
 
