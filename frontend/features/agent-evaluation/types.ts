@@ -44,6 +44,15 @@ export interface CreateAgentEvalCaseRequest {
   enabled?: boolean;
 }
 
+export interface PromoteAgentRunRequest {
+  agent_run_id: string;
+  name: string;
+  expected_outcome: string;
+  expected_tools?: AgentEvalToolExpectation[];
+  forbidden_tools?: string[];
+  enabled?: boolean;
+}
+
 export interface AgentEvalDatasetImportResponse {
   dataset: AgentEvalDataset;
   case_count: number;

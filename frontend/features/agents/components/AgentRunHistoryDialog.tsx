@@ -5,6 +5,7 @@ import {
 } from "react";
 
 import {
+  Beaker,
   Clock3,
   History,
 } from "lucide-react";
@@ -21,12 +22,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+import PromoteAgentRunDialog from "@/features/agent-evaluation/components/PromoteAgentRunDialog";
+
 import {
   useAgentRuns,
 } from "../hooks";
 
 import type {
   Agent,
+  AgentRun,
 } from "../types";
 
 import AgentRunDetailsDialog from "./AgentRunDetailsDialog";
@@ -57,6 +61,18 @@ export default function AgentRunHistoryDialog({
     setDetailsOpen,
   ] = useState(false);
 
+  const [
+    promotionRun,
+    setPromotionRun,
+  ] = useState<
+    AgentRun | null
+  >(null);
+
+  const [
+    promotionOpen,
+    setPromotionOpen,
+  ] = useState(false);
+
 
   const runsQuery =
     useAgentRuns(
@@ -74,6 +90,19 @@ export default function AgentRunHistoryDialog({
     );
 
     setDetailsOpen(
+      true,
+    );
+  }
+
+
+  function promoteRun(
+    run: AgentRun,
+  ) {
+    setPromotionRun(
+      run,
+    );
+
+    setPromotionOpen(
       true,
     );
   }
@@ -100,7 +129,7 @@ export default function AgentRunHistoryDialog({
           setOpen
         }
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-6xl">
 
           <DialogHeader>
 
@@ -115,7 +144,8 @@ export default function AgentRunHistoryDialog({
                   agent.name
                 }
               </span>
-              .
+              . Promote meaningful production or staging scenarios
+              into Agent Evaluation regression datasets.
             </DialogDescription>
 
           </DialogHeader>
@@ -199,111 +229,140 @@ export default function AgentRunHistoryDialog({
                     {runsQuery.data.map(
                       (
                         run,
-                      ) => (
-                        <tr
-                          key={
-                            run.id
-                          }
-                          className="bg-white"
-                        >
+                      ) => {
+                        const promotable =
+                          run.status === "COMPLETED"
+                          || run.status === "FAILED";
 
-                          <td className="px-4 py-3">
-
-                            <span
-                              className={
-                                run.status ===
-                                "COMPLETED"
-                                  ? "rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700"
-                                  : run.status ===
-                                    "RUNNING"
-                                    ? "rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
-                                    : "rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700"
-                              }
-                            >
-                              {
-                                run.status
-                              }
-                            </span>
-
-                          </td>
-
-
-                          <td className="max-w-sm px-4 py-3">
-
-                            <p className="truncate text-slate-700">
-                              {
-                                run.query
-                              }
-                            </p>
-
-                          </td>
-
-
-                          <td className="px-4 py-3 text-slate-600">
-                            {
-                              run.llm_calls
+                        return (
+                          <tr
+                            key={
+                              run.id
                             }
-                          </td>
+                            className="bg-white"
+                          >
+
+                            <td className="px-4 py-3">
+
+                              <span
+                                className={
+                                  run.status ===
+                                  "COMPLETED"
+                                    ? "rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700"
+                                    : run.status ===
+                                      "RUNNING"
+                                      ? "rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
+                                      : run.status ===
+                                        "WAITING_FOR_APPROVAL"
+                                        ? "rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700"
+                                        : "rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700"
+                                }
+                              >
+                                {
+                                  run.status
+                                }
+                              </span>
+
+                            </td>
 
 
-                          <td className="px-4 py-3 text-slate-600">
-                            {
-                              run.tools_used.length
-                            }
-                          </td>
+                            <td className="max-w-sm px-4 py-3">
+
+                              <p className="truncate text-slate-700">
+                                {
+                                  run.query
+                                }
+                              </p>
+
+                            </td>
 
 
-                          <td className="px-4 py-3 text-slate-600">
-
-                            {run.duration_ms
-                              ? `${(
-                                  run.duration_ms
-                                  / 1000
-                                ).toFixed(
-                                  2,
-                                )}s`
-                              : "-"}
-
-                          </td>
-
-
-                          <td className="px-4 py-3 text-slate-500">
-
-                            <span className="flex items-center gap-1">
-
-                              <Clock3 className="h-3.5 w-3.5" />
-
+                            <td className="px-4 py-3 text-slate-600">
                               {
-                                new Date(
-                                  run.started_at,
-                                )
-                                  .toLocaleString()
+                                run.llm_calls
                               }
-
-                            </span>
-
-                          </td>
+                            </td>
 
 
-                          <td className="px-4 py-3 text-right">
-
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                openRun(
-                                  run.id,
-                                )
+                            <td className="px-4 py-3 text-slate-600">
+                              {
+                                run.tools_used.length
                               }
-                            >
-                              View
-                            </Button>
+                            </td>
 
-                          </td>
 
-                        </tr>
-                      ),
+                            <td className="px-4 py-3 text-slate-600">
+
+                              {run.duration_ms
+                                ? `${(
+                                    run.duration_ms
+                                    / 1000
+                                  ).toFixed(
+                                    2,
+                                  )}s`
+                                : "-"}
+
+                            </td>
+
+
+                            <td className="px-4 py-3 text-slate-500">
+
+                              <span className="flex items-center gap-1">
+
+                                <Clock3 className="h-3.5 w-3.5" />
+
+                                {
+                                  new Date(
+                                    run.started_at,
+                                  )
+                                    .toLocaleString()
+                                }
+
+                              </span>
+
+                            </td>
+
+
+                            <td className="px-4 py-3 text-right">
+
+                              <div className="flex justify-end gap-2">
+
+                                {promotable && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      promoteRun(
+                                        run,
+                                      )
+                                    }
+                                  >
+                                    <Beaker className="mr-1.5 h-3.5 w-3.5" />
+                                    Promote
+                                  </Button>
+                                )}
+
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    openRun(
+                                      run.id,
+                                    )
+                                  }
+                                >
+                                  View
+                                </Button>
+
+                              </div>
+
+                            </td>
+
+                          </tr>
+                        );
+                      },
                     )}
 
                   </tbody>
@@ -328,6 +387,22 @@ export default function AgentRunHistoryDialog({
         }
         onOpenChange={
           setDetailsOpen
+        }
+      />
+
+
+      <PromoteAgentRunDialog
+        agent={
+          agent
+        }
+        run={
+          promotionRun
+        }
+        open={
+          promotionOpen
+        }
+        onOpenChange={
+          setPromotionOpen
         }
       />
     </>

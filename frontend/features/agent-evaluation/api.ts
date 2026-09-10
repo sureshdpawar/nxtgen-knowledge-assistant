@@ -11,6 +11,7 @@ import type {
   CreateAgentEvalCaseRequest,
   CreateAgentEvalDatasetRequest,
   CreateAgentEvalExperimentRequest,
+  PromoteAgentRunRequest,
 } from "./types";
 
 
@@ -80,6 +81,19 @@ export async function createAgentEvalCase(
 ) {
   const response = await api.post<AgentEvalCase>(
     `/agent-eval/datasets/${datasetId}/cases`,
+    payload,
+  );
+
+  return response.data;
+}
+
+
+export async function promoteAgentRunToEvalCase(
+  datasetId: string,
+  payload: PromoteAgentRunRequest,
+) {
+  const response = await api.post<AgentEvalCase>(
+    `/agent-eval/datasets/${datasetId}/cases/promote-run`,
     payload,
   );
 
