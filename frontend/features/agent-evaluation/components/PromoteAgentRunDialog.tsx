@@ -128,6 +128,7 @@ export default function PromoteAgentRunDialog({
       return;
     }
 
+    const activeRun = run;
     let cancelled = false;
 
     async function load() {
@@ -138,8 +139,8 @@ export default function PromoteAgentRunDialog({
       setExpectedTools("");
       setForbiddenTools("");
       setName(
-        run.query
-          ? `Regression: ${run.query.slice(0, 80)}`
+        activeRun.query
+          ? `Regression: ${activeRun.query.slice(0, 80)}`
           : "Promoted Agent Run",
       );
 
