@@ -1,0 +1,24 @@
+colang_version: "1.0"
+
+rails:
+  input:
+    flows:
+      - mask sensitive data on input
+
+  output:
+    flows:
+      - mask sensitive data on output
+
+  config:
+    sensitive_data_detection:
+      input:
+        entities:
+          - EMAIL_ADDRESS
+          - PHONE_NUMBER
+          - CREDIT_CARD
+
+      output:
+        entities:
+          - EMAIL_ADDRESS
+          - PHONE_NUMBER
+          - CREDIT_CARD

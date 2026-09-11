@@ -5,6 +5,8 @@ import json
 from fastapi import (
     APIRouter,
     Depends,
+    HTTPException,
+    status,
 )
 from fastapi.responses import (
     StreamingResponse,
@@ -23,6 +25,10 @@ from app.schemas.agent_chat import (
 from app.services.agent_chat_service import (
     AgentChatService,
 )
+from app.services.guardrails_service import (
+    GuardrailBlockedError,
+    GuardrailsService,
+)
 
 
 router = APIRouter(
@@ -32,6 +38,7 @@ router = APIRouter(
 
 
 service = AgentChatService()
+guardrails_service = GuardrailsService()
 
 
 def _sse(
@@ -49,6 +56,60 @@ def _sse(
     )
 
 
+async def _guard_input(
+    query: str,
+) -> str:
+    try:
+        return (
+            await
+            guardrails_service
+            .check_input_async(
+                query
+            )
+        )
+    except GuardrailBlockedError as exc:
+        raise HTTPException(
+            status_code=
+                status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+async def _guard_result_output(
+    result: dict,
+) -> dict:
+    answer = (
+        result.get(
+            "answer"
+        )
+        or ""
+    )
+
+    if not answer:
+        return result
+
+    guarded_result = dict(
+        result
+    )
+
+    try:
+        guarded_result[
+            "answer"
+        ] = (
+            await
+            guardrails_service
+            .check_output_async(
+                answer
+            )
+        )
+    except GuardrailBlockedError as exc:
+        guarded_result[
+            "answer"
+        ] = str(exc)
+
+    return guarded_result
+
+
 @router.post(
     "",
     response_model=
@@ -63,15 +124,32 @@ async def run_agent_chat(
         require_authenticated_user,
     ),
 ):
-    return await service.run(
-        db=db,
-        current_user=current_user,
-        agent_id=
-            payload.agent_id,
-        conversation_id=
-            payload.conversation_id,
-        query=
-            payload.query,
+    guarded_query = (
+        await
+        _guard_input(
+            payload.query
+        )
+    )
+
+    result = (
+        await
+        service.run(
+            db=db,
+            current_user=current_user,
+            agent_id=
+                payload.agent_id,
+            conversation_id=
+                payload.conversation_id,
+            query=
+                guarded_query,
+        )
+    )
+
+    return (
+        await
+        _guard_result_output(
+            result
+        )
     )
 
 
@@ -113,6 +191,13 @@ async def stream_agent_chat(
     context for the Agent execution task.
     """
 
+    guarded_query = (
+        await
+        _guard_input(
+            payload.query
+        )
+    )
+
     queue: asyncio.Queue[
         dict | None
     ] = asyncio.Queue()
@@ -145,9 +230,16 @@ async def stream_agent_chat(
                     payload
                     .conversation_id,
                 query=
-                    payload.query,
+                    guarded_query,
                 progress_callback=
                     progress_callback,
+            )
+
+            result = (
+                await
+                _guard_result_output(
+                    result
+                )
             )
 
             event_name = (

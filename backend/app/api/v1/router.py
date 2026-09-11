@@ -1,10 +1,14 @@
 from fastapi import APIRouter
 
+from app.api.v1.routers import a2a
 from app.api.v1.routers import account
 from app.api.v1.routers import agent
+from app.api.v1.routers import agent_a2a_connection
 from app.api.v1.routers import agent_access
 from app.api.v1.routers import agent_action_approval
 from app.api.v1.routers import agent_chat
+from app.api.v1.routers import agent_eval
+from app.api.v1.routers import agent_online_eval
 from app.api.v1.routers import agent_runs
 from app.api.v1.routers import auth
 from app.api.v1.routers import chat
@@ -89,6 +93,14 @@ api_router.include_router(
 )
 
 api_router.include_router(
+    agent_a2a_connection.router,
+)
+
+api_router.include_router(
+    a2a.router,
+)
+
+api_router.include_router(
     agent_access.router,
 )
 
@@ -114,6 +126,14 @@ api_router.include_router(
 
 api_router.include_router(
     eval.router,
+)
+
+api_router.include_router(
+    agent_eval.router,
+)
+
+api_router.include_router(
+    agent_online_eval.router,
 )
 
 api_router.include_router(

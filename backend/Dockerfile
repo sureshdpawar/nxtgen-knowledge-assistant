@@ -20,7 +20,8 @@ RUN pip install --no-cache-dir --upgrade pip \
         torch \
     && pip install \
         --no-cache-dir \
-        -r requirements.txt
+        -r requirements.txt \
+    && python -m spacy download en_core_web_lg
 
 COPY . .
 

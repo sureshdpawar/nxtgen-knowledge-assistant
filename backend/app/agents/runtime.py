@@ -101,6 +101,98 @@ class AgentRuntime:
             )
         ).upper()
 
+    def _runtime_system_prompt(
+        self,
+        *,
+        system_prompt: str,
+        tools: list[BaseTool],
+    ) -> str:
+        """
+        Add Knowgentiq's runtime capability boundary.
+
+        The persisted agent system prompt describes the agent's role and
+        behavior. The resolved runtime tool list is authoritative for actions
+        the agent can actually perform during this execution.
+
+        This prevents an agent from claiming capabilities that exist elsewhere
+        in an integration, prompt, conversation history, or knowledge source
+        but are not assigned to the current runtime.
+        """
+        tool_names = [
+            str(
+                getattr(
+                    tool,
+                    "name",
+                    "",
+                )
+                or ""
+            ).strip()
+            for tool in tools
+            if str(
+                getattr(
+                    tool,
+                    "name",
+                    "",
+                )
+                or ""
+            ).strip()
+        ]
+
+        if tool_names:
+            available_tools = "\n".join(
+                f"- {name}"
+                for name in tool_names
+            )
+        else:
+            available_tools = "- None"
+
+        capability_boundary = (
+            "KNOWGENTIQ RUNTIME CAPABILITY BOUNDARY:\n"
+            "The tools listed below are the complete and authoritative set "
+            "of executable capabilities available to you for this runtime.\n\n"
+            "AVAILABLE RUNTIME TOOLS:\n"
+            f"{available_tools}\n\n"
+            "CAPABILITY RULES:\n"
+            "- You may perform an external action only through an available "
+            "runtime tool.\n"
+            "- Never claim that you can perform an action when no available "
+            "runtime tool supports that action.\n"
+            "- The existence of a capability in your instructions, knowledge "
+            "base, conversation history, or an external integration does not "
+            "make that capability available unless the corresponding tool is "
+            "listed above.\n"
+            "- If the user requests an unsupported action, clearly explain "
+            "that the action is not available with your current capabilities.\n"
+            "- Do not reinterpret or substitute an unsupported requested action "
+            "as a different available action.\n"
+            "- Do not execute, initiate, or collect required fields for a "
+            "different proxy action unless the user explicitly chooses that "
+            "alternative.\n"
+            "- You may mention supported alternatives after explaining that the "
+            "requested action is unavailable, but wait for the user to select "
+            "an alternative before acting on it.\n"
+            "- Do not invent tools, tool results, successful actions, pending "
+            "actions, bookings, schedules, updates, deletions, or other "
+            "external side effects.\n"
+            "- You may still provide information or guidance when appropriate "
+            "without claiming that an unsupported action was performed.\n"
+            "- Tool execution policy and human-approval requirements are "
+            "controlled by Knowgentiq. Do not infer execution permission from "
+            "tool risk or from these instructions."
+        )
+
+        clean_system_prompt = str(
+            system_prompt or ""
+        ).strip()
+
+        if clean_system_prompt:
+            return (
+                f"{clean_system_prompt}\n\n"
+                f"{capability_boundary}"
+            )
+
+        return capability_boundary
+
     def _checkpoint_id(
         self,
         snapshot,
@@ -214,6 +306,15 @@ class AgentRuntime:
             model_with_tools = model
             langgraph_tool_node = None
 
+        runtime_system_prompt = (
+            self._runtime_system_prompt(
+                system_prompt=
+                    system_prompt,
+                tools=
+                    tools,
+            )
+        )
+
         risk_by_tool_name = {
             tool.name:
                 self._tool_risk_level(
@@ -271,7 +372,7 @@ class AgentRuntime:
             messages = [
                 SystemMessage(
                     content=
-                        system_prompt,
+                        runtime_system_prompt,
                 ),
                 *state[
                     "messages"
@@ -398,7 +499,6 @@ class AgentRuntime:
 
                         "name":
                             "llm",
-
                         "status":
                             "COMPLETED",
 
@@ -797,7 +897,6 @@ class AgentRuntime:
                     {
                         "step_type":
                             "TOOL",
-
                         "name":
                             trace_name,
 
@@ -1197,8 +1296,7 @@ class AgentRuntime:
             max_iterations=
                 max_iterations,
             checkpointer=
-                checkpointer,
-            progress_callback=
+                checkpointer,            progress_callback=
                 None,
         )
 
