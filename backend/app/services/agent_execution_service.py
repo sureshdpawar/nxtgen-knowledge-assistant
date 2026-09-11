@@ -323,6 +323,8 @@ class AgentExecutionService:
                     knowledge_base_ids,
                 tool_ids=
                     tool_ids,
+                agent_id=
+                    agent.id,    
             )
         )
 

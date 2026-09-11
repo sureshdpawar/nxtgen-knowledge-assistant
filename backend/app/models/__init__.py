@@ -40,6 +40,9 @@ from app.models.user_knowledge_base_access import (
 )
 
 from app.models.agent import Agent
+from app.models.agent_a2a_connection import (
+    AgentA2AConnection,
+)
 from app.models.agent_knowledge_base import (
     AgentKnowledgeBase,
 )
@@ -113,6 +116,7 @@ __all__ = [
     "ConversationMessage",
     "UserKnowledgeBaseAccess",
     "Agent",
+    "AgentA2AConnection",
     "AgentKnowledgeBase",
     "AgentRun",
     "AgentRunStep",

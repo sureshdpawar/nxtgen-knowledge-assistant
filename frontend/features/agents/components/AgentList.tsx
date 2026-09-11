@@ -10,6 +10,7 @@ import type {
 } from "../types";
 
 import AgentRunHistoryDialog from "./AgentRunHistoryDialog";
+import ConnectedAgentsDialog from "./ConnectedAgentsDialog";
 import EditAgentDialog from "./EditAgentDialog";
 import TestAgentDialog from "./TestAgentDialog";
 
@@ -146,6 +147,16 @@ export default function AgentList({
                 <AgentRunHistoryDialog
                   agent={
                     agent
+                  }
+                />
+
+
+                <ConnectedAgentsDialog
+                  agent={
+                    agent
+                  }
+                  agents={
+                    agents
                   }
                 />
 
