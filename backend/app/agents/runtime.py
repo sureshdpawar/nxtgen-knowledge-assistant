@@ -730,6 +730,25 @@ class AgentRuntime:
                 * 1000
             )
 
+            for tool_call in (
+                requested_tools
+            ):
+                await self._emit(
+                    progress_callback,
+                    {
+                        "type":
+                            "tool_completed",
+
+                        "name":
+                            tool_call.get(
+                                "name"
+                            ),
+
+                        "duration_ms":
+                            duration_ms,
+                    },
+                )
+
             output_messages = (
                 result.get(
                     "messages",
