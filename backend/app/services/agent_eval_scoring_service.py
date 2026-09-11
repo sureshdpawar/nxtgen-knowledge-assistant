@@ -278,6 +278,7 @@ class AgentEvalScoringService:
         tool_metric = ToolCorrectnessMetric(
             threshold=tool_threshold,
             should_exact_match=True,
+            model=judge,
         )
 
         argument_metric = (
