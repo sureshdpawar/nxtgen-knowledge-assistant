@@ -27,10 +27,10 @@ class AgentEvalScoringService:
     tenant-managed LLM configuration. The process environment is deliberately
     not mutated and legacy settings.LLM_API / settings.LLM_API_KEY are not used.
 
-    Agent Evaluation currently uses the tenant default LLM profile as its judge
-    profile. The experiment's judge_model remains an optional model-name
-    override, allowing the evaluator model to differ while still using the
-    tenant-managed endpoint and credential.
+    An experiment may select an explicit evaluator LLM configuration. When it
+    does, that profile's endpoint, credential, provider, and configured model
+    are authoritative. Legacy judge_model remains supported only when no
+    explicit evaluator profile is selected.
 
     knowledge_base_id is supported for callers that evaluate a single KB:
     LLMClientFactory then applies the existing KB override -> tenant default
@@ -127,14 +127,38 @@ class AgentEvalScoringService:
     def _expected_tool_calls(
         case: AgentEvalCase,
     ) -> list[ToolCall]:
+        """
+        Convert the persisted Agent Evaluation schema into DeepEval ToolCall.
+
+        AgentEvalToolExpectation persists expected arguments under
+        `input_parameters`, not `input`. The previous scorer dropped those
+        arguments and therefore gave ArgumentCorrectnessMetric no gold
+        argument contract.
+        """
         calls = []
 
         for item in case.expected_tools or []:
+            if not isinstance(item, dict):
+                continue
+
             name = str(
                 item.get("name") or ""
             ).strip()
 
-            if name:
+            if not name:
+                continue
+
+            if (
+                "input_parameters" in item
+                and item.get("input_parameters") is not None
+            ):
+                calls.append(
+                    ToolCall(
+                        name=name,
+                        input=item.get("input_parameters") or {},
+                    )
+                )
+            else:
                 calls.append(
                     ToolCall(
                         name=name,
@@ -142,6 +166,42 @@ class AgentEvalScoringService:
                 )
 
         return calls
+
+    @staticmethod
+    def _expected_arguments_specified(
+        case: AgentEvalCase,
+    ) -> bool:
+        """
+        Argument correctness is applicable only when the regression case
+        actually supplies expected tool arguments.
+
+        This prevents cases such as "no tool expected" from receiving a
+        misleading Argument Correctness score merely because the runtime
+        happened to call an informational tool.
+        """
+        expected_items = []
+
+        for item in case.expected_tools or []:
+            if not isinstance(item, dict):
+                continue
+
+            name = str(
+                item.get("name") or ""
+            ).strip()
+
+            if name:
+                expected_items.append(item)
+
+        if not expected_items:
+            return False
+
+        return all(
+            (
+                "input_parameters" in item
+                and item.get("input_parameters") is not None
+            )
+            for item in expected_items
+        )
 
     @staticmethod
     def _measure(
@@ -192,6 +252,12 @@ class AgentEvalScoringService:
 
         expected_tools = (
             self._expected_tool_calls(
+                case
+            )
+        )
+
+        expected_arguments_specified = (
+            self._expected_arguments_specified(
                 case
             )
         )
@@ -266,16 +332,30 @@ class AgentEvalScoringService:
                 test_case,
             )
 
-        if actual_tools:
+        if (
+            expected_arguments_specified
+            and actual_tools
+        ):
             arguments = self._measure(
                 argument_metric,
                 test_case,
             )
+        elif not expected_arguments_specified:
+            arguments = {
+                "score": None,
+                "reason": (
+                    "Argument correctness is not applicable because "
+                    "the regression case does not specify expected "
+                    "tool arguments."
+                ),
+                "passed": None,
+            }
         else:
             arguments = {
                 "score": None,
                 "reason": (
-                    "No tool call was made."
+                    "Expected tool arguments are defined, but no "
+                    "tool call was made."
                 ),
                 "passed": None,
             }

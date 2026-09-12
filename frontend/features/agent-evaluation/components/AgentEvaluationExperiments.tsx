@@ -153,6 +153,42 @@ export default function AgentEvaluationExperiments() {
     [cases],
   );
 
+  const selectedExperimentJudgeLabel = useMemo(() => {
+    if (!selectedExperiment) {
+      return "—";
+    }
+
+    const evaluatorId = (
+      selectedExperiment.metrics?.evaluator_llm_configuration_id
+    );
+
+    if (typeof evaluatorId === "string" && evaluatorId) {
+      const profile = llmProfiles.find(
+        (item) => item.id === evaluatorId,
+      );
+
+      if (profile) {
+        return `${profile.name} · ${profile.model_name}`;
+      }
+
+      return `Evaluator profile ${evaluatorId}`;
+    }
+
+    if (selectedExperiment.judge_model) {
+      return `${selectedExperiment.judge_model} (legacy model override)`;
+    }
+
+    const defaultProfile = llmProfiles.find(
+      (item) => item.is_default && item.is_active,
+    );
+
+    if (defaultProfile) {
+      return `${defaultProfile.name} · ${defaultProfile.model_name} (tenant default)`;
+    }
+
+    return "Tenant default";
+  }, [selectedExperiment, llmProfiles]);
+
   async function loadDatasetContext(
     agentId: string,
   ) {
@@ -663,7 +699,7 @@ export default function AgentEvaluationExperiments() {
                       {selectedExperiment.name}
                     </h2>
                     <p className="mt-1 text-sm text-slate-500">
-                      Judge: {selectedExperiment.judge_model ?? "Tenant profile"}
+                      Judge: {selectedExperimentJudgeLabel}
                     </p>
                   </div>
 
