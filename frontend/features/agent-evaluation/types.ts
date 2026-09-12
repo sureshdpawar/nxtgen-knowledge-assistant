@@ -88,7 +88,8 @@ export interface AgentEvalExperiment {
 export interface CreateAgentEvalExperimentRequest {
   dataset_id: string;
   name: string;
-  judge_model?: string;
+  evaluator_llm_configuration_id?: string | null;
+  judge_model?: string | null;
   pass_rate_threshold?: number;
   outcome_threshold?: number;
   tool_threshold?: number;

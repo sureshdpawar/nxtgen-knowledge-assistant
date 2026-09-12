@@ -110,6 +110,8 @@ class AgentEvalExperimentService:
             status="pending",
             judge_model=(
                 payload.judge_model.strip()
+                if payload.judge_model
+                else None
             ),
             pass_rate_threshold=(
                 payload.pass_rate_threshold
@@ -128,8 +130,16 @@ class AgentEvalExperimentService:
                         payload.pass_rate_threshold,
                 },
                 "quality_gate": "pending",
-                "judge_resolution":
-                    "tenant_default",
+                "evaluator_llm_configuration_id": (
+                    str(payload.evaluator_llm_configuration_id)
+                    if payload.evaluator_llm_configuration_id
+                    else None
+                ),
+                "judge_resolution": (
+                    "explicit_configuration"
+                    if payload.evaluator_llm_configuration_id
+                    else "tenant_default"
+                ),
             },
         )
 
@@ -269,6 +279,17 @@ class AgentEvalExperimentService:
         ]
 
     @staticmethod
+    def _evaluator_llm_configuration_id(
+        experiment: AgentEvalExperiment,
+    ) -> UUID | None:
+        value = (experiment.metrics or {}).get(
+            "evaluator_llm_configuration_id"
+        )
+        if not value:
+            return None
+        return UUID(str(value))
+
+    @staticmethod
     def _thresholds(
         experiment:
             AgentEvalExperiment,
@@ -378,6 +399,14 @@ class AgentEvalExperimentService:
         thresholds = self._thresholds(
             experiment
         )
+        evaluator_llm_configuration_id = (
+            self._evaluator_llm_configuration_id(experiment)
+        )
+        judge_resolution = (
+            "explicit_configuration"
+            if evaluator_llm_configuration_id
+            else "tenant_default"
+        )
 
         experiment.status = (
             "running"
@@ -400,7 +429,7 @@ class AgentEvalExperimentService:
             "quality_gate":
                 "running",
             "judge_resolution":
-                "tenant_default",
+                judge_resolution,
         }
 
         db.commit()
@@ -503,8 +532,13 @@ class AgentEvalExperimentService:
                     judge_metadata={
                         "requested_judge_model":
                             experiment.judge_model,
+                        "evaluator_llm_configuration_id": (
+                            str(evaluator_llm_configuration_id)
+                            if evaluator_llm_configuration_id
+                            else None
+                        ),
                         "resolution_source":
-                            "tenant_default",
+                            judge_resolution,
                     },
                 )
 
@@ -512,7 +546,7 @@ class AgentEvalExperimentService:
                 db.flush()
 
                 if runtime_completed:
-                    scores = await (
+                    scores = (
                         self.scoring_service
                         .score(
                             db=db,
@@ -523,6 +557,9 @@ class AgentEvalExperimentService:
                             judge_model=(
                                 experiment
                                 .judge_model
+                            ),
+                            evaluator_llm_configuration_id=(
+                                evaluator_llm_configuration_id
                             ),
                             outcome_threshold=
                                 thresholds[

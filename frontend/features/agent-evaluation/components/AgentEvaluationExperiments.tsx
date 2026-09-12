@@ -32,6 +32,7 @@ import type {
 
 import { getAgents } from "@/features/agents/api";
 import type { Agent } from "@/features/agents/types";
+import { useLLMProfiles } from "@/features/llm-config/hooks";
 
 
 function errorMessage(error: unknown) {
@@ -109,7 +110,10 @@ export default function AgentEvaluationExperiments() {
   const [selectedExperimentId, setSelectedExperimentId] = useState("");
 
   const [name, setName] = useState("");
-  const [judgeModel, setJudgeModel] = useState("gpt-5.4");
+  const [
+    evaluatorLLMConfigurationId,
+    setEvaluatorLLMConfigurationId,
+  ] = useState("");
   const [passRate, setPassRate] = useState("0.80");
   const [outcomeThreshold, setOutcomeThreshold] = useState("0.80");
   const [toolThreshold, setToolThreshold] = useState("1.00");
@@ -119,6 +123,19 @@ export default function AgentEvaluationExperiments() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
+  const {
+    data: llmProfiles = [],
+    isLoading: llmProfilesLoading,
+  } = useLLMProfiles();
+
+  const activeLLMProfiles = useMemo(
+    () =>
+      llmProfiles.filter(
+        (profile) => profile.is_active,
+      ),
+    [llmProfiles],
+  );
 
   const selectedExperiment = useMemo(
     () =>
@@ -340,7 +357,8 @@ export default function AgentEvaluationExperiments() {
         await createAgentEvalExperiment({
           dataset_id: selectedDatasetId,
           name: name.trim(),
-          judge_model: judgeModel.trim(),
+          evaluator_llm_configuration_id:
+            evaluatorLLMConfigurationId || null,
           pass_rate_threshold: Number(passRate),
           outcome_threshold: Number(outcomeThreshold),
           tool_threshold: Number(toolThreshold),
@@ -494,15 +512,37 @@ export default function AgentEvaluationExperiments() {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
               />
 
-              <input
-                required
-                value={judgeModel}
-                onChange={(event) =>
-                  setJudgeModel(event.target.value)
-                }
-                placeholder="Judge model"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-              />
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-600">
+                  Evaluator / Judge LLM
+                </span>
+                <select
+                  value={evaluatorLLMConfigurationId}
+                  onChange={(event) =>
+                    setEvaluatorLLMConfigurationId(
+                      event.target.value,
+                    )
+                  }
+                  disabled={llmProfilesLoading}
+                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm disabled:opacity-50"
+                >
+                  <option value="">
+                    Tenant default
+                  </option>
+                  {activeLLMProfiles.map((profile) => (
+                    <option
+                      key={profile.id}
+                      value={profile.id}
+                    >
+                      {profile.name} · {profile.model_name}
+                      {profile.is_default ? " (default)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-[11px] leading-4 text-slate-500">
+                  Independent from the agent runtime model.
+                </span>
+              </label>
 
               <div className="grid grid-cols-2 gap-3">
                 <Threshold
@@ -623,7 +663,7 @@ export default function AgentEvaluationExperiments() {
                       {selectedExperiment.name}
                     </h2>
                     <p className="mt-1 text-sm text-slate-500">
-                      Judge: {selectedExperiment.judge_model ?? "—"}
+                      Judge: {selectedExperiment.judge_model ?? "Tenant profile"}
                     </p>
                   </div>
 

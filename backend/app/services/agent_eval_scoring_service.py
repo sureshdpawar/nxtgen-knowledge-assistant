@@ -47,9 +47,17 @@ class AgentEvalScoringService:
         db: Session,
         tenant_id: UUID,
         judge_model: str | None,
+        evaluator_llm_configuration_id: UUID | None = None,
         knowledge_base_id: UUID | None = None,
     ) -> tuple[OpenAIModel, dict]:
-        if knowledge_base_id is not None:
+        if evaluator_llm_configuration_id is not None:
+            _, configuration = self.client_factory.create_for_configuration(
+                db=db,
+                tenant_id=tenant_id,
+                configuration_id=evaluator_llm_configuration_id,
+            )
+            resolution_source = "explicit_configuration"
+        elif knowledge_base_id is not None:
             _, configuration = (
                 self.client_factory.create_for_knowledge_base(
                     db=db,
@@ -69,9 +77,9 @@ class AgentEvalScoringService:
 
         requested_model = str(judge_model or "").strip()
         effective_model = (
-            requested_model
-            if requested_model
-            else configuration.model_name
+            configuration.model_name
+            if evaluator_llm_configuration_id is not None
+            else requested_model or configuration.model_name
         )
 
         judge = OpenAIModel(
@@ -87,6 +95,7 @@ class AgentEvalScoringService:
             "provider": configuration.provider.value,
             "configured_model": configuration.model_name,
             "judge_model": effective_model,
+            "evaluator_llm_configuration_id": str(configuration.id),
             "resolution_source": resolution_source,
         }
 
@@ -121,27 +130,11 @@ class AgentEvalScoringService:
         calls = []
 
         for item in case.expected_tools or []:
-            if not isinstance(item, dict):
-                continue
-
             name = str(
                 item.get("name") or ""
             ).strip()
 
-            if not name:
-                continue
-
-            if (
-                "input" in item
-                and item.get("input") is not None
-            ):
-                calls.append(
-                    ToolCall(
-                        name=name,
-                        input=item.get("input"),
-                    )
-                )
-            else:
+            if name:
                 calls.append(
                     ToolCall(
                         name=name,
@@ -151,47 +144,11 @@ class AgentEvalScoringService:
         return calls
 
     @staticmethod
-    def _expected_arguments_specified(
-        case: AgentEvalCase,
-    ) -> bool:
-        """
-        Return True only when every valid expected tool includes explicit
-        expected input.
-
-        Tool-name-only expectations are sufficient for Tool Correctness, but
-        they do not provide a gold standard for Argument Correctness. In that
-        case argument scoring must be N/A rather than a failing zero.
-        """
-        expected_items = []
-
-        for item in case.expected_tools or []:
-            if not isinstance(item, dict):
-                continue
-
-            name = str(
-                item.get("name") or ""
-            ).strip()
-
-            if name:
-                expected_items.append(item)
-
-        if not expected_items:
-            return False
-
-        return all(
-            (
-                "input" in item
-                and item.get("input") is not None
-            )
-            for item in expected_items
-        )
-
-    @staticmethod
-    async def _measure(
+    def _measure(
         metric,
         test_case: LLMTestCase,
     ) -> dict:
-        await metric.a_measure(test_case)
+        metric.measure(test_case)
 
         return {
             "score": metric.score,
@@ -203,7 +160,7 @@ class AgentEvalScoringService:
             "passed": metric.is_successful(),
         }
 
-    async def score(
+    def score(
         self,
         *,
         db: Session,
@@ -212,6 +169,7 @@ class AgentEvalScoringService:
         result: AgentEvalResult,
         judge_model: str | None,
         outcome_threshold: float,
+        evaluator_llm_configuration_id: UUID | None = None,
         tool_threshold: float,
         argument_threshold: float,
         knowledge_base_id: UUID | None = None,
@@ -221,6 +179,7 @@ class AgentEvalScoringService:
                 db=db,
                 tenant_id=tenant_id,
                 judge_model=judge_model,
+                evaluator_llm_configuration_id=evaluator_llm_configuration_id,
                 knowledge_base_id=knowledge_base_id,
             )
         )
@@ -233,12 +192,6 @@ class AgentEvalScoringService:
 
         expected_tools = (
             self._expected_tool_calls(
-                case
-            )
-        )
-
-        expected_arguments_specified = (
-            self._expected_arguments_specified(
                 case
             )
         )
@@ -278,7 +231,6 @@ class AgentEvalScoringService:
         tool_metric = ToolCorrectnessMetric(
             threshold=tool_threshold,
             should_exact_match=True,
-            model=judge,
         )
 
         argument_metric = (
@@ -291,7 +243,7 @@ class AgentEvalScoringService:
             )
         )
 
-        outcome = await self._measure(
+        outcome = self._measure(
             outcome_metric,
             test_case,
         )
@@ -309,32 +261,21 @@ class AgentEvalScoringService:
                 "passed": True,
             }
         else:
-            tool = await self._measure(
+            tool = self._measure(
                 tool_metric,
                 test_case,
             )
 
-        if (
-            actual_tools
-            and expected_arguments_specified
-        ):
-            arguments = await self._measure(
+        if actual_tools:
+            arguments = self._measure(
                 argument_metric,
                 test_case,
             )
-        elif not actual_tools:
-            arguments = {
-                "score": None,
-                "reason": (
-                    "No tool call was made."
-                ),
-                "passed": None,
-            }
         else:
             arguments = {
                 "score": None,
                 "reason": (
-                    "No expected tool arguments were specified."
+                    "No tool call was made."
                 ),
                 "passed": None,
             }
