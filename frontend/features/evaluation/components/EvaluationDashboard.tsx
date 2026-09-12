@@ -29,6 +29,10 @@ import {
 } from "@/features/knowledge-bases/hooks";
 
 import {
+  useLLMProfiles,
+} from "@/features/llm-config/hooks";
+
+import {
   useEvaluationCases,
   useEvaluationDatasets,
   useEvaluationRuns,
@@ -414,6 +418,13 @@ export default function EvaluationDashboard() {
     true,
   );
 
+  const [
+    evaluatorLLMConfigurationId,
+    setEvaluatorLLMConfigurationId,
+  ] = useState(
+    "",
+  );
+
 
   const {
     data:
@@ -421,6 +432,29 @@ export default function EvaluationDashboard() {
     isLoading:
       knowledgeBasesLoading,
   } = useKnowledgeBases();
+
+
+  const {
+    data:
+      llmProfiles = [],
+    isLoading:
+      llmProfilesLoading,
+  } = useLLMProfiles();
+
+
+  const activeLLMProfiles =
+    useMemo(
+      () =>
+        llmProfiles.filter(
+          (
+            profile,
+          ) =>
+            profile.is_active,
+        ),
+      [
+        llmProfiles,
+      ],
+    );
 
 
   const {
@@ -738,7 +772,10 @@ export default function EvaluationDashboard() {
           topK,
 
         evaluator_llm_configuration_id:
-          null,
+          (
+            evaluatorLLMConfigurationId
+            || null
+          ),
 
         run_judges:
           runJudges,
@@ -1159,6 +1196,71 @@ export default function EvaluationDashboard() {
                         }
                         className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
                       />
+                    </div>
+
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                        Evaluator / Judge LLM
+                      </label>
+
+                      <select
+                        value={
+                          evaluatorLLMConfigurationId
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setEvaluatorLLMConfigurationId(
+                            event
+                              .target
+                              .value,
+                          )
+                        }
+                        disabled={
+                          !runJudges
+                          || llmProfilesLoading
+                        }
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm disabled:bg-slate-50 disabled:text-slate-400"
+                      >
+                        <option value="">
+                          Tenant default
+                        </option>
+
+                        {
+                          activeLLMProfiles.map(
+                            (
+                              profile,
+                            ) => (
+                              <option
+                                key={
+                                  profile.id
+                                }
+                                value={
+                                  profile.id
+                                }
+                              >
+                                {
+                                  profile.name
+                                }{" "}
+                                ·{" "}
+                                {
+                                  profile.model_name
+                                }
+                                {
+                                  profile.is_default
+                                    ? " (default)"
+                                    : ""
+                                }
+                              </option>
+                            ),
+                          )
+                        }
+                      </select>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        Independent from the RAG generator model.
+                      </p>
                     </div>
 
 
