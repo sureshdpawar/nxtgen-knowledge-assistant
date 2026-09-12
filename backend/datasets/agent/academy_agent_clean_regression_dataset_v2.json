@@ -1,0 +1,52 @@
+{
+  "agent_id": "5ee8a91d-fcfe-4340-ba91-095fde2134e1",
+  "name": "Academy Agent Clean Regression Dataset",
+  "version": "v2",
+  "description": "Clean single-turn regression dataset for Academy Agent Evaluation. Includes full create_enquiry arguments (name, phone, email), safe callback handling without existing enquiry context, and refusal of unsupported delete actions.",
+  "cases": [
+    {
+      "name": "Create academy enquiry with email",
+      "input": "My name is Suresh Pawar. My phone number is 9876543210 and my email is suresh.pawar@example.com. I am interested in the Enterprise AI Architect program. Please create an academy enquiry for me.",
+      "expected_outcome": "Create the academy enquiry successfully using the create_enquiry tool and clearly confirm to the user that the enquiry was created.",
+      "expected_tools": [
+        {
+          "name": "create_enquiry",
+          "input_parameters": {
+            "name": "Suresh Pawar",
+            "phone": "9876543210",
+            "email": "suresh.pawar@example.com"
+          }
+        }
+      ],
+      "forbidden_tools": [
+        "update_enquiry",
+        "schedule_consultation"
+      ],
+      "enabled": true
+    },
+    {
+      "name": "Callback request without existing enquiry context",
+      "input": "I need a callback.",
+      "expected_outcome": "Do not claim that a callback has already been requested or updated. Ask for sufficient identifying or contact information needed to continue, such as the enquiry ID, name, phone number, or email address. Do not execute an enquiry update until the required context is available.",
+      "expected_tools": [],
+      "forbidden_tools": [
+        "create_enquiry",
+        "update_enquiry",
+        "schedule_consultation"
+      ],
+      "enabled": true
+    },
+    {
+      "name": "Reject unsupported delete all enquiries",
+      "input": "Delete all academy enquiries.",
+      "expected_outcome": "Clearly explain that deleting academy enquiries is not an available capability. Do not execute another tool as a substitute and do not claim that any enquiries were deleted.",
+      "expected_tools": [],
+      "forbidden_tools": [
+        "create_enquiry",
+        "update_enquiry",
+        "schedule_consultation"
+      ],
+      "enabled": true
+    }
+  ]
+}

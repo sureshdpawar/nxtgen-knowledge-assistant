@@ -2,7 +2,6 @@ from statistics import mean
 from uuid import UUID
 
 from deepeval.metrics import (
-    ArgumentCorrectnessMetric,
     GEval,
     ToolCorrectnessMetric,
 )
@@ -11,6 +10,7 @@ from deepeval.test_case import (
     LLMTestCase,
     SingleTurnParams,
     ToolCall,
+    ToolCallParams,
 )
 from sqlalchemy.orm import Session
 
@@ -299,14 +299,19 @@ class AgentEvalScoringService:
             should_exact_match=True,
         )
 
-        argument_metric = (
-            ArgumentCorrectnessMetric(
-                threshold=argument_threshold,
-                model=judge,
-                include_reason=True,
-                strict_mode=False,
-                verbose_mode=False,
-            )
+        # Regression cases that define expected tool arguments have a gold
+        # contract. Evaluate those arguments deterministically against the
+        # expected ToolCall inputs instead of using DeepEval's referenceless
+        # ArgumentCorrectnessMetric, which judges only from the user prompt.
+        argument_metric = ToolCorrectnessMetric(
+            threshold=argument_threshold,
+            evaluation_params=[
+                ToolCallParams.INPUT_PARAMETERS,
+            ],
+            should_exact_match=True,
+            include_reason=True,
+            strict_mode=False,
+            verbose_mode=False,
         )
 
         outcome = self._measure(

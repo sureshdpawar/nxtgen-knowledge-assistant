@@ -260,23 +260,75 @@ class AgentEvalExperimentService:
             )
         )
 
-        return [
-            {
-                "name": step.name,
-                "input":
-                    step.input_data
-                    or {},
-                "output":
-                    step.output_data
-                    or {},
-                "status":
-                    step.status.value,
-            }
-            for step
-            in db.scalars(
-                stmt
-            ).all()
-        ]
+        tools_called: list[dict] = []
+
+        for step in db.scalars(
+            stmt
+        ).all():
+            input_data = (
+                step.input_data
+                or {}
+            )
+            output_data = (
+                step.output_data
+                or {}
+            )
+
+            persisted_calls = (
+                input_data.get(
+                    "tool_calls"
+                )
+                if isinstance(
+                    input_data,
+                    dict,
+                )
+                else None
+            ) or []
+
+            if persisted_calls:
+                for call in persisted_calls:
+                    if not isinstance(
+                        call,
+                        dict,
+                    ):
+                        continue
+
+                    name = str(
+                        call.get("name")
+                        or step.name
+                        or ""
+                    ).strip()
+
+                    if not name:
+                        continue
+
+                    tools_called.append(
+                        {
+                            "name": name,
+                            "input": (
+                                call.get("args")
+                                or {}
+                            ),
+                            "output":
+                                output_data,
+                            "status":
+                                step.status.value,
+                        }
+                    )
+                continue
+
+            if step.name:
+                tools_called.append(
+                    {
+                        "name": step.name,
+                        "input": input_data,
+                        "output": output_data,
+                        "status":
+                            step.status.value,
+                    }
+                )
+
+        return tools_called
 
     @staticmethod
     def _evaluator_llm_configuration_id(
@@ -726,7 +778,7 @@ class AgentEvalExperimentService:
                         else "FAIL"
                     ),
                 "judge_resolution":
-                    "tenant_default",
+                    judge_resolution,
             }
 
             db.commit()
