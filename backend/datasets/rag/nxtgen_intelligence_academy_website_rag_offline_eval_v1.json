@@ -1,0 +1,123 @@
+{
+  "knowledge_base_id": "df8e0b19-068a-4f4d-acfa-9c042dde1234",
+  "name": "NXTGEN Intelligence Academy Website RAG Offline Evaluation",
+  "version": "v1",
+  "description": "Offline RAG evaluation dataset grounded in the NXTGEN Intelligence Academy website. Covers Academy positioning, learning modes, certificates, founder information, AI course/program details, contact/location information, and one unanswerable case to validate grounded refusal behavior. Replace knowledge_base_id with the production Website Knowledge Base UUID before import.",
+  "cases": [
+    {
+      "question": "Who is NXTGEN Intelligence Academy designed for?",
+      "expected_answer": "NXTGEN Intelligence Academy provides AI and IT training for learners of different stages, including school students, college students or fresh graduates, and working professionals, with hands-on and career-oriented learning.",
+      "expected_text": "The Academy serves learners of all ages, including school students, college graduates, and working professionals, and focuses on real-world, career-ready AI and IT skills.",
+      "expected_sources": [
+        {
+          "type": "url",
+          "value": "https://nxtgenintelligenceacademy.com/"
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "question": "What learning modes are available at NXTGEN Intelligence Academy?",
+      "expected_answer": "The Academy offers classroom learning, live online classes, and self-paced learning.",
+      "expected_text": "Choose How You Learn: Classroom Learning, Live Online Classes, and Self-Paced Learning.",
+      "expected_sources": [
+        {
+          "type": "url",
+          "value": "https://nxtgenintelligenceacademy.com/"
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "question": "Do learners receive a certificate after completing a course?",
+      "expected_answer": "Yes. The website states that learners receive a personalised certificate after successfully completing a course or program.",
+      "expected_text": "Upon successfully completing courses, learners receive a personalised certificate that can be used in professional portfolios, LinkedIn profiles, or personal records.",
+      "expected_sources": [
+        {
+          "type": "url",
+          "value": "https://nxtgenintelligenceacademy.com/"
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "question": "Who founded NXTGEN Intelligence Academy and what is his professional background?",
+      "expected_answer": "Suresh Pawar is the Founder and Director of NXTGEN Intelligence Academy. The website describes him as a technologist and architect with more than 21 years of global experience, including 17 years in the USA, and experience with organizations such as Reliance Industries, Cognizant, and UKG. It also states that he completed postgraduate study in Artificial Intelligence and Machine Learning at the University of Texas at Austin.",
+      "expected_text": "Suresh Pawar is Founder, Director and AI Coach, with 21+ years of global technology experience including 17 years in the USA.",
+      "expected_sources": [
+        {
+          "type": "url",
+          "value": "https://nxtgenintelligenceacademy.com/"
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "question": "What does the AI, ML, Generative AI and Agentic AI certification pathway cover?",
+      "expected_answer": "The certification pathway covers foundations of AI and machine learning, mathematics for AI/ML, Python for data science and machine learning, practical machine-learning frameworks, predictive modeling, deep learning, Generative AI, Retrieval-Augmented Generation (RAG), and Agentic AI through hands-on projects and real-world use cases.",
+      "expected_text": "The flagship program combines Artificial Intelligence and Machine Learning foundations with Generative AI, RAG and Agentic AI and uses hands-on projects, case studies and industry-relevant tools.",
+      "expected_sources": [
+        {
+          "type": "url",
+          "value": "https://www.nxtgenintelligenceacademy.com/certification-program-in-ai-ml-generative-ai"
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "question": "How long is the professional AI, ML and Generative AI certification program?",
+      "expected_answer": "The professional certification program is listed as a 6-month advanced program.",
+      "expected_text": "Duration: 6 Months. Skill level: Advanced.",
+      "expected_sources": [
+        {
+          "type": "url",
+          "value": "https://www.nxtgenintelligenceacademy.com/professional-certification-program-ai-ml-generative-ai"
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "question": "What is the duration and language of the AI Creator course?",
+      "expected_answer": "The AI Creator course is listed as a 2-month course taught in English.",
+      "expected_text": "Duration: 2 Months. Language: English.",
+      "expected_sources": [
+        {
+          "type": "url",
+          "value": "https://nxtgenintelligenceacademy.com/ai-creator"
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "question": "What support does the Academy mention for students seeking jobs or internships?",
+      "expected_answer": "The website mentions career mentorship, hands-on training, internship and job opportunities, resume preparation, mock interviews, a global recruitment network, and 100% job assistance.",
+      "expected_text": "The Academy lists career mentorship, internship and job opportunities, resume preparation and mock interviews, global recruitment support, and 100% Job Assistance.",
+      "expected_sources": [
+        {
+          "type": "url",
+          "value": "https://nxtgenintelligenceacademy.com/enroll-form"
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "question": "Where is the NXTGEN Intelligence Academy office in Amravati and how can I contact the Academy?",
+      "expected_answer": "The Academy office is at 102, First Floor, Surabhi, Above Mathura Dairy, Near Shegaon Naka Square, Rathi Nagar, Amravati, Maharashtra 444601. The website lists phone +91 8087090028 and email info@nxtgenintelligenceacademy.com.",
+      "expected_text": "Academy Office: 102, First Floor, Surabhi, Above Mathura Dairy, Near Shegaon Naka Square, Rathi Nagar, Amravati, Maharashtra, India 444601; +91 8087090028; info@nxtgenintelligenceacademy.com.",
+      "expected_sources": [
+        {
+          "type": "url",
+          "value": "https://nxtgenintelligenceacademy.com/"
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "question": "How many students are enrolled at NXTGEN Intelligence Academy today?",
+      "expected_answer": null,
+      "expected_text": null,
+      "expected_sources": [],
+      "answerable": false
+    }
+  ]
+}
