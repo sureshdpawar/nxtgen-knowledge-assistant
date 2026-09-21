@@ -2,7 +2,6 @@ from statistics import mean
 from uuid import UUID
 
 from deepeval.metrics import (
-    ArgumentCorrectnessMetric,
     GEval,
     ToolCorrectnessMetric,
 )
@@ -11,6 +10,7 @@ from deepeval.test_case import (
     LLMTestCase,
     SingleTurnParams,
     ToolCall,
+    ToolCallParams,
 )
 from sqlalchemy.orm import Session
 
@@ -27,10 +27,10 @@ class AgentEvalScoringService:
     tenant-managed LLM configuration. The process environment is deliberately
     not mutated and legacy settings.LLM_API / settings.LLM_API_KEY are not used.
 
-    Agent Evaluation currently uses the tenant default LLM profile as its judge
-    profile. The experiment's judge_model remains an optional model-name
-    override, allowing the evaluator model to differ while still using the
-    tenant-managed endpoint and credential.
+    An experiment may select an explicit evaluator LLM configuration. When it
+    does, that profile's endpoint, credential, provider, and configured model
+    are authoritative. Legacy judge_model remains supported only when no
+    explicit evaluator profile is selected.
 
     knowledge_base_id is supported for callers that evaluate a single KB:
     LLMClientFactory then applies the existing KB override -> tenant default
@@ -47,9 +47,17 @@ class AgentEvalScoringService:
         db: Session,
         tenant_id: UUID,
         judge_model: str | None,
+        evaluator_llm_configuration_id: UUID | None = None,
         knowledge_base_id: UUID | None = None,
     ) -> tuple[OpenAIModel, dict]:
-        if knowledge_base_id is not None:
+        if evaluator_llm_configuration_id is not None:
+            _, configuration = self.client_factory.create_for_configuration(
+                db=db,
+                tenant_id=tenant_id,
+                configuration_id=evaluator_llm_configuration_id,
+            )
+            resolution_source = "explicit_configuration"
+        elif knowledge_base_id is not None:
             _, configuration = (
                 self.client_factory.create_for_knowledge_base(
                     db=db,
@@ -69,9 +77,9 @@ class AgentEvalScoringService:
 
         requested_model = str(judge_model or "").strip()
         effective_model = (
-            requested_model
-            if requested_model
-            else configuration.model_name
+            configuration.model_name
+            if evaluator_llm_configuration_id is not None
+            else requested_model or configuration.model_name
         )
 
         judge = OpenAIModel(
@@ -87,6 +95,7 @@ class AgentEvalScoringService:
             "provider": configuration.provider.value,
             "configured_model": configuration.model_name,
             "judge_model": effective_model,
+            "evaluator_llm_configuration_id": str(configuration.id),
             "resolution_source": resolution_source,
         }
 
@@ -118,6 +127,14 @@ class AgentEvalScoringService:
     def _expected_tool_calls(
         case: AgentEvalCase,
     ) -> list[ToolCall]:
+        """
+        Convert the persisted Agent Evaluation schema into DeepEval ToolCall.
+
+        AgentEvalToolExpectation persists expected arguments under
+        `input_parameters`, not `input`. The previous scorer dropped those
+        arguments and therefore gave ArgumentCorrectnessMetric no gold
+        argument contract.
+        """
         calls = []
 
         for item in case.expected_tools or []:
@@ -132,13 +149,13 @@ class AgentEvalScoringService:
                 continue
 
             if (
-                "input" in item
-                and item.get("input") is not None
+                "input_parameters" in item
+                and item.get("input_parameters") is not None
             ):
                 calls.append(
                     ToolCall(
                         name=name,
-                        input=item.get("input"),
+                        input=item.get("input_parameters") or {},
                     )
                 )
             else:
@@ -155,12 +172,12 @@ class AgentEvalScoringService:
         case: AgentEvalCase,
     ) -> bool:
         """
-        Return True only when every valid expected tool includes explicit
-        expected input.
+        Argument correctness is applicable only when the regression case
+        actually supplies expected tool arguments.
 
-        Tool-name-only expectations are sufficient for Tool Correctness, but
-        they do not provide a gold standard for Argument Correctness. In that
-        case argument scoring must be N/A rather than a failing zero.
+        This prevents cases such as "no tool expected" from receiving a
+        misleading Argument Correctness score merely because the runtime
+        happened to call an informational tool.
         """
         expected_items = []
 
@@ -180,18 +197,18 @@ class AgentEvalScoringService:
 
         return all(
             (
-                "input" in item
-                and item.get("input") is not None
+                "input_parameters" in item
+                and item.get("input_parameters") is not None
             )
             for item in expected_items
         )
 
     @staticmethod
-    async def _measure(
+    def _measure(
         metric,
         test_case: LLMTestCase,
     ) -> dict:
-        await metric.a_measure(test_case)
+        metric.measure(test_case)
 
         return {
             "score": metric.score,
@@ -203,7 +220,7 @@ class AgentEvalScoringService:
             "passed": metric.is_successful(),
         }
 
-    async def score(
+    def score(
         self,
         *,
         db: Session,
@@ -212,6 +229,7 @@ class AgentEvalScoringService:
         result: AgentEvalResult,
         judge_model: str | None,
         outcome_threshold: float,
+        evaluator_llm_configuration_id: UUID | None = None,
         tool_threshold: float,
         argument_threshold: float,
         knowledge_base_id: UUID | None = None,
@@ -221,6 +239,7 @@ class AgentEvalScoringService:
                 db=db,
                 tenant_id=tenant_id,
                 judge_model=judge_model,
+                evaluator_llm_configuration_id=evaluator_llm_configuration_id,
                 knowledge_base_id=knowledge_base_id,
             )
         )
@@ -278,20 +297,24 @@ class AgentEvalScoringService:
         tool_metric = ToolCorrectnessMetric(
             threshold=tool_threshold,
             should_exact_match=True,
-            model=judge,
         )
 
-        argument_metric = (
-            ArgumentCorrectnessMetric(
-                threshold=argument_threshold,
-                model=judge,
-                include_reason=True,
-                strict_mode=False,
-                verbose_mode=False,
-            )
+        # Regression cases that define expected tool arguments have a gold
+        # contract. Evaluate those arguments deterministically against the
+        # expected ToolCall inputs instead of using DeepEval's referenceless
+        # ArgumentCorrectnessMetric, which judges only from the user prompt.
+        argument_metric = ToolCorrectnessMetric(
+            threshold=argument_threshold,
+            evaluation_params=[
+                ToolCallParams.INPUT_PARAMETERS,
+            ],
+            should_exact_match=True,
+            include_reason=True,
+            strict_mode=False,
+            verbose_mode=False,
         )
 
-        outcome = await self._measure(
+        outcome = self._measure(
             outcome_metric,
             test_case,
         )
@@ -309,24 +332,26 @@ class AgentEvalScoringService:
                 "passed": True,
             }
         else:
-            tool = await self._measure(
+            tool = self._measure(
                 tool_metric,
                 test_case,
             )
 
         if (
-            actual_tools
-            and expected_arguments_specified
+            expected_arguments_specified
+            and actual_tools
         ):
-            arguments = await self._measure(
+            arguments = self._measure(
                 argument_metric,
                 test_case,
             )
-        elif not actual_tools:
+        elif not expected_arguments_specified:
             arguments = {
                 "score": None,
                 "reason": (
-                    "No tool call was made."
+                    "Argument correctness is not applicable because "
+                    "the regression case does not specify expected "
+                    "tool arguments."
                 ),
                 "passed": None,
             }
@@ -334,7 +359,8 @@ class AgentEvalScoringService:
             arguments = {
                 "score": None,
                 "reason": (
-                    "No expected tool arguments were specified."
+                    "Expected tool arguments are defined, but no "
+                    "tool call was made."
                 ),
                 "passed": None,
             }

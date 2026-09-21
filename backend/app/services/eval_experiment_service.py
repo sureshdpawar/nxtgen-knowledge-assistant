@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from deepeval.metrics import (
     ContextualRelevancyMetric,
     FaithfulnessMetric,
 )
+from deepeval.models import OpenAIModel
 from deepeval.test_case import LLMTestCase
 
 from app.core.config import settings
@@ -42,9 +44,15 @@ from app.services.evaluators import (
 from app.services.generation_eval_service import (
     GenerationEvalService,
 )
+from app.services.llm_client_factory import (
+    LLMClientFactory,
+)
 from app.services.retrieval_eval_service import (
     RetrievalEvalService,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class EvalExperimentService:
@@ -76,10 +84,75 @@ class EvalExperimentService:
             EvaluatorRegistry()
         )
 
+        self.llm_client_factory = (
+            LLMClientFactory()
+        )
+
+    def _resolve_deepeval_judge(
+        self,
+        db: Session,
+        tenant_id: UUID,
+        evaluator_llm_configuration_id:
+            UUID | None,
+    ) -> tuple[OpenAIModel, dict]:
+        """
+        Resolve the native DeepEval judge from
+        Knowgentiq's tenant-managed LLM profiles.
+
+        An explicitly selected evaluator profile
+        wins. Otherwise the tenant default profile
+        is used. Credentials are passed directly
+        to DeepEval; environment fallback is not
+        used.
+        """
+
+        if evaluator_llm_configuration_id is not None:
+            _, configuration = (
+                self.llm_client_factory
+                .create_for_configuration(
+                    db=db,
+                    tenant_id=tenant_id,
+                    configuration_id=
+                        evaluator_llm_configuration_id,
+                )
+            )
+            resolution_source = (
+                "explicit_evaluator_profile"
+            )
+
+        else:
+            _, configuration = (
+                self.llm_client_factory.create(
+                    db=db,
+                    tenant_id=tenant_id,
+                )
+            )
+            resolution_source = (
+                "tenant_default"
+            )
+
+        judge = OpenAIModel(
+            model=configuration.model_name,
+            api_key=configuration.api_key,
+            base_url=configuration.base_url,
+            temperature=0.0,
+        )
+
+        metadata = {
+            "profile_id": str(configuration.id),
+            "profile_name": configuration.name,
+            "provider": configuration.provider.value,
+            "model": configuration.model_name,
+            "resolution_source": resolution_source,
+        }
+
+        return judge, metadata
+
     def _run_deepeval_rag_case(
         self,
         eval_case,
         generation_data: dict,
+        judge: OpenAIModel,
     ):
         """
         Execute DeepEval natively against one
@@ -153,14 +226,17 @@ class EvalExperimentService:
         metrics = [
             FaithfulnessMetric(
                 threshold=0.8,
+                model=judge,
             ),
 
             AnswerRelevancyMetric(
                 threshold=0.8,
+                model=judge,
             ),
 
             ContextualRelevancyMetric(
                 threshold=0.8,
+                model=judge,
             ),
         ]
 
@@ -175,10 +251,12 @@ class EvalExperimentService:
                 [
                     ContextualPrecisionMetric(
                         threshold=0.8,
+                        model=judge,
                     ),
 
                     ContextualRecallMetric(
                         threshold=0.8,
+                        model=judge,
                     ),
                 ]
             )
@@ -1071,6 +1149,26 @@ class EvalExperimentService:
 
         evaluator_metadata = None
 
+        deepeval_judge = None
+
+        deepeval_native_summary = {
+            "completed": 0,
+            "timeout": 0,
+            "error": 0,
+            "skipped_unanswerable": 0,
+        }
+
+        if run_judges:
+            (
+                deepeval_judge,
+                evaluator_metadata,
+            ) = self._resolve_deepeval_judge(
+                db=db,
+                tenant_id=knowledge_base.tenant_id,
+                evaluator_llm_configuration_id=
+                    evaluator_llm_configuration_id,
+            )
+
         completed_case_count = 0
 
         passed_case_count = 0
@@ -1110,14 +1208,88 @@ class EvalExperimentService:
                 # side-by-side validation during
                 # this integration stage.
                 #
-                if run_judges:
-                    self._run_deepeval_rag_case(
-                        eval_case=
-                            eval_case,
+                deepeval_native = {
+                    "status": "disabled",
+                    "error_type": None,
+                    "error": None,
+                }
 
-                        generation_data=
-                            generation_data,
+                if run_judges:
+                    if not eval_case.answerable:
+                        deepeval_native = {
+                            "status":
+                                "skipped_unanswerable",
+                            "error_type": None,
+                            "error": None,
+                        }
+
+                    else:
+                        try:
+                            self._run_deepeval_rag_case(
+                                eval_case=
+                                    eval_case,
+
+                                generation_data=
+                                    generation_data,
+
+                                judge=
+                                    deepeval_judge,
+                            )
+
+                            deepeval_native = {
+                                "status": "completed",
+                                "error_type": None,
+                                "error": None,
+                            }
+
+                        except TimeoutError as exc:
+                            logger.warning(
+                                "Native DeepEval RAG "
+                                "evaluation timed out "
+                                "for eval case %s: %s",
+                                eval_case.id,
+                                exc,
+                            )
+
+                            deepeval_native = {
+                                "status": "timeout",
+                                "error_type":
+                                    "TimeoutError",
+                                "error": (
+                                    str(exc)
+                                    or (
+                                        "Native DeepEval "
+                                        "evaluation timed out."
+                                    )
+                                ),
+                            }
+
+                        except Exception as exc:
+                            logger.exception(
+                                "Native DeepEval RAG "
+                                "evaluation failed for "
+                                "eval case %s.",
+                                eval_case.id,
+                            )
+
+                            deepeval_native = {
+                                "status": "error",
+                                "error_type":
+                                    type(exc).__name__,
+                                "error": str(exc),
+                            }
+
+                    deepeval_status = (
+                        deepeval_native["status"]
                     )
+
+                    if (
+                        deepeval_status
+                        in deepeval_native_summary
+                    ):
+                        deepeval_native_summary[
+                            deepeval_status
+                        ] += 1
 
                 #
                 # 2. Score the exact retrieval
@@ -1588,6 +1760,10 @@ class EvalExperimentService:
                     },
                 }
 
+                metrics["deepeval_native"] = (
+                    deepeval_native
+                )
+
                 #
                 # 6. Determine generation/RAG
                 # answer pass state.
@@ -1748,6 +1924,9 @@ class EvalExperimentService:
 
                         "run_judges":
                             run_judges,
+
+                        "deepeval_native":
+                            deepeval_native,
                     },
                 )
 
@@ -2042,6 +2221,12 @@ class EvalExperimentService:
 
                 "evaluator":
                     evaluator_metadata,
+
+                "deepeval_native": {
+                    "mode": "diagnostic",
+                    "failure_isolation": True,
+                    **deepeval_native_summary,
+                },
 
                 "run_judges":
                     run_judges,
